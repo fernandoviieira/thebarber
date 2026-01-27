@@ -38,6 +38,16 @@ function App() {
     });
   }, []);
 
+  useEffect(() => {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Isso captura o evento de instalação automática do Chrome
+    e.preventDefault(); 
+    // Agora você pode mostrar um modal ou aviso dizendo: 
+    // "Instale nosso app para uma melhor experiência!"
+    // E ao clicar no seu botão, você chama: e.prompt();
+  });
+}, []);
+
   const handleInstallClick = () => {
     if (!installPrompt) return;
     installPrompt.prompt(); // Mostra a caixinha de instalação
