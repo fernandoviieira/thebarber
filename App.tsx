@@ -27,67 +27,16 @@ const App: React.FC = () => {
   
   const hasRedirected = useRef(false);
 
-
-function App() {
-  const [installPrompt, setInstallPrompt] = useState<any>(null);
-
-  useEffect(() => {
-    window.addEventListener('beforeinstallprompt', (e) => {
-      // Impede o Chrome de mostrar o banner padrão feio
-      e.preventDefault();
-      // Guarda o evento para usar quando o cliente clicar no seu botão
-      setInstallPrompt(e);
-    });
-  }, []);
-
-  useEffect(() => {
-  window.addEventListener('beforeinstallprompt', (e) => {
-    // Isso captura o evento de instalação automática do Chrome
-    e.preventDefault(); 
-    // Agora você pode mostrar um modal ou aviso dizendo: 
-    // "Instale nosso app para uma melhor experiência!"
-    // E ao clicar no seu botão, você chama: e.prompt();
-  });
-}, []);
-
-  const handleInstallClick = () => {
-    if (!installPrompt) return;
-    installPrompt.prompt(); // Mostra a caixinha de instalação
-  };
-
-  return (
-    <div>
-      {/* Se o prompt estiver disponível, mostra um aviso fixo no topo ou base */}
-      {installPrompt && (
-        <div className="fixed bottom-0 w-full bg-orange-500 p-4 text-white flex justify-between items-center z-50">
-          <span>Instale nosso App para agendar mais rápido!</span>
-          <button 
-            onClick={handleInstallClick}
-            className="bg-white text-orange-500 px-4 py-2 rounded-lg font-bold"
-          >
-            BAIXAR APP
-          </button>
-        </div>
-      )}
-      
-      {/* Restante do seu Dashboard... */}
-    </div>
-  );
-}
-
   useEffect(() => {
     // 1. DETECTOR DE ROTA DINÂMICA
     const path = window.location.pathname.split('/')[1];
     const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
     
-    let detectedSlug = null;
     if (path === 'registrar') {
       setView('create_barbershop');
     } else if (path && !reservedRoutes.includes(path)) {
-      detectedSlug = path;
       setUrlSlug(path);
       setView('client'); 
-    } else {
     }
 
     // 2. GESTÃO DE SESSÃO
@@ -154,7 +103,6 @@ function App() {
             }
           } 
           else {
-            console.warn(`🛡️ Admin em unidade alheia. URL: ${normalizedCurrentPath} | Seu Slug: ${myBarbershopSlug}`);
             setIsAdmin(false); 
             
             if (allowRedirect && !hasRedirected.current) {
@@ -228,7 +176,7 @@ function App() {
     <BookingProvider>
       <div className="min-h-screen flex flex-col bg-black text-white font-sans selection:bg-amber-500/30">
 
-      {/* Banner de Instalação Proativo */}
+        {/* Banner de Instalação Proativo */}
         <InstallBanner />
         
         {view !== 'create_barbershop' && (
@@ -348,10 +296,7 @@ function App() {
         </nav>
       </div>
     </BookingProvider>
-    
   );
-  
 };
-
 
 export default App;
