@@ -7,6 +7,8 @@ import AdminDashboard from './views/AdminDashboard';
 import AdminSettings from './views/AdminSettings';
 import CreateBarbershop from './views/CreateBarbershop';
 import MyAppointments from './views/MyAppointments';
+import InstallBanner from './views/InstallBanner';
+
 import Login from './views/Login';
 import { MOCK_USER } from './constants';
 import { supabase } from '@/lib/supabase';
@@ -225,6 +227,9 @@ function App() {
   return (
     <BookingProvider>
       <div className="min-h-screen flex flex-col bg-black text-white font-sans selection:bg-amber-500/30">
+
+      {/* Banner de Instalação Proativo */}
+        <InstallBanner />
         
         {view !== 'create_barbershop' && (
           <Header
@@ -343,7 +348,10 @@ function App() {
         </nav>
       </div>
     </BookingProvider>
+    
   );
+  
 };
+
 
 export default App;
