@@ -58,11 +58,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         const newUser = signUpData.user;
 
         if (newUser) {
-          // Aguarda um pouco mais para a Trigger do Supabase criar o registro na tabela profiles
           await new Promise(resolve => setTimeout(resolve, 1000));
-
-          // Se existe uma barbearia na URL, o usuário é CLIENTE. 
-          // Se a URL está limpa, ele é o ADMIN (Dono da plataforma)
           const userRole = currentBarbershop ? 'client' : 'admin';
 
           const { error: profileError } = await supabase

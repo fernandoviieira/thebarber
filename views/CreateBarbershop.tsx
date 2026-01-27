@@ -14,11 +14,9 @@ const CreateBarbershop: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // 1. Captura o usuário logado
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) throw new Error("Usuário não autenticado.");
 
-      // 2. Cria a barbearia vinculando o dono
       const { data: shop, error: shopError } = await supabase
         .from('barbershops')
         .insert([{ 
@@ -36,7 +34,6 @@ const CreateBarbershop: React.FC = () => {
       }
 
       if (shop) {
-        // 3. Vincula o barbershop_id ao perfil do administrador
         const { error: profileError } = await supabase
           .from('profiles')
           .upsert({ 

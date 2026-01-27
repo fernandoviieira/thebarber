@@ -75,7 +75,6 @@ const App: React.FC = () => {
       if (error) throw error;
 
       if (profile) {
-        // Normalização de strings para evitar erros de digitação (case sensitivity / trim)
         const rawSlug = (profile as any).barbershops?.slug || '';
         const myBarbershopSlug = rawSlug.trim().toLowerCase();
         const normalizedCurrentPath = (currentPath || '').trim().toLowerCase();
@@ -87,7 +86,6 @@ const App: React.FC = () => {
         const isUserAdmin = profile.role === 'admin';
 
         if (isUserAdmin) {
-          // Verifica se o Admin é o dono desta URL específica
           const isOwner = !normalizedCurrentPath || 
                           normalizedCurrentPath === '' || 
                           normalizedCurrentPath === 'registrar' || 
@@ -106,7 +104,6 @@ const App: React.FC = () => {
             }
           } 
           else {
-            // Admin em unidade alheia: age como cliente (Header de admin oculto)
             console.warn(`🛡️ Admin em unidade alheia. URL: ${normalizedCurrentPath} | Seu Slug: ${myBarbershopSlug}`);
             setIsAdmin(false); 
             
@@ -116,7 +113,6 @@ const App: React.FC = () => {
             }
           }
         } else {
-          // Lógica para Clientes Comuns
           setIsAdmin(false);
           if (allowRedirect && !hasRedirected.current) {
             const isSlug = normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath);
