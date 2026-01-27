@@ -1,0 +1,7 @@
+{
+  "name": "The Barber's Cut - Premium Booking",
+  "description": "A modern PWA for barbershop management and client booking with an elegant premium interface.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
