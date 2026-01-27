@@ -23,7 +23,7 @@
   "screenshots": [
     {
       "src": "/screenshot-mobile.png",
-      "sizes": "1080x1920",
+      "sizes": "720x1600",
       "type": "image/png",
       "form_factor": "narrow",
       "label": "Tela Inicial Mobile"
