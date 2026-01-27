@@ -25,15 +25,13 @@
       "src": "/screenshot-mobile.png",
       "sizes": "720x1600",
       "type": "image/png",
-      "form_factor": "narrow",
-      "label": "Tela Inicial Mobile"
+      "form_factor": "narrow"
     },
     {
       "src": "/screenshot-desktop.png",
       "sizes": "1280x800",
       "type": "image/png",
-      "form_factor": "wide",
-      "label": "Tela Inicial Desktop"
+      "form_factor": "wide"
     }
   ]
 }
