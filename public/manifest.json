@@ -26,7 +26,14 @@
       "sizes": "1080x1920",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Tela Inicial do BarberPro"
+      "label": "Tela Inicial Mobile"
+    },
+    {
+      "src": "/screenshot-desktop.png",
+      "sizes": "1280x800",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Tela Inicial Desktop"
     }
   ]
 }
