@@ -54,3 +54,5 @@ export function InstallBanner() {
     </div>
   );
 }
+
+export default InstallBanner;
