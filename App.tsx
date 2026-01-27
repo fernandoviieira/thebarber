@@ -25,6 +25,44 @@ const App: React.FC = () => {
   
   const hasRedirected = useRef(false);
 
+
+function App() {
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      // Impede o Chrome de mostrar o banner padrão feio
+      e.preventDefault();
+      // Guarda o evento para usar quando o cliente clicar no seu botão
+      setInstallPrompt(e);
+    });
+  }, []);
+
+  const handleInstallClick = () => {
+    if (!installPrompt) return;
+    installPrompt.prompt(); // Mostra a caixinha de instalação
+  };
+
+  return (
+    <div>
+      {/* Se o prompt estiver disponível, mostra um aviso fixo no topo ou base */}
+      {installPrompt && (
+        <div className="fixed bottom-0 w-full bg-orange-500 p-4 text-white flex justify-between items-center z-50">
+          <span>Instale nosso App para agendar mais rápido!</span>
+          <button 
+            onClick={handleInstallClick}
+            className="bg-white text-orange-500 px-4 py-2 rounded-lg font-bold"
+          >
+            BAIXAR APP
+          </button>
+        </div>
+      )}
+      
+      {/* Restante do seu Dashboard... */}
+    </div>
+  );
+}
+
   useEffect(() => {
     // 1. DETECTOR DE ROTA DINÂMICA
     const path = window.location.pathname.split('/')[1];
