@@ -114,7 +114,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <Scissors className="text-zinc-950" size={32} />
             </div>
             <h1 className="text-4xl font-serif font-bold italic text-white tracking-tighter uppercase">
-              {currentBarbershop ? currentBarbershop.name : 'CONTAFÁCIL PRO'}
+              {currentBarbershop ? currentBarbershop.name : 'BARBEARIA PRO'}
             </h1>
             <p className="text-zinc-400 mt-4 font-medium uppercase text-xs tracking-widest">
               {isRegister ? 'Crie sua conta' : 'Acesse o sistema'}
@@ -166,12 +166,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               {isRegister ? 'Já possui uma conta? Entrar' : 'Novo por aqui? Crie sua conta grátis'}
             </button>
           </div>
-        </div>
-        
-        <div className="absolute bottom-8 text-center w-full">
-            <p className="text-zinc-600 text-[10px] uppercase tracking-[0.3em] font-bold">
-                Powered by ContaFácil Pro AI
-            </p>
         </div>
       </div>
     </div>
