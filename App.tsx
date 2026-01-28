@@ -27,17 +27,28 @@ const App: React.FC = () => {
   
   const hasRedirected = useRef(false);
 
-  useEffect(() => {
+ useEffect(() => {
     // 1. DETECTOR DE ROTA DINÂMICA
     const path = window.location.pathname.split('/')[1];
     const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
     
-    if (path === 'registrar') {
-      setView('create_barbershop');
-    } else if (path && !reservedRoutes.includes(path)) {
+    // --- LÓGICA DE PERSISTÊNCIA PWA ---
+    // Se estiver em uma rota de cliente (slug), salva no celular
+    if (path && !reservedRoutes.includes(path)) {
+      localStorage.setItem('last_visited_slug', path);
       setUrlSlug(path);
       setView('client'); 
+    } 
+    // Se abrir na raiz "/" (comum no PWA) e tiver um slug salvo, redireciona
+    else if (path === '' && localStorage.getItem('last_visited_slug')) {
+      const savedSlug = localStorage.getItem('last_visited_slug');
+      window.location.replace(`/${savedSlug}`);
+      return; // Interrompe para processar o redirecionamento
     }
+    else if (path === 'registrar') {
+      setView('create_barbershop');
+    }
+    // ----------------------------------
 
     // 2. GESTÃO DE SESSÃO
     supabase.auth.getSession().then(({ data: { session } }) => {
