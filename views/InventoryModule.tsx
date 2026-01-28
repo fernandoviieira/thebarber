@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
   Package, Plus, Search, AlertTriangle, Edit3, Trash2, 
-  ArrowUpRight, ArrowDownRight, Loader2, X 
+  Loader2, X, Percent
 } from 'lucide-react';
 
 const InventoryModule = ({ barbershopId }: { barbershopId: string | null }) => {
@@ -10,45 +10,86 @@ const InventoryModule = ({ barbershopId }: { barbershopId: string | null }) => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Estado do produto com o novo campo de comissão
   const [newProduct, setNewProduct] = useState({
-    name: '', category: '', current_stock: 0, min_stock: 5, price_cost: '', price_sell: ''
+    name: '', 
+    category: '', 
+    current_stock: 0, 
+    min_stock: 5, 
+    price_cost: '', 
+    price_sell: '',
+    commission_rate: 0 // NOVO CAMPO
   });
 
   useEffect(() => {
     if (barbershopId) fetchInventory();
   }, [barbershopId]);
 
- // O CORRETO: .select() deve vir antes de .order()
-const fetchInventory = async () => {
-  setLoading(true);
-  const { data, error } = await supabase
-    .from('inventory')
-    .select('*') // Adicione esta linha aqui
-    .eq('barbershop_id', barbershopId) // Garante que só pegue o estoque desta barbearia
-    .order('name', { ascending: true });
+  const fetchInventory = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('inventory')
+      .select('*')
+      .eq('barbershop_id', barbershopId)
+      .order('name', { ascending: true });
 
-  if (error) {
-    console.error("Erro ao buscar estoque:", error.message);
-  } else if (data) {
-    setProducts(data);
-  }
-  setLoading(false);
-};
+    if (!error && data) setProducts(data);
+    setLoading(false);
+  };
 
-  const handleAddProduct = async (e: React.FormEvent) => {
+  // Função para abrir o modal em modo edição
+  const handleEditClick = (product: any) => {
+    setEditingId(product.id);
+    setNewProduct({
+      name: product.name,
+      category: product.category || '',
+      current_stock: product.current_stock,
+      min_stock: product.min_stock,
+      price_cost: product.price_cost.toString(),
+      price_sell: product.price_sell.toString(),
+      commission_rate: product.commission_rate || 0
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { error } = await supabase.from('inventory').insert([{
+    const productData = {
       ...newProduct,
       barbershop_id: barbershopId,
       price_cost: Number(newProduct.price_cost),
-      price_sell: Number(newProduct.price_sell)
-    }]);
+      price_sell: Number(newProduct.price_sell),
+      commission_rate: Number(newProduct.commission_rate)
+    };
+
+    let error;
+    if (editingId) {
+      // Lógica de Edição
+      const { error: updateError } = await supabase
+        .from('inventory')
+        .update(productData)
+        .eq('id', editingId);
+      error = updateError;
+    } else {
+      // Lógica de Novo Produto
+      const { error: insertError } = await supabase
+        .from('inventory')
+        .insert([productData]);
+      error = insertError;
+    }
 
     if (!error) {
-      setIsModalOpen(false);
-      setNewProduct({ name: '', category: '', current_stock: 0, min_stock: 5, price_cost: '', price_sell: '' });
+      closeModal();
       fetchInventory();
     }
+  };
+
+  const closeModal = () => {
+    setIsModalOpen(false);
+    setEditingId(null);
+    setNewProduct({ name: '', category: '', current_stock: 0, min_stock: 5, price_cost: '', price_sell: '', commission_rate: 0 });
   };
 
   const deleteProduct = async (id: string) => {
@@ -113,6 +154,7 @@ const fetchInventory = async () => {
               <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Categoria</th>
               <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Estoque</th>
               <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Venda</th>
+              <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Comissão</th>
               <th className="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Ações</th>
             </tr>
           </thead>
@@ -143,9 +185,15 @@ const fetchInventory = async () => {
                 <td className="px-8 py-6 text-amber-400 font-black italic tabular-nums">
                   R$ {Number(product.price_sell).toFixed(2)}
                 </td>
+                <td className="px-8 py-6">
+                   <div className="flex items-center gap-1 text-slate-300 font-bold">
+                      <Percent size={12} className="text-amber-500" />
+                      {product.commission_rate || 0}%
+                   </div>
+                </td>
                 <td className="px-8 py-6 text-right">
                   <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button className="p-2 bg-white/5 text-slate-400 hover:text-white rounded-lg transition-all"><Edit3 size={16} /></button>
+                    <button onClick={() => handleEditClick(product)} className="p-2 bg-white/5 text-slate-400 hover:text-white rounded-lg transition-all"><Edit3 size={16} /></button>
                     <button onClick={() => deleteProduct(product.id)} className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all"><Trash2 size={16} /></button>
                   </div>
                 </td>
@@ -155,15 +203,17 @@ const fetchInventory = async () => {
         </table>
       </div>
 
-      {/* MODAL NOVO PRODUTO */}
+      {/* MODAL NOVO/EDITAR PRODUTO */}
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm">
           <div className="bg-[#121418] border border-white/10 w-full max-w-2xl rounded-[3rem] p-10 shadow-2xl animate-in zoom-in-95">
             <div className="flex justify-between items-center border-b border-white/5 pb-6 mb-8">
-              <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter">Entrada de <span className="text-amber-500">Material</span></h3>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-white"><X size={32} /></button>
+              <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter">
+                {editingId ? 'Editar' : 'Entrada de'} <span className="text-amber-500">Material</span>
+              </h3>
+              <button onClick={closeModal} className="text-slate-500 hover:text-white"><X size={32} /></button>
             </div>
-            <form onSubmit={handleAddProduct} className="space-y-6">
+            <form onSubmit={handleSaveProduct} className="space-y-6">
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Nome do Item</label>
@@ -180,6 +230,8 @@ const fetchInventory = async () => {
                   </select>
                 </div>
               </div>
+
+              {/* LINHA DE ESTOQUE */}
               <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Qtd. Atual</label>
@@ -190,18 +242,25 @@ const fetchInventory = async () => {
                   <input type="number" required value={newProduct.min_stock} onChange={e => setNewProduct({...newProduct, min_stock: Number(e.target.value)})} className="w-full bg-slate-900 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-amber-500" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-6">
+
+              {/* LINHA DE PREÇOS E COMISSÃO */}
+              <div className="grid grid-cols-3 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Preço de Custo (R$)</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Custo (R$)</label>
                   <input type="number" step="0.01" required value={newProduct.price_cost} onChange={e => setNewProduct({...newProduct, price_cost: e.target.value})} className="w-full bg-slate-900 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-amber-500" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Preço de Venda (R$)</label>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Venda (R$)</label>
                   <input type="number" step="0.01" required value={newProduct.price_sell} onChange={e => setNewProduct({...newProduct, price_sell: e.target.value})} className="w-full bg-slate-900 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-amber-500" />
                 </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-4">Comissão (%)</label>
+                  <input type="number" required value={newProduct.commission_rate} onChange={e => setNewProduct({...newProduct, commission_rate: Number(e.target.value)})} className="w-full bg-slate-900 border border-white/10 rounded-2xl p-5 text-amber-500 font-bold outline-none focus:border-amber-500" placeholder="0" />
+                </div>
               </div>
+
               <button type="submit" className="w-full bg-amber-500 hover:bg-amber-400 text-black py-7 rounded-[2rem] font-black uppercase text-sm tracking-[0.3em] transition-all shadow-xl active:scale-95">
-                Salvar no Inventário
+                {editingId ? 'Salvar Alterações' : 'Salvar no Inventário'}
               </button>
             </form>
           </div>

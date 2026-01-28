@@ -74,7 +74,7 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
+const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
@@ -90,32 +90,32 @@ const App: React.FC = () => {
         const normalizedCurrentPath = (currentPath || '').trim().toLowerCase();
         const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
 
+
         setUserName(profile.full_name || currentSession.user.email.split('@')[0]);
         setBarbershopId(profile.barbershop_id);
 
         const isUserAdmin = profile.role === 'admin';
 
         if (isUserAdmin) {
-          const isOwner = !normalizedCurrentPath || 
-                          normalizedCurrentPath === '' || 
-                          normalizedCurrentPath === 'registrar' || 
-                          normalizedCurrentPath === myBarbershopSlug;
+          setIsAdmin(true);
 
-          if (isOwner) {
-            setIsAdmin(true);
-            
+          // LÓGICA DE ADMIN: Se ele logar, ele DEVE ir para o admin, a menos que esteja tentando acessar uma unidade alheia
+          const isOwnerOrGeneral = !normalizedCurrentPath || 
+                                   normalizedCurrentPath === '' || 
+                                   normalizedCurrentPath === 'admin' ||
+                                   normalizedCurrentPath === 'registrar' || 
+                                   normalizedCurrentPath === myBarbershopSlug;
+
+          if (isOwnerOrGeneral) {
             if (allowRedirect && !hasRedirected.current) {
-              if (normalizedCurrentPath === 'registrar') {
-                setView('create_barbershop');
-              } else {
-                setView(profile.barbershop_id ? 'admin' : 'create_barbershop');
-              }
+              const targetView = profile.barbershop_id ? 'admin' : 'create_barbershop';
+              setView(targetView);
               hasRedirected.current = true;
             }
-          } 
-          else {
-            setIsAdmin(false); 
-            
+          } else {
+            // Se o Admin tentar entrar no link de OUTRA barbearia
+            console.warn("⚠️ Admin tentando acessar unidade de terceiros como cliente.");
+            setIsAdmin(false); // Trata como cliente temporariamente para essa unidade
             if (allowRedirect && !hasRedirected.current) {
               setView('client');
               hasRedirected.current = true;
@@ -131,7 +131,7 @@ const App: React.FC = () => {
         }
       }
     } catch (err) {
-      console.error("Erro ao carregar perfil:", err);
+      console.error("❌ Erro ao carregar perfil:", err);
     } finally {
       setLoading(false);
     }

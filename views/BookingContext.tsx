@@ -11,6 +11,7 @@ export interface Appointment {
   time: string;
   price: number;
   status: 'pendente' | 'confirmado';
+  payment_method?: string;
   barbershop_id: string;
   user_id?: string;
 }
@@ -60,6 +61,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         price: Number(app.price),
         status: app.status as 'pendente' | 'confirmado',
         barbershop_id: app.barbershop_id,
+        payment_method: app.payment_method,
         user_id: app.user_id
       }));
 

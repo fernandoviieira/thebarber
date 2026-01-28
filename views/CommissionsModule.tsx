@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
     Users, ChevronDown, ChevronUp, Download, Wallet, Save,
-    Loader2, Percent, Calendar as CalendarIcon, Scissors, MinusCircle, Printer, Filter
+    Loader2, Percent, Calendar as CalendarIcon, Scissors, MinusCircle, Printer, Filter, Package
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
@@ -48,14 +48,35 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 .order('date', { ascending: false });
 
             if (barbersData && salesData) {
-                setReportData(barbersData.map(barber => ({
-                    ...barber,
-                    atendimentos: salesData.filter(sale => sale.barber === barber.name).length,
-                    totalBruto: salesData.filter(sale => sale.barber === barber.name).reduce((acc, curr) => acc + Number(curr.price), 0),
-                    currentRate: barber.commission_rate || 0,
-                    expenses: barber.expenses || 0, 
-                    detalhes: salesData.filter(sale => sale.barber === barber.name)
-                })));
+                setReportData(barbersData.map(barber => {
+                    const mySales = salesData.filter(sale => sale.barber === barber.name);
+                    
+                    // LÓGICA DE CÁLCULO HÍBRIDA (PRODUTO FIXO / SERVIÇO %)
+                    const comissaoTotalCalculada = mySales.reduce((acc, sale) => {
+                        // 1. Se for comissão de produto já salva no Checkout, usa o valor fixo
+                        if (sale.product_commission && Number(sale.product_commission) > 0) {
+                            return acc + Number(sale.product_commission);
+                        }
+                        // 2. Se for caixinha pura lançada como item, ignora (pois entra no tip_amount)
+                        if (sale.service === "Caixinha / Gorjeta") return acc;
+                        
+                        // 3. Caso contrário, aplica a % do barbeiro sobre o serviço
+                        return acc + (Number(sale.price) * (barber.commission_rate / 100));
+                    }, 0);
+
+                    const totalGorjetas = mySales.reduce((acc, sale) => acc + (Number(sale.tip_amount) || 0), 0);
+
+                    return {
+                        ...barber,
+                        atendimentos: mySales.length,
+                        totalBruto: mySales.reduce((acc, curr) => acc + Number(curr.price), 0),
+                        currentRate: barber.commission_rate || 0,
+                        expenses: barber.expenses || 0, 
+                        totalComissaoCalculada: comissaoTotalCalculada,
+                        totalGorjetas: totalGorjetas,
+                        detalhes: mySales
+                    };
+                }));
             }
         } catch (e) { console.error(e); } finally { setLoading(false); }
     };
@@ -151,8 +172,8 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                     <div className="py-20 flex flex-col items-center gap-4 text-amber-500 font-black text-[10px] tracking-[0.5em]"><Loader2 className="animate-spin" size={40} /> PROCESSANDO...</div>
                 ) : (
                     filteredReportData.map(barber => {
-                        const comissaoBruta = barber.totalBruto * (barber.currentRate / 100);
-                        const totalLiquido = comissaoBruta - (barber.expenses || 0);
+                        // Total líquido = (Comissão Serviços + Comissão Produtos) + Gorjetas - Vales
+                        const totalLiquido = barber.totalComissaoCalculada + barber.totalGorjetas - (barber.expenses || 0);
 
                         return (
                             <div key={barber.id} className="group">
@@ -164,17 +185,17 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                         <div className="w-20 h-20 rounded-[2rem] bg-gradient-to-br from-slate-800 to-black flex items-center justify-center text-amber-500 border border-white/5 shadow-2xl"><Users size={32} /></div>
                                         <div>
                                             <h4 className="text-3xl font-black text-white uppercase italic tracking-tighter">{barber.name}</h4>
-                                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">{barber.atendimentos} atendimentos no período</p>
+                                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">{barber.atendimentos} atendimentos</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-12">
                                         <div className="text-right">
-                                            <p className="text-[10px] font-black text-slate-500 uppercase mb-1">Comissão ({barber.currentRate}%)</p>
-                                            <p className="text-xl font-black text-white italic tabular-nums">R$ {comissaoBruta.toFixed(2)}</p>
+                                            <p className="text-[10px] font-black text-slate-500 uppercase mb-1">Comissões Acumuladas</p>
+                                            <p className="text-xl font-black text-white italic tabular-nums">R$ {barber.totalComissaoCalculada.toFixed(2)}</p>
                                         </div>
-                                        <div className="text-right text-red-500">
-                                            <p className="text-[10px] font-black uppercase mb-1 opacity-60">Vales/Adiantamentos</p>
-                                            <p className="text-xl font-black italic tabular-nums">- R$ {Number(barber.expenses || 0).toFixed(2)}</p>
+                                        <div className="text-right text-green-500">
+                                            <p className="text-[10px] font-black uppercase mb-1 opacity-60">Gorjetas</p>
+                                            <p className="text-xl font-black italic tabular-nums">+ R$ {barber.totalGorjetas.toFixed(2)}</p>
                                         </div>
                                         <div className="bg-amber-500 px-10 py-5 rounded-[2rem] text-center shadow-xl min-w-[200px]">
                                             <p className="text-[10px] font-black text-black/40 uppercase mb-1 italic leading-none">Total Líquido</p>
@@ -190,7 +211,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                             <div className="space-y-4">
                                                 <div className="flex items-center gap-2 text-amber-500">
                                                     <Percent size={18} />
-                                                    <span className="text-xs font-black uppercase italic">Taxa de Comissão (%)</span>
+                                                    <span className="text-xs font-black uppercase italic">Taxa de Comissão Serviços (%)</span>
                                                 </div>
                                                 <input
                                                     type="number"
@@ -211,8 +232,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                     className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-red-500 font-black text-2xl outline-none focus:border-red-500/50"
                                                 />
                                             </div>
-                                            
-                                            {/* BOTÃO DE SALVAR PERSISTENTE */}
                                             <div className="md:col-span-2 flex justify-end">
                                                 <button 
                                                     onClick={() => saveBarberChanges(barber.id)}
@@ -230,20 +249,28 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                 <thead className="sticky top-0 z-10">
                                                     <tr className="bg-slate-900 shadow-sm">
                                                         <th className="px-10 py-5 bg-slate-900 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">Data/Horário</th>
-                                                        <th className="px-10 py-5 bg-slate-900 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">Cliente</th>
-                                                        <th className="px-10 py-5 bg-slate-900 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5 text-right">Valor Bruto</th>
+                                                        <th className="px-10 py-5 bg-slate-900 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">Serviço / Produto</th>
+                                                        <th className="px-10 py-5 bg-slate-900 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5 text-right">Preço</th>
                                                         <th className="px-10 py-5 bg-slate-900 text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] border-b border-white/5 text-right italic">Comissão</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-white/5 bg-transparent">
-                                                    {barber.detalhes.map((v: any) => (
-                                                        <tr key={v.id} className="hover:bg-white/[0.03] transition-colors">
-                                                            <td className="px-10 py-4 text-[10px] text-slate-400 font-bold">{new Date(v.date + 'T00:00:00').toLocaleDateString('pt-BR')} <span className="text-slate-600 ml-2">{v.time}</span></td>
-                                                            <td className="px-10 py-4 text-xs font-black uppercase text-white tracking-tighter">{v.customerName}</td>
-                                                            <td className="px-10 py-4 text-right text-xs font-bold tabular-nums text-slate-400">R$ {Number(v.price).toFixed(2)}</td>
-                                                            <td className="px-10 py-4 text-right text-sm font-black text-amber-500 tabular-nums">R$ {(Number(v.price) * (barber.currentRate / 100)).toFixed(2)}</td>
-                                                        </tr>
-                                                    ))}
+                                                    {barber.detalhes.map((v: any) => {
+                                                        const isProduct = v.product_commission && v.product_commission > 0;
+                                                        const comissaoItem = isProduct ? v.product_commission : (v.service === "Caixinha / Gorjeta" ? 0 : (v.price * (barber.currentRate / 100)));
+                                                        
+                                                        return (
+                                                            <tr key={v.id} className="hover:bg-white/[0.03] transition-colors">
+                                                                <td className="px-10 py-4 text-[10px] text-slate-400 font-bold">{new Date(v.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                                                                <td className="px-10 py-4 text-xs font-black uppercase text-white tracking-tighter flex items-center gap-2">
+                                                                    {isProduct ? <Package size={12} className="text-blue-400"/> : <Scissors size={12} className="text-amber-500"/>}
+                                                                    {v.service}
+                                                                </td>
+                                                                <td className="px-10 py-4 text-right text-xs font-bold tabular-nums text-slate-400">R$ {Number(v.price).toFixed(2)}</td>
+                                                                <td className="px-10 py-4 text-right text-sm font-black text-amber-500 tabular-nums">R$ {Number(comissaoItem).toFixed(2)}</td>
+                                                            </tr>
+                                                        );
+                                                    })}
                                                 </tbody>
                                             </table>
                                         </div>
@@ -262,7 +289,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                         <div>
                             <p className="text-[12px] font-black text-black/50 uppercase tracking-[0.3em] mb-3">Total Líquido a Repassar</p>
                             <h3 className="text-7xl font-black text-black italic leading-none tabular-nums">
-                                R$ {filteredReportData.reduce((acc, b) => acc + ((b.totalBruto * (b.currentRate / 100)) - (b.expenses || 0)), 0).toFixed(2)}
+                                R$ {filteredReportData.reduce((acc, b) => acc + (b.totalComissaoCalculada + b.totalGorjetas - (b.expenses || 0)), 0).toFixed(2)}
                             </h3>
                         </div>
                     </div>
@@ -275,6 +302,8 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
             <div id="print-area" className="hidden print:block bg-white text-black p-0 font-sans">
                 {filteredReportData.map((barber, index) => {
                     const isLast = index === filteredReportData.length - 1;
+                    const totalLiquidoPrint = barber.totalComissaoCalculada + barber.totalGorjetas - (barber.expenses || 0);
+
                     return (
                         <div 
                             key={barber.id} 
@@ -300,25 +329,25 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                             <div className="bg-gray-100 p-4 rounded-xl mb-5 border border-gray-200">
                                 <div className="grid grid-cols-4 gap-4 text-center">
                                     <div>
-                                        <p className="text-[8px] font-black uppercase text-gray-400">Produção Bruta</p>
-                                        <p className="text-lg font-black">R$ {barber.totalBruto.toFixed(2)}</p>
+                                        <p className="text-[8px] font-black uppercase text-gray-400">Comissões Total</p>
+                                        <p className="text-lg font-black">R$ {barber.totalComissaoCalculada.toFixed(2)}</p>
                                     </div>
                                     <div>
-                                        <p className="text-[8px] font-black uppercase text-gray-400">Taxa (%)</p>
+                                        <p className="text-[8px] font-black uppercase text-gray-400">Gorjetas (+)</p>
+                                        <p className="text-lg font-black">R$ {barber.totalGorjetas.toFixed(2)}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-[8px] font-black uppercase text-gray-400">Taxa Base (%)</p>
                                         <p className="text-lg font-black">{barber.currentRate}%</p>
                                     </div>
-                                    <div>
-                                        <p className="text-[8px] font-black uppercase text-gray-400">Comissão</p>
-                                        <p className="text-lg font-black">R$ {(barber.totalBruto * (barber.currentRate / 100)).toFixed(2)}</p>
-                                    </div>
                                     <div className="text-red-600">
-                                        <p className="text-[8px] font-black uppercase text-gray-400">Descontos/Vales</p>
-                                        <p className="text-lg font-black">- R$ {Number(barber.expenses || 0).toFixed(2)}</p>
+                                        <p className="text-[8px] font-black uppercase text-gray-400">Vales/Desc (-)</p>
+                                        <p className="text-lg font-black">R$ {Number(barber.expenses || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                                 <div className="mt-6 pt-6 border-t border-gray-300 text-center">
                                     <p className="text-xs font-black uppercase text-gray-400 mb-1">Total Líquido a Receber</p>
-                                    <p className="text-4xl font-black italic">R$ {((barber.totalBruto * (barber.currentRate / 100)) - (barber.expenses || 0)).toFixed(2)}</p>
+                                    <p className="text-4xl font-black italic">R$ {totalLiquidoPrint.toFixed(2)}</p>
                                 </div>
                             </div>
 
@@ -328,20 +357,24 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                     <thead>
                                         <tr className="border-b border-gray-300">
                                             <th className="py-2 text-left">Data</th>
-                                            <th className="py-2 text-left">Cliente</th>
-                                            <th className="py-2 text-left">Serviço</th>
-                                            <th className="py-2 text-right">Valor</th>
+                                            <th className="py-2 text-left">Item</th>
+                                            <th className="py-2 text-right">V. Bruto</th>
+                                            <th className="py-2 text-right">Comissão</th>
                                         </tr>
                                     </thead>
                                     <tbody>
-                                        {barber.detalhes.map((v: any) => (
-                                            <tr key={v.id} className="border-b border-gray-100">
-                                                <td className="py-2">{new Date(v.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                                                <td className="py-2 font-bold uppercase">{v.customerName}</td>
-                                                <td className="py-2 italic">{v.service}</td>
-                                                <td className="py-2 text-right">R$ {Number(v.price).toFixed(2)}</td>
-                                            </tr>
-                                        ))}
+                                        {barber.detalhes.map((v: any) => {
+                                             const isProd = v.product_commission && v.product_commission > 0;
+                                             const comVal = isProd ? v.product_commission : (v.service === "Caixinha / Gorjeta" ? 0 : (v.price * (barber.currentRate / 100)));
+                                             return (
+                                                <tr key={v.id} className="border-b border-gray-100">
+                                                    <td className="py-2">{new Date(v.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                                                    <td className="py-2 font-bold uppercase">{v.service}</td>
+                                                    <td className="py-2 text-right text-gray-400">R$ {Number(v.price).toFixed(2)}</td>
+                                                    <td className="py-2 text-right font-bold">R$ {Number(comVal).toFixed(2)}</td>
+                                                </tr>
+                                             )
+                                        })}
                                     </tbody>
                                 </table>
                             </div>

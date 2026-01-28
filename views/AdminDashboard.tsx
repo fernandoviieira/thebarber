@@ -5,8 +5,11 @@ import AdminSettings from './AdminSettings';
 import CustomersModule from './CustomersModule';
 import CommissionsModule from './CommissionsModule';
 import InventoryModule from './InventoryModule';
-// Importação do DatePicker
+import AdminCalendarView from './AdminCalendarView';
+import CashFlowModule from './CashFlowModule';
+import CheckoutModule from './CheckoutModule';
 import DatePicker from 'react-datepicker';
+import SalesHistoryModule from './SalesHistoryModule'; // Importe o novo componente
 import "react-datepicker/dist/react-datepicker.css";
 import { ptBR } from 'date-fns/locale';
 import {
@@ -44,7 +47,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
   const [allCustomers, setAllCustomers] = useState<any[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'agendamentos' | 'lancamento' | 'clientes' | 'estoque' | 'config' | 'comissoes'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'agendamentos' | 'lancamento' | 'clientes' | 'estoque' | 'config' | 'comissoes' | 'historico' | 'caixa'>('dashboard');
 
   const [machineFees, setMachineFees] = useState({
     dinheiro: 0,
@@ -323,19 +326,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
         </div>
         <nav className="flex-1 space-y-1">
           {/* NOMES DAS ABAS ORIGINAIS RESTAURADOS */}
+          <SidebarItem icon={<Banknote size={20} />} label="Fluxo de Caixa" active={activeTab === 'caixa'} onClick={() => setActiveTab('caixa')} />
           <SidebarItem icon={<LayoutDashboard size={20} />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => setActiveTab('dashboard')} />
           <SidebarItem icon={<CalendarDays size={20} />} label="Agendamentos" active={activeTab === 'agendamentos'} onClick={() => setActiveTab('agendamentos')} />
           <SidebarItem icon={<ReceiptText size={20} />} label="Lançar Venda" active={activeTab === 'lancamento'} onClick={() => setActiveTab('lancamento')} />
-          <div className="h-4" />
           <SidebarItem icon={<DollarSign size={20} />} label="Comissões" active={activeTab === 'comissoes'} onClick={() => setActiveTab('comissoes')} />
           <SidebarItem icon={<Users size={20} />} label="Clientes" active={activeTab === 'clientes'} onClick={() => setActiveTab('clientes')} />
           <SidebarItem icon={<Package size={20} />} label="Estoque" active={activeTab === 'estoque'} onClick={() => setActiveTab('estoque')} />
+          <SidebarItem icon={<History size={20} />} label="Histórico" active={activeTab === 'historico'} onClick={() => setActiveTab('historico')} />
           <SidebarItem icon={<Settings size={20} />} label="Configurações" active={activeTab === 'config'} onClick={() => setActiveTab('config')} />
         </nav>
       </aside>
 
       <main className="flex-1 overflow-y-auto relative bg-[#0f1115] custom-scrollbar">
         <div className="max-w-[1400px] mx-auto px-10 py-10">
+
+          {/* Título dinâmico para a nova aba */}
+          {activeTab === 'historico' && (
+            <header className="border-b border-white/5 pb-8 mb-8">
+              <h2 className="text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
+                Livro de <span className="text-amber-500">Caixa</span>
+              </h2>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mt-2">Relatório detalhado de todas as transações</p>
+            </header>
+          )}
 
           {(activeTab === 'dashboard' || activeTab === 'agendamentos') && (
             <header className="flex flex-col lg:flex-row justify-between items-start lg:items-end gap-6 border-b border-white/5 pb-8 mb-8">
@@ -351,24 +365,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
               <div className="flex items-center gap-4">
                 {activeTab === 'dashboard' && (
-                  <button onClick={analyzeWithSarah} disabled={isSarahAnalyzing} className="bg-slate-900 border border-white/5 p-4 rounded-2xl hover:border-amber-500/50 shadow-xl transition-all">
-                    {isSarahAnalyzing ? <Loader2 className="animate-spin text-amber-500" size={24} /> : <BrainCircuit className="text-amber-500" size={24} />}
-                  </button>
-                )}
+                  <>
+                    <button onClick={analyzeWithSarah} disabled={isSarahAnalyzing} className="bg-slate-900 border border-white/5 p-4 rounded-2xl hover:border-amber-500/50 shadow-xl transition-all">
+                      {isSarahAnalyzing ? <Loader2 className="animate-spin text-amber-500" size={24} /> : <BrainCircuit className="text-amber-500" size={24} />}
+                    </button>
 
-                <div className="bg-slate-900 border border-white/10 p-4 rounded-2xl flex items-center gap-4 shadow-xl hover:border-amber-500/30 transition-all">
-                  <CalendarIcon size={18} className="text-amber-500" />
-                  <DatePicker
-                    selectsRange={true}
-                    startDate={startDate}
-                    endDate={endDate}
-                    onChange={(update) => setDateRange(update)}
-                    locale={ptBR}
-                    dateFormat="dd/MM/yyyy"
-                    className="bg-transparent text-white text-sm font-bold outline-none cursor-pointer w-[190px]"
-                    placeholderText="Selecione o período"
-                  />
-                </div>
+                    <div className="bg-slate-900 border border-white/10 p-4 rounded-2xl flex items-center gap-4 shadow-xl hover:border-amber-500/30 transition-all z-[100] relative">
+                      <CalendarIcon size={18} className="text-amber-500" />
+                      <DatePicker
+                        selectsRange={true}
+                        startDate={startDate}
+                        endDate={endDate}
+                        onChange={(update) => setDateRange(update)}
+                        locale={ptBR}
+                        dateFormat="dd/MM/yyyy"
+                        className="bg-transparent text-white text-sm font-bold outline-none cursor-pointer w-[190px]"
+                        placeholderText="Selecione o período"
+                        portalId="root-portal"
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </header>
           )}
@@ -467,257 +484,68 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
             </div>
           )}
 
-          {/* O RESTANTE DO CÓDIGO (Lançamento, Agendamentos, etc) PERMANECE 100% IGUAL AO SEU ORIGINAL */}
           {activeTab === 'lancamento' && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-              <header className="border-b border-white/5 flex justify-between items-center pb-8">
-                <h2 className="text-5xl font-black text-white tracking-tighter uppercase italic">Lançamento <span className="text-amber-500">Checkout</span></h2>
-                <div className="flex items-center gap-4 bg-slate-900 p-4 rounded-2xl border border-white/5">
-                  {/* BARRA DE TAXAS SEM SETAS/SCROLL */}
-                  <div className="flex gap-4 border-r border-white/10 pr-4">
-                    <div className="space-y-1">
-                      <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Déb. (%)</label>
-                      <input
-                        type="number"
-                        value={machineFees.debito}
-                        onChange={(e) => setMachineFees({ ...machineFees, debito: Number(e.target.value) })}
-                        className="appearance-none bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs font-bold text-amber-500 w-16 outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[8px] font-black uppercase text-slate-500 tracking-widest">Créd. (%)</label>
-                      <input
-                        type="number"
-                        value={machineFees.credito}
-                        onChange={(e) => setMachineFees({ ...machineFees, credito: Number(e.target.value) })}
-                        className="appearance-none bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs font-bold text-amber-500 w-16 outline-none focus:border-amber-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-                  <button onClick={saveFees} disabled={isSavingFees} className="flex items-center gap-2 text-slate-500 hover:text-amber-500 transition-colors">
-                    {isSavingFees ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                    <span className="text-[9px] font-black uppercase tracking-widest">Salvar</span>
-                  </button>
-                </div>
-              </header>
-
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
-                <div className="xl:col-span-2 space-y-10">
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-2">0. Localizar Cliente</label>
-                    <select
-                      className="w-full bg-slate-900 border border-white/10 rounded-2xl p-5 text-white font-bold outline-none focus:border-amber-500"
-                      onChange={(e) => {
-                        const customer = allCustomers.find(c => c.id === e.target.value);
-                        setSelectedCustomer(customer || null);
-                      }}
-                      value={selectedCustomer?.id || ""}
-                    >
-                      <option value="">Cliente de Balcão (Venda Direta)</option>
-                      {allCustomers.map(c => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} {c.customer_packages?.some((p: any) => p.used_credits < p.total_credits) ? '⭐ (Tem Pacote)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-2">1. Quem está atendendo?</label>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {barbers.map(b => (
-                        <button key={b.id} onClick={() => setSelectedBarber(b.name)} className={`p-4 rounded-2xl border transition-all text-center ${selectedBarber === b.name ? 'bg-amber-500 border-amber-500 text-black' : 'bg-slate-900 border-white/5 text-slate-400 hover:border-amber-500/50'}`}>
-                          <p className="text-xs font-black uppercase italic">{b.name}</p>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="space-y-8">
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-2 flex items-center gap-2"><Clock size={14} /> 2. Adicionar Serviços</label>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {availableServices.map(s => (
-                          <button key={s.id} onClick={() => addItemToPdv(s, 'servico')} className="bg-slate-900/50 border border-white/5 p-6 rounded-3xl hover:border-amber-500/50 text-left transition-all">
-                            <p className="text-white font-black uppercase text-xs mb-1 italic">{s.name}</p>
-                            <p className="text-amber-500 font-bold tabular-nums">R$ {Number(s.price).toFixed(2)}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-2 flex items-center gap-2"><Package size={14} /> 3. Venda de Produtos</label>
-                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                        {inventory.map(p => (
-                          <button key={p.id} onClick={() => addItemToPdv(p, 'produto')} className="bg-slate-800/30 border border-white/5 p-6 rounded-3xl hover:border-blue-500/50 text-left transition-all">
-                            <p className="text-white font-black uppercase text-xs mb-1 italic">{p.name}</p>
-                            <p className="text-blue-400 font-bold tabular-nums text-xs">R$ {Number(p.price_sell).toFixed(2)}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] ml-2">4. Forma de Pagamento</label>
-                      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                        <PaymentBtn icon={<Banknote size={20} />} label="Dinheiro" active={paymentMethod === 'dinheiro'} onClick={() => setPaymentMethod('dinheiro')} />
-                        <PaymentBtn icon={<QrCode size={20} />} label="PIX" active={paymentMethod === 'pix'} onClick={() => setPaymentMethod('pix')} />
-                        <PaymentBtn icon={<CreditCard size={20} />} label="Débito" active={paymentMethod === 'debito'} onClick={() => setPaymentMethod('debito')} />
-                        <PaymentBtn icon={<CreditCard size={20} />} label="Crédito" active={paymentMethod === 'credito'} onClick={() => setPaymentMethod('credito')} />
-                        <button
-                          disabled={!selectedCustomer?.customer_packages?.some((p: any) => p.used_credits < p.total_credits)}
-                          onClick={() => setPaymentMethod('pacote')}
-                          className={`p-4 rounded-2xl border transition-all flex flex-col items-center gap-2 disabled:opacity-20 ${paymentMethod === 'pacote' ? 'bg-green-500 text-black border-green-500' : 'bg-slate-900 border-white/5 text-slate-400 hover:border-green-500/50'}`}
-                        >
-                          <History size={20} /> <span className="text-[10px] font-black uppercase">Pacote</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-slate-900/40 border border-white/5 rounded-[3rem] p-8 h-fit sticky top-10 shadow-2xl backdrop-blur-md">
-                  <div className="flex items-center gap-3 mb-8 border-b border-white/5 pb-6">
-                    <ShoppingCart className="text-amber-500" size={24} />
-                    <h4 className="text-xl font-black text-white italic uppercase">Carrinho</h4>
-                  </div>
-                  <div className="space-y-4 min-h-[150px] mb-8">
-                    {pdvItems.map(item => (
-                      <div key={item.id} className="flex justify-between items-center bg-white/5 p-4 rounded-2xl group border border-transparent hover:border-white/10">
-                        <div>
-                          <p className="text-white font-bold text-xs uppercase italic">{item.name}</p>
-                          <p className={`text-[8px] font-black uppercase tracking-widest ${item.type === 'produto' ? 'text-blue-400' : 'text-amber-500'}`}>{item.type}</p>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <span className="text-sm font-black tabular-nums text-slate-300">
-                            R$ {Number(paymentMethod === 'pacote' && item.type === 'servico' && selectedCustomer?.customer_packages?.find((p: any) => p.used_credits < p.total_credits)?.used_credits > 0 ? 0 : item.price).toFixed(2)}
-                          </span>
-                          <button onClick={() => removeItemFromPdv(item.id)} className="text-red-500/50 hover:text-red-500"><X size={16} /></button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="bg-black/40 rounded-3xl p-6 mb-8 border border-white/5 text-center">
-                    <p className="text-[10px] font-black text-slate-500 uppercase mb-1">Total a Pagar</p>
-                    <h3 className="text-5xl font-black text-amber-500 italic tabular-nums">R$ {pdvTotal.toFixed(2)}</h3>
-
-                    {/* LUCRO LÍQUIDO APÓS TAXAS */}
-                    {paymentMethod !== 'pacote' && (
-                      <div className="mt-4 pt-4 border-t border-white/5">
-                        <p className="text-[9px] font-black text-slate-500 uppercase mb-1 tracking-widest">Lucro Líquido (Pós Taxas)</p>
-                        <p className="text-xl font-black text-green-500 italic tabular-nums">R$ {pdvTotalLiquido.toFixed(2)}</p>
-                      </div>
-                    )}
-
-                    {paymentMethod === 'pacote' && selectedCustomer && (
-                      <div className="mt-2">
-                        {selectedCustomer.customer_packages?.find((p: any) => p.used_credits < p.total_credits)?.used_credits === 0 ? (
-                          <p className="text-[9px] text-amber-500 font-black uppercase">Ativando Pacote (Valor Full + Produtos)</p>
-                        ) : (
-                          <p className="text-[9px] text-green-500 font-black uppercase">Crédito Disponível (Corte Isento + Produtos)</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <button
-                    disabled={!selectedBarber || (paymentMethod !== 'pacote' && pdvItems.length === 0)}
-                    onClick={handleFinalizeSale}
-                    className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-20 text-black py-6 rounded-[2rem] font-black uppercase text-xs tracking-widest transition-all shadow-xl active:scale-95"
-                  >
-                    Finalizar Venda
-                  </button>
-                </div>
-              </div>
-            </div>
+            <CheckoutModule
+              barbershopId={barbershopId!}
+              barbers={barbers}
+              services={availableServices}
+              inventory={inventory}
+              customers={allCustomers}
+              machineFees={machineFees}
+              onSuccess={() => {
+                fetchAppointments(barbershopId!);
+              }}
+            />
           )}
 
-          {/* APENAS A ABA DE AGENDAMENTO FOI MODIFICADA */}
+          {activeTab === 'historico' && (
+            <SalesHistoryModule
+              appointments={appointments.filter(app => app.barbershop_id === barbershopId)}
+              onDelete={async (id) => {
+                if (confirm("Deseja estornar esta venda? Isso removerá o valor do faturamento.")) {
+                  await deleteAppointment(id);
+                  if (fetchAppointments) await fetchAppointments(barbershopId!);
+                }
+              }}
+            />
+          )}
+
           {/* APENAS A ABA DE AGENDAMENTO FOI MODIFICADA PARA UM CALENDÁRIO PREMIUM */}
           {activeTab === 'agendamentos' && (
-            <div className="space-y-6 animate-in fade-in zoom-in-95 duration-700">
-              <div className="bg-[#0a0b0e] border border-white/5 rounded-[3rem] p-8 shadow-2xl relative overflow-hidden">
+            <div className="space-y-8 animate-in fade-in duration-700">
+              <AdminCalendarView
+                barbers={barbers}
+                appointments={filteredApps}
+                services={availableServices}
+                barbershopId={barbershopId!}
+                onSave={async (newBooking) => {
+                  await addAppointment(newBooking);
+                  if (fetchAppointments) await fetchAppointments(barbershopId!);
+                }}
+                onDelete={async (id) => {
+                  await deleteAppointment(id);
+                  if (fetchAppointments) await fetchAppointments(barbershopId!);
+                }}
+                onUpdate={async (id, updates) => {
+                  // ESSA É A LÓGICA QUE MUDA NO BANCO
+                  const { error } = await supabase
+                    .from('appointments')
+                    .update(updates)
+                    .eq('id', id);
 
-                {/* Header do Calendário */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 px-4">
-                  <div>
-                    <h4 className="text-2xl font-black text-white uppercase italic tracking-tighter">Agenda <span className="text-amber-500">Inteligente</span></h4>
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mt-1">Gestão de ocupação e slots</p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-white/5 rounded-lg border border-white/10">
-                      <div className="w-2 h-2 bg-amber-500 rounded-full animate-pulse" />
-                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Live Sync</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Grid do Calendário */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pr-2 custom-scrollbar">
-                  {filteredApps.length > 0 ? (
-                    filteredApps
-                      .sort((a, b) => a.time.localeCompare(b.time))
-                      .map((app) => (
-                        <div
-                          key={app.id}
-                          className="group relative bg-slate-900/40 border border-white/5 p-5 rounded-[2rem] hover:border-amber-500/40 transition-all duration-500 hover:bg-slate-900/60 hover:-translate-y-1 shadow-lg"
-                        >
-                          {/* Badge de Horário */}
-                          <div className="flex justify-between items-start mb-4">
-                            <div className="bg-amber-500 text-black px-3 py-1 rounded-full text-[10px] font-black tabular-nums shadow-[0_0_15px_rgba(245,158,11,0.3)]">
-                              {app.time}
-                            </div>
-                            <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Sparkles size={14} className="text-amber-500" />
-                            </div>
-                          </div>
-
-                          {/* Info do Cliente */}
-                          <div className="space-y-1 mb-4">
-                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Cliente</p>
-                            <h5 className="text-lg font-black text-white uppercase italic truncate group-hover:text-amber-500 transition-colors">
-                              {app.customerName}
-                            </h5>
-                          </div>
-
-                          {/* Detalhes do Serviço */}
-                          <div className="bg-black/20 rounded-2xl p-4 border border-white/5 group-hover:border-amber-500/10 transition-colors">
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Serviço</span>
-                              <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest">{app.barber}</span>
-                            </div>
-                            <p className="text-xs font-bold text-slate-200 truncate">{app.service}</p>
-                          </div>
-
-                          {/* Valor e Footer */}
-                          <div className="mt-4 flex justify-between items-center">
-                            <div className="flex flex-col">
-                              <span className="text-[8px] font-black text-slate-600 uppercase tracking-widest">Total</span>
-                              <span className="text-lg font-black text-white italic tabular-nums group-hover:text-amber-500 transition-colors">
-                                R$ {Number(app.price).toFixed(2)}
-                              </span>
-                            </div>
-                            <button className="p-2 rounded-xl bg-white/5 text-slate-500 hover:text-amber-500 hover:bg-amber-500/10 transition-all">
-                              <ArrowRight size={16} />
-                            </button>
-                          </div>
-
-                          {/* Decoração Lateral */}
-                          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-12 bg-amber-500 rounded-r-full opacity-0 group-hover:opacity-100 transition-all shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
-                        </div>
-                      ))
-                  ) : (
-                    <div className="col-span-full py-24 flex flex-col items-center justify-center opacity-20 border-2 border-dashed border-white/10 rounded-[3rem]">
-                      <CalendarIcon size={64} className="mb-4 stroke-[1px]" />
-                      <p className="font-black uppercase tracking-[0.4em] text-xs">Agenda Vazia no Período</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+                  if (!error && fetchAppointments) {
+                    await fetchAppointments(barbershopId!);
+                  }
+                }}
+              />
             </div>
           )}
+          {activeTab === 'caixa' && (
+  <CashFlowModule 
+    barbershopId={barbershopId!} 
+    appointments={appointments.filter(app => app.barbershop_id === barbershopId)} 
+  />
+)}
           {activeTab === 'clientes' && <CustomersModule barbershopId={barbershopId} />}
           {activeTab === 'comissoes' && <CommissionsModule barbershopId={barbershopId} />}
           {activeTab === 'estoque' && <InventoryModule barbershopId={barbershopId} />}
