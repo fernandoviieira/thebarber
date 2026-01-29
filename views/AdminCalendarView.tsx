@@ -147,7 +147,6 @@ const getServiceDuration = (appointment: any) => {
         customerPhone: 'Balcão'
       };
 
-      console.log("Salvando agendamento:", dataToSave);
       await onSave(dataToSave);
 
       setNewBooking({
@@ -228,9 +227,7 @@ const getServiceDuration = (appointment: any) => {
                   const end = start + duration;
 
                   const occupied = slotMin > start && slotMin < end;
-                  if (occupied) {
-                    console.log(`Slot ${slot} bloqueado por: ${a.customerName} | Duração: ${duration}min`);
-                  }
+                
                   return occupied;
                 });
 
