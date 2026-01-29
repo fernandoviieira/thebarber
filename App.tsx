@@ -199,7 +199,7 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
           />
         )}
         
-        <main className="flex-1 pb-24 md:pb-0">
+        <main className="flex-1">
           {view === 'client' && urlSlug && <ClientHome onStartBooking={() => navigateTo('booking')} />}
 
           {view === 'admin' && isAdmin && barbershopId && <AdminDashboard barbershopId={barbershopId} />}
@@ -248,7 +248,7 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
                 <div className="bg-zinc-900/80 backdrop-blur-md border border-zinc-800 rounded-[3rem] overflow-hidden shadow-2xl text-left">
                   {isAdmin && barbershopId && (
                     <button onClick={() => navigateTo('admin')} className="w-full flex items-center justify-between p-7 hover:bg-zinc-800 transition-all border-b border-zinc-800 text-amber-500 group">
-                      <div className="w-full flex items-center justify-between p-5 md:p-7">
+                      <div className="flex items-center gap-5">
                         <LayoutDashboard size={24} className="group-hover:rotate-6 transition-transform" />
                         <span className="font-black uppercase text-xs tracking-[0.2em]">Painel do Gestor</span>
                       </div>

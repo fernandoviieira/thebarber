@@ -572,7 +572,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
             <div className="space-y-6 lg:space-y-8 animate-in fade-in duration-700">
               <AdminCalendarView
                 barbers={barbers}
-                appointments={filteredApps}
+                appointments={appointments.filter(app => app.barbershop_id === barbershopId)}
                 services={availableServices}
                 barbershopId={barbershopId!}
                 onSave={async (newBooking) => {
