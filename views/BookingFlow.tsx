@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { BUSINESS_HOURS, SERVICES as DEFAULT_SERVICES, BARBERS as DEFAULT_BARBERS } from '../constants';
 import { Service, Barber } from '../types';
-import { Check, ArrowLeft, Calendar as CalendarIcon, Clock, CheckCircle2, User, Phone, Scissors, Loader2 } from 'lucide-react';
+import { 
+  Check, ArrowLeft, Calendar as CalendarIcon, Clock, 
+  CheckCircle2, User, Phone, Scissors, Loader2, AlertTriangle 
+} from 'lucide-react';
 import { useBooking } from './BookingContext';
 import { supabase } from '@/lib/supabase';
 
@@ -18,6 +20,12 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   const [currentBarbershopId, setCurrentBarbershopId] = useState<string | null>(null);
   const [availableBarbers, setAvailableBarbers] = useState<Barber[]>([]);
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
+  
+  const [shopSettings, setShopSettings] = useState<{
+    is_closed: boolean;
+    opening_time: string;
+    closing_time: string;
+  } | null>(null);
 
   const [selectedServices, setSelectedServices] = useState<Service[]>([]);
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
@@ -40,13 +48,15 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
         if (barbershop) {
           setCurrentBarbershopId(barbershop.id);
-          const [barbersRes, servicesRes] = await Promise.all([
+          const [barbersRes, servicesRes, settingsRes] = await Promise.all([
             supabase.from('barbers').select('*').eq('barbershop_id', barbershop.id).order('name'),
-            supabase.from('services').select('*').eq('barbershop_id', barbershop.id).order('name')
+            supabase.from('services').select('*').eq('barbershop_id', barbershop.id).order('name'),
+            supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershop.id).maybeSingle()
           ]);
 
           if (barbersRes.data) setAvailableBarbers(barbersRes.data);
           if (servicesRes.data) setAvailableServices(servicesRes.data);
+          if (settingsRes.data) setShopSettings(settingsRes.data);
         }
       } catch (err) {
         console.error("Erro ao carregar dados:", err);
@@ -56,6 +66,27 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     }
     loadBookingData();
   }, []);
+
+  const handleFinalizeBooking = async () => {
+    if (!selectedBarber || !currentBarbershopId) return;
+    const newBooking = {
+      customerName,
+      customerPhone,
+      service: selectedServices.map(s => s.name).join(', '),
+      barber: selectedBarber.name,
+      date: selectedDate,
+      time: selectedTime,
+      price: totalPrice,
+      status: 'pendente' as const,
+      barbershop_id: currentBarbershopId
+    };
+    try {
+      await addAppointment(newBooking);
+      setStep(5);
+    } catch (err: any) {
+      alert(`Erro ao agendar: ${err.message}`);
+    }
+  };
 
   const timeToMinutes = (t: string) => {
     const [h, m] = t.split(':').map(Number);
@@ -71,29 +102,6 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     );
   };
 
-  const handleFinalizeBooking = async () => {
-    if (!selectedBarber || !currentBarbershopId) return;
-
-    const newBooking = {
-      customerName,
-      customerPhone,
-      service: selectedServices.map(s => s.name).join(', '),
-      barber: selectedBarber.name,
-      date: selectedDate,
-      time: selectedTime,
-      price: totalPrice,
-      status: 'pendente' as const,
-      barbershop_id: currentBarbershopId
-    };
-
-    try {
-      await addAppointment(newBooking);
-      setStep(5);
-    } catch (err: any) {
-      alert(`Erro: ${err.message}`);
-    }
-  };
-
   const formatPhone = (value: string) => {
     if (!value) return "";
     value = value.replace(/\D/g, "");
@@ -104,7 +112,20 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
   const totalPrice = selectedServices.reduce((acc, s) => acc + Number(s.price), 0);
 
-  // --- RENDERS ---
+  if (shopSettings?.is_closed) {
+    return (
+      <div className="max-w-xl mx-auto px-4 py-20 text-center animate-in zoom-in duration-500">
+        <div className="bg-red-500/10 border border-red-500/20 p-10 rounded-[3rem] shadow-2xl backdrop-blur-md">
+          <AlertTriangle size={64} className="text-red-500 mx-auto mb-6 animate-pulse" />
+          <h3 className="text-2xl font-black text-white uppercase italic tracking-tighter">Unidade Fechada</h3>
+          <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] mt-4 leading-relaxed">
+            Não estamos aceitando novos agendamentos online no momento.
+          </p>
+          <button onClick={onCancel} className="mt-10 w-full bg-zinc-800 text-white font-black py-5 rounded-2xl uppercase italic">Voltar</button>
+        </div>
+      </div>
+    );
+  }
 
   const renderStep1 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
@@ -120,8 +141,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
                 setSelectedServices([...selectedServices, service]);
               }
             }}
-            className={`w-full flex items-center justify-between p-5 rounded-2xl border transition-all ${selectedServices.find(s => s.id === service.id) ? 'bg-amber-500/10 border-amber-500' : 'bg-zinc-900 border-zinc-800'
-              }`}
+            className={`w-full flex items-center justify-between p-5 rounded-2xl border transition-all ${selectedServices.find(s => s.id === service.id) ? 'bg-amber-500/10 border-amber-500' : 'bg-zinc-900 border-zinc-800'}`}
           >
             <div className="text-left">
               <p className="font-black text-white italic uppercase">{service.name}</p>
@@ -143,10 +163,9 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
           <button
             key={barber.id}
             onClick={() => setSelectedBarber(barber)}
-            className={`flex flex-col items-center p-6 rounded-[2rem] border transition-all ${selectedBarber?.id === barber.id ? 'bg-amber-500/10 border-amber-500 shadow-lg' : 'bg-zinc-900 border-zinc-800'
-              }`}
+            className={`flex flex-col items-center p-6 rounded-[2rem] border transition-all ${selectedBarber?.id === barber.id ? 'bg-amber-500/10 border-amber-500 shadow-lg' : 'bg-zinc-900 border-zinc-800'}`}
           >
-            <img src={barber.photo} className="w-20 h-20 rounded-full mb-3 object-cover grayscale hover:grayscale-0 transition-all" alt={barber.name} />
+            <img src={barber.photo} className="w-20 h-20 rounded-full mb-3 object-cover grayscale" alt={barber.name} />
             <span className="font-black text-white italic uppercase text-xs">{barber.name}</span>
           </button>
         ))}
@@ -159,43 +178,29 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   );
 
   const renderStep3 = () => {
-    const today = new Date();
-    // String de comparação YYYY-MM-DD
-    const todayStr = today.toISOString().split('T')[0];
-    const currentHour = today.getHours();
-    const currentMinutes = today.getMinutes();
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    
+    // 🔥 Pega hora e minuto atual para bloquear horários passados no dia de hoje
+    const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
 
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
-        <h3 className="text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter italic">Melhor horário?</h3>
-
-        {/* SELETOR DE DATAS: 30 DIAS PARA FRENTE */}
+        <h3 className="text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">Melhor horário?</h3>
         <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
           {Array.from({ length: 30 }, (_, i) => {
-            const d = new Date();
-            d.setDate(d.getDate() + i);
+            const d = new Date(); d.setDate(d.getDate() + i);
             const dateStr = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric' });
             const value = d.toISOString().split('T')[0];
-
-            const dayOfWeek = d.getDay().toString();
-            const isWorkingDay = selectedBarber?.work_days?.[dayOfWeek]?.active;
-            const isToday = value === todayStr;
-
+            const isWorkingDay = selectedBarber?.work_days?.[d.getDay().toString()]?.active;
             return (
               <button
-                key={i}
-                disabled={!isWorkingDay}
+                key={i} disabled={!isWorkingDay}
                 onClick={() => { setSelectedDate(value); setSelectedTime(''); }}
-                className={`flex-shrink-0 w-20 py-5 rounded-2xl border transition-all flex flex-col items-center justify-center gap-1 ${selectedDate === value
-                    ? 'bg-amber-500 text-black border-amber-500 shadow-lg'
-                    : !isWorkingDay
-                      ? 'opacity-10 bg-black border-zinc-900 cursor-not-allowed'
-                      : 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                  }`}
+                className={`flex-shrink-0 w-20 py-5 rounded-2xl border transition-all flex flex-col items-center justify-center ${selectedDate === value ? 'bg-amber-500 text-black border-amber-500 shadow-lg' : isWorkingDay ? 'bg-zinc-900 border-zinc-800' : 'opacity-10 grayscale cursor-not-allowed'}`}
               >
                 <p className="text-[9px] uppercase font-black italic">{dateStr.split(' ')[0]}</p>
                 <p className="text-xl font-black italic">{dateStr.split(' ')[1]}</p>
-                {isToday && isWorkingDay && <span className="text-[7px] font-black uppercase text-black bg-white px-1 rounded italic">Hoje</span>}
               </button>
             );
           })}
@@ -207,37 +212,31 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
               const hour = Math.floor(i / 4);
               const min = (i % 4) * 15;
               const timeStr = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-
-              const dayOfWeek = new Date(selectedDate + 'T12:00:00').getDay().toString();
-              const dayConfig = selectedBarber?.work_days?.[dayOfWeek];
-
+              
+              const dayConfig = selectedBarber?.work_days?.[new Date(selectedDate + 'T12:00:00').getDay().toString()];
               if (!dayConfig) return null;
 
               const slotMin = timeToMinutes(timeStr);
-              const startMin = timeToMinutes(dayConfig.start);
-              const endMin = timeToMinutes(dayConfig.end);
-
-              const isOutsideHours = slotMin < startMin || slotMin >= endMin;
+              const shopOpenMin = shopSettings ? timeToMinutes(shopSettings.opening_time) : 0;
+              const shopCloseMin = shopSettings ? timeToMinutes(shopSettings.closing_time) : 1440;
+              
+              const isOutsideShop = slotMin < shopOpenMin || slotMin >= shopCloseMin;
+              const isOutsideBarber = slotMin < timeToMinutes(dayConfig.start) || slotMin >= timeToMinutes(dayConfig.end);
               const isOccupied = isTimeSlotOccupied(selectedDate, timeStr, selectedBarber!.name);
 
-              // TRAVA: Se for hoje, bloqueia horários que já passaram
-              const isPastTime = selectedDate === todayStr && (hour < currentHour || (hour === currentHour && min <= currentMinutes));
+              // 🔥 REGRA: Se a data selecionada for HOJE, verifica se o horário do slot já passou
+              const isPastTime = selectedDate === todayStr && slotMin <= currentTotalMinutes;
 
-              if (isOutsideHours) return null;
-
-              const isDisabled = isOccupied || isPastTime;
+              if (isOutsideShop || isOutsideBarber) return null;
 
               return (
                 <button
-                  key={i}
-                  disabled={isDisabled}
+                  key={i} 
+                  disabled={isOccupied || isPastTime}
                   onClick={() => setSelectedTime(timeStr)}
-                  className={`py-3 rounded-xl border transition-all text-[11px] font-black italic ${selectedTime === timeStr
-                      ? 'bg-amber-500 text-black border-amber-500'
-                      : isDisabled
-                        ? 'opacity-20 bg-black border-zinc-900 cursor-not-allowed line-through'
-                        : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-amber-500/50'
-                    }`}
+                  className={`py-3 rounded-xl border transition-all text-[11px] font-black italic 
+                    ${selectedTime === timeStr ? 'bg-amber-500 text-black border-amber-500' : 
+                      (isOccupied || isPastTime) ? 'opacity-20 line-through cursor-not-allowed bg-black border-zinc-900' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
                 >
                   {timeStr}
                 </button>
@@ -248,22 +247,16 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
         <div className="flex gap-4">
           <button onClick={() => setStep(2)} className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic">Voltar</button>
-          <button
-            disabled={!selectedDate || !selectedTime}
-            onClick={() => setStep(4)}
-            className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic"
-          >
-            Próximo
-          </button>
+          <button disabled={!selectedDate || !selectedTime} onClick={() => setStep(4)} className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic">Próximo</button>
         </div>
       </div>
     );
   };
 
   const renderStep4 = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-300 text-center">
-      <h3 className="text-2xl font-black text-amber-500 uppercase tracking-tighter italic">Seus dados</h3>
-      <div className="space-y-4 text-left">
+    <div className="space-y-6 animate-in slide-in-from-right duration-300">
+      <h3 className="text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter italic">Seus dados</h3>
+      <div className="space-y-4">
         <input type="text" placeholder="Nome Completo" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-5 text-white font-black italic outline-none focus:border-amber-500" />
         <input type="tel" placeholder="WhatsApp" value={customerPhone} onChange={(e) => setCustomerPhone(formatPhone(e.target.value))} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-5 text-white font-black italic outline-none focus:border-amber-500" />
       </div>
@@ -277,43 +270,14 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   const renderStep5 = () => (
     <div className="space-y-8 text-center py-8 animate-in zoom-in duration-500">
       <CheckCircle2 size={64} className="text-amber-500 mx-auto" />
-      <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter">Enviado para aprovação!</h3>
-      <div className="bg-zinc-900/50 p-10 rounded-[3rem] border border-zinc-800 text-left space-y-6 shadow-2xl backdrop-blur-sm mx-auto w-full max-w-lg">
-        {/* Profissional */}
-        <div className="flex justify-between items-center border-b border-zinc-800/50 pb-4">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] italic">Profissional</span>
-            <span className="text-xl font-black text-white uppercase italic tracking-tighter">{selectedBarber?.name}</span>
-          </div>
-          <div className="bg-amber-500/10 p-3 rounded-full">
-            <User className="text-amber-500" size={24} />
-          </div>
-        </div>
-
-        {/* Data e Hora */}
-        <div className="flex justify-between items-center border-b border-zinc-800/50 pb-4">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] italic">Data e Horário</span>
-            <span className="text-xl font-black text-white uppercase italic tracking-tighter">
-              {new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às {selectedTime}
-            </span>
-          </div>
-          <div className="bg-amber-500/10 p-3 rounded-full">
-            <Clock className="text-amber-500" size={24} />
-          </div>
-        </div>
-
-        {/* Valor Total */}
-        <div className="flex justify-between items-end pt-2">
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black text-zinc-500 uppercase tracking-[0.2em] italic">Total do Serviço</span>
-            <span className="text-4xl font-black text-amber-500 italic tracking-tighter">
-              R$ {totalPrice.toFixed(2)}
-            </span>
-          </div>
-        </div>
+      <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter">Agendado!</h3>
+      <div className="bg-zinc-900/50 p-10 rounded-[3rem] border border-zinc-800 text-left space-y-4">
+        <div className="flex justify-between"><span className="text-[10px] font-black text-zinc-500 uppercase">Profissional</span><span className="font-black italic">{selectedBarber?.name}</span></div>
+        <div className="flex justify-between"><span className="text-[10px] font-black text-zinc-500 uppercase">Data</span><span className="font-black italic">{new Date(selectedDate + 'T12:00:00').toLocaleDateString()}</span></div>
+        <div className="flex justify-between"><span className="text-[10px] font-black text-zinc-500 uppercase">Horário</span><span className="font-black italic">{selectedTime}</span></div>
+        <div className="pt-4 border-t border-zinc-800 flex justify-between"><span className="text-[10px] font-black text-zinc-500 uppercase">Total</span><span className="text-xl font-black text-amber-500 italic">R$ {totalPrice.toFixed(2)}</span></div>
       </div>
-      <button onClick={onComplete} className="w-full bg-zinc-800 text-white font-black py-5 rounded-2xl uppercase italic">Início</button>
+      <button onClick={onComplete} className="w-full bg-zinc-800 text-white font-black py-5 rounded-2xl uppercase italic">Concluir</button>
     </div>
   );
 
