@@ -14,6 +14,7 @@ export interface Appointment {
   payment_method?: string;
   barbershop_id: string;
   user_id?: string;
+  duration?: number;
 }
 
 interface BookingContextType {
@@ -21,9 +22,15 @@ interface BookingContextType {
   addAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<void>;
   updateStatus: (id: string, status: 'pendente' | 'confirmado') => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
-  fetchAppointments: (barbershopId?: string) => Promise<void>; // Adicionada a prop opcional
+  fetchAppointments: (barbershopId?: string) => Promise<void>;
   loading: boolean;
 }
+
+const timeToMinutes = (t: string) => {
+  if (!t) return 0;
+  const [h, m] = t.split(':').map(Number);
+  return h * 60 + m;
+};
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
 
@@ -31,15 +38,11 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // AJUSTE: fetchAppointments agora aceita um ID para filtrar (essencial para o Admin)
   const fetchAppointments = async (barbershopId?: string) => {
     try {
       setLoading(true);
-      let query = supabase
-        .from('appointments')
-        .select('*');
+      let query = supabase.from('appointments').select('*');
 
-      // Se passarmos o ID (vinda do AdminDashboard), filtramos pesado
       if (barbershopId) {
         query = query.eq('barbershop_id', barbershopId);
       }
@@ -62,7 +65,8 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         status: app.status as 'pendente' | 'confirmado',
         barbershop_id: app.barbershop_id,
         payment_method: app.payment_method,
-        user_id: app.user_id
+        user_id: app.user_id,
+        duration: app.duration
       }));
 
       setAppointments(formattedData);
@@ -79,51 +83,63 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
   const addAppointment = async (data: Omit<Appointment, 'id'>) => {
     try {
-      const isManualEntry = data.status === 'confirmado';
+      // 1. Verificação de Conflito de Horário (REGRA DE OURO)
+      // Buscamos se já existe algum agendamento para o mesmo barbeiro, data e hora
+      const { data: existingApp, error: checkError } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('barber', data.barber)
+        .eq('date', data.date)
+        .eq('time', data.time)
+        .eq('barbershop_id', data.barbershop_id)
+        .neq('status', 'cancelado'); // Permite agendar se o anterior foi cancelado
 
-      if (!isManualEntry) {
-        const { data: barberInfo, error: barberError } = await supabase
+      if (checkError) throw checkError;
+
+      if (existingApp && existingApp.length > 0) {
+        alert(`Indisponível: O barbeiro ${data.barber} já possui um agendamento às ${data.time} no dia selecionado.`);
+        return;
+      }
+
+      // 2. Validação de Horário de Trabalho do Barbeiro
+      if (data.status !== 'confirmado') {
+        const { data: barberData, error: barberError } = await supabase
           .from('barbers')
-          .select('work_hours')
+          .select('work_days')
           .eq('name', data.barber)
-          .eq('barbershop_id', data.barbershop_id)
-          .limit(1)
-          .maybeSingle(); 
+          .eq('barbershop_id', data.barbershop_id);
 
         if (barberError) throw barberError;
+        
+        // Pegamos o primeiro barbeiro encontrado para evitar erro de múltiplas linhas
+        const barberInfo = barberData?.[0];
 
-        if (barberInfo?.work_hours) {
-          const [start, end] = barberInfo.work_hours.split(' - ');
-          const startH = parseInt(start.split(':')[0]);
-          const endH = parseInt(end.split(':')[0]);
-          const currentH = parseInt(data.time.split(':')[0]);
+        if (barberInfo?.work_days) {
+          const [year, month, day] = data.date.split('-').map(Number);
+          const dateObj = new Date(year, month - 1, day);
+          const dayOfWeek = dateObj.getDay().toString();
+          const dayConfig = barberInfo.work_days[dayOfWeek];
 
-          if (currentH < startH || currentH >= endH) {
-            alert(`O barbeiro ${data.barber} não atende neste horário. Expediente: ${barberInfo.work_hours}`);
-            return; 
+          if (!dayConfig || !dayConfig.active) {
+            alert(`O barbeiro ${data.barber} não atende neste dia da semana.`);
+            return;
           }
-        }
 
-        const { data: existing, error: checkError } = await supabase
-          .from('appointments')
-          .select('id')
-          .eq('barber', data.barber)
-          .eq('date', data.date)
-          .eq('time', data.time)
-          .eq('barbershop_id', data.barbershop_id)
-          .maybeSingle();
+          const currentMin = timeToMinutes(data.time);
+          const startMin = timeToMinutes(dayConfig.start);
+          const endMin = timeToMinutes(dayConfig.end);
 
-        if (checkError) throw checkError;
-
-        if (existing) {
-          alert(`O horário das ${data.time} já foi preenchido por outro cliente.`);
-          return;
+          if (currentMin < startMin || currentMin >= endMin) {
+            alert(`Horário fora da jornada: ${data.barber} atende das ${dayConfig.start} às ${dayConfig.end}.`);
+            return;
+          }
         }
       }
 
-      const { data: { user } } = await supabase.auth.getUser();
-
-      const { error } = await supabase
+      // 3. Inserção
+      const { data: userData } = await supabase.auth.getUser();
+      
+      const { error: insertError } = await supabase
         .from('appointments')
         .insert([{
           customer_name: data.customerName,
@@ -135,12 +151,12 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
           price: data.price,
           status: data.status,
           barbershop_id: data.barbershop_id,
-          user_id: user?.id 
+          user_id: userData.user?.id,
+          duration: data.duration
         }]);
 
-      if (error) throw error;
+      if (insertError) throw insertError;
       
-      // Atualiza a lista usando o ID da barbearia que acabamos de usar
       await fetchAppointments(data.barbershop_id);
       
     } catch (err: any) {
@@ -157,26 +173,17 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         .eq('id', id);
 
       if (error) throw error;
-      
-      setAppointments(prev => 
-        prev.map(app => app.id === id ? { ...app, status } : app)
-      );
+      setAppointments(prev => prev.map(app => app.id === id ? { ...app, status } : app));
     } catch (err) {
       console.error("Erro ao atualizar status:", err);
     }
   };
 
   const deleteAppointment = async (id: string) => {
-    // Removi o confirm daqui para não duplicar com o que você já tem na View
     try {
-      const { error } = await supabase
-        .from('appointments')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('appointments').delete().eq('id', id);
       if (error) throw error;
       setAppointments(prev => prev.filter(app => app.id !== id));
-      
     } catch (err) {
       console.error("Erro ao deletar:", err);
     }

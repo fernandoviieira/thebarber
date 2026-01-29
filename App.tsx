@@ -19,6 +19,7 @@ type ViewState = 'client' | 'admin' | 'booking' | 'profile' | 'my_appointments' 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('client');
   const [session, setSession] = useState<any>(null);
+  const [userPhone, setUserPhone] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userName, setUserName] = useState('');
@@ -166,7 +167,7 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
   if (loading) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
       <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
-      <p className="text-amber-500 font-black animate-pulse uppercase tracking-[0.3em] text-[10px]">ContaFácil Pro • Sincronizando</p>
+      <p className="text-amber-500 font-black animate-pulse uppercase tracking-[0.3em] text-[10px]">Barber Pro • Sincronizando</p>
     </div>
   );
 
@@ -218,14 +219,15 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
           )}
 
           {view === 'my_appointments' && (
-            <MyAppointments
-              onBack={() => setView('profile')}
-              customerName={userName}
-              userId={session?.user?.id}
-              isAdmin={isAdmin} 
-            />
-          )}
-
+    <MyAppointments
+      onBack={() => setView('profile')}
+      customerName={userName}
+      // ADICIONE ESTA LINHA ABAIXO 
+      customerPhone={userPhone || session?.user?.phone || ""} 
+      userId={session?.user?.id || ""}
+      isAdmin={isAdmin} 
+    />
+  )}
           {view === 'profile' && (
             <div className="max-w-xl mx-auto px-4 py-12 animate-in fade-in slide-in-from-bottom duration-700 pb-32 text-center">
               <div className="flex flex-col items-center space-y-6 mb-12">

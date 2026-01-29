@@ -1,113 +1,152 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useBooking } from './BookingContext';
 import { Calendar, Clock, MapPin, ChevronLeft, User, Loader2, Trash2, CheckCircle2 } from 'lucide-react';
 
 interface MyAppointmentsProps {
   onBack: () => void;
   customerName: string;
+  customerPhone: string;
   userId: string;
-  isAdmin: boolean; // Adicionado aqui
+  isAdmin: boolean;
 }
 
-const MyAppointments: React.FC<MyAppointmentsProps> = ({ onBack, customerName, userId, isAdmin }) => {
+const MyAppointments: React.FC<MyAppointmentsProps> = ({ onBack, customerName, customerPhone, userId, isAdmin }) => {
   const { appointments, loading, deleteAppointment } = useBooking();
 
-  // FILTRO AGORA USA O PAPEL (ROLE) REAL
+  // --- ÁREA DE DEBUG NO CONSOLE ---
+  useEffect(() => {
+    console.log("=== DEBUG MEUS AGENDAMENTOS ===");
+    console.log("Prop customerPhone recebida:", customerPhone);
+    console.log("Prop userId recebida:", userId);
+    console.log("Total de agendamentos no sistema:", appointments.length);
+    if (appointments.length > 0) {
+      console.log("Exemplo de agendamento no banco:", {
+        phoneNoBanco: appointments[0].customerPhone,
+        userIdNoBanco: appointments[0].user_id
+      });
+    }
+  }, [appointments, customerPhone, userId]);
+
+  // FILTRO INTELIGENTE
   const myAppointments = appointments.filter(app => {
-    // Se o sistema confirmou que você é Admin no App.tsx, mostra tudo
-    if (isAdmin) {
-      return true;
+    if (isAdmin) return true;
+
+    const matchUserId = userId && app.user_id === userId;
+
+    // Limpeza para comparação (Remove (), -, espaços)
+    const cleanAppPhone = app.customerPhone?.replace(/\D/g, "");
+    const cleanUserPhone = customerPhone?.replace(/\D/g, "");
+    
+    const matchPhone = cleanUserPhone && cleanAppPhone && cleanAppPhone === cleanUserPhone;
+
+    const isMatch = matchUserId || matchPhone;
+    
+    // Se você tiver agendamentos no banco mas nenhum aparece, 
+    // este log vai mostrar por que cada um foi rejeitado:
+    if (!isMatch && appointments.length > 0) {
+        // console.log(`Falha no match: Banco(${cleanAppPhone}) vs Usuário(${cleanUserPhone})`);
     }
 
-    // Para clientes comuns, filtra pelo ID único
-    return app.user_id === userId;
+    return isMatch;
   });
 
   const handleCancel = async (id: string) => {
-    await deleteAppointment(id);
+    if (window.confirm("Deseja realmente cancelar este agendamento?")) {
+      await deleteAppointment(id);
+    }
   };
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4 text-amber-500">
+      <div className="flex flex-col items-center justify-center py-20 gap-4 text-amber-500 bg-[#08080a] min-h-screen">
         <Loader2 className="animate-spin" size={40} />
-        <p className="font-bold">Buscando agendamentos...</p>
+        <p className="font-black uppercase italic tracking-widest text-xs">Sincronizando Agenda...</p>
       </div>
     );
   }
 
   return (
-    <div className="max-w-xl mx-auto px-4 py-8 animate-in slide-in-from-right duration-300 pb-20">
-      <div className="flex items-center gap-4 mb-8">
-        <button onClick={onBack} className="p-2 hover:bg-zinc-900 rounded-full transition-colors">
+    <div className="max-w-xl mx-auto px-4 py-8 animate-in slide-in-from-right duration-300 pb-20 min-h-screen">
+      <div className="flex items-center gap-4 mb-10">
+        <button onClick={onBack} className="p-3 bg-zinc-900 border border-zinc-800 text-amber-500 rounded-2xl hover:bg-zinc-800 transition-all">
           <ChevronLeft size={24} />
         </button>
-        <h2 className="text-2xl font-serif font-bold">
-          {isAdmin ? "Agenda Administrador" : "Meus Agendamentos"}
-        </h2>
+        <div>
+          <h2 className="text-3xl font-black text-white uppercase italic tracking-tighter leading-none">
+            {isAdmin ? "Agenda Geral" : "Meus Agendamentos"}
+          </h2>
+          <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mt-1">
+            {myAppointments.length} agendamento(s) encontrado(s)
+          </p>
+        </div>
       </div>
 
       {myAppointments.length === 0 ? (
-        <div className="text-center py-20 bg-zinc-900/50 rounded-3xl border border-dashed border-zinc-800">
-          <Calendar className="mx-auto text-zinc-700 mb-4" size={48} />
-          <p className="text-zinc-500">Nenhum agendamento encontrado.</p>
+        <div className="text-center py-24 bg-zinc-900/30 rounded-[3rem] border border-dashed border-zinc-800/50 backdrop-blur-sm">
+          <Calendar className="mx-auto text-zinc-800 mb-6" size={64} />
+          <p className="text-zinc-500 font-bold uppercase italic text-sm mb-2">Nenhum compromisso encontrado.</p>
+          <p className="text-zinc-700 text-[10px] uppercase font-bold tracking-tighter">
+            Verifique se o telefone no seu perfil é: {customerPhone || 'Não informado'}
+          </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {myAppointments.map((app) => (
-            <div key={app.id} className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5 space-y-4 relative overflow-hidden group">
-              <div className="absolute top-0 left-0 w-1 h-full bg-amber-500" />
+            <div key={app.id} className="bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-[2.5rem] p-8 space-y-6 relative overflow-hidden transition-all hover:border-amber-500/30">
+              <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]" />
               
               <div className="flex justify-between items-start">
-                <div>
-                  <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider ${
+                <div className="space-y-3">
+                  <span className={`text-[9px] px-3 py-1 rounded-full font-black uppercase tracking-widest italic border ${
                     app.status === 'confirmado' 
-                    ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20' 
-                    : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
+                    : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
                   }`}>
                     {app.status}
                   </span>
-                  <h4 className="text-lg font-bold mt-2">{app.service}</h4>
-                  
-                  {/* Se for Admin, mostra o nome do cliente no card */}
-                  {isAdmin && (
-                    <p className="text-xs text-amber-500 font-medium mt-1 uppercase italic">
-                      Cliente: {app.customerName}
-                    </p>
-                  )}
+                  <h4 className="text-2xl font-black text-white uppercase italic tracking-tight leading-none">
+                    {app.service}
+                  </h4>
                 </div>
                 
-                {/* Admin pode apagar qualquer um. Cliente só apaga se não estiver confirmado */}
                 {(isAdmin || app.status !== 'confirmado') ? (
                   <button 
                     onClick={() => handleCancel(app.id)}
-                    className="p-2 text-zinc-500 hover:text-red-500 hover:bg-red-500/10 rounded-xl transition-all"
+                    className="p-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-2xl transition-all shadow-lg"
                   >
-                    <Trash2 size={20} />
+                    <Trash2 size={24} />
                   </button>
                 ) : (
-                   <div className="p-2 text-zinc-700">
-                     <CheckCircle2 size={20} className="text-emerald-500/30" />
+                   <div className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl border border-emerald-500/20">
+                     <CheckCircle2 size={24} />
                    </div>
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-zinc-800/50">
-                <div className="flex items-center gap-2 text-zinc-400 text-sm">
-                  <Calendar size={16} className="text-amber-500" />
-                  <span>{new Date(app.date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+              <div className="grid grid-cols-2 gap-y-5 pt-6 border-t border-zinc-800/50">
+                <div className="flex items-center gap-3">
+                  <Calendar size={18} className="text-amber-500" />
+                  <span className="text-xs font-black text-zinc-300 uppercase italic">
+                    {new Date(app.date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 text-zinc-400 text-sm">
-                  <Clock size={16} className="text-amber-500" />
-                  <span>{app.time}</span>
+                <div className="flex items-center gap-3">
+                  <Clock size={18} className="text-amber-500" />
+                  <span className="text-xs font-black text-zinc-300 uppercase italic">
+                    {app.time}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 text-zinc-400 text-sm">
-                  <User size={16} className="text-amber-500" />
-                  <span>{app.barber}</span>
+                <div className="flex items-center gap-3">
+                  <User size={18} className="text-amber-500" />
+                  <span className="text-xs font-black text-zinc-300 uppercase italic truncate">
+                    {app.barber}
+                  </span>
                 </div>
-                <div className="flex items-center gap-2 text-zinc-400 text-sm">
-                  <MapPin size={16} className="text-amber-500" />
-                  <span>Unidade Centro</span>
+                <div className="flex items-center gap-3">
+                  <MapPin size={18} className="text-amber-500" />
+                  <span className="text-xs font-black text-zinc-300 uppercase italic">
+                    Matriz Centro
+                  </span>
                 </div>
               </div>
             </div>

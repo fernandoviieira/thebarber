@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, X, User, Clock, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
-import { addDays, startOfWeek, format, isSameDay, addWeeks, subWeeks, subDays } from 'date-fns';
+import { addDays, startOfWeek, format, addWeeks, subWeeks, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 interface CalendarProps {
@@ -14,15 +14,15 @@ interface CalendarProps {
   onUpdate: (appointmentId: string, updates: any) => Promise<void>;
 }
 
-const AdminCalendarView: React.FC<CalendarProps> = ({ 
-  barbers = [], 
-  appointments = [], 
-  services = [], 
-  barbershopId, 
-  selectedDate, 
-  onSave, 
-  onDelete, 
-  onUpdate 
+const AdminCalendarView: React.FC<CalendarProps> = ({
+  barbers = [],
+  appointments = [],
+  services = [],
+  barbershopId,
+  selectedDate,
+  onSave,
+  onDelete,
+  onUpdate
 }) => {
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -32,7 +32,13 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
   const [draggingAppId, setDraggingAppId] = useState<string | null>(null);
   const [selectedBarberForWeek, setSelectedBarberForWeek] = useState<string>(barbers[0]?.name || '');
   const [newBooking, setNewBooking] = useState({
-    customerName: '', barber: '', time: '', service: '', price: 0, date: ''
+    customerName: '',
+    barber: '',
+    time: '',
+    service: '',
+    price: 0,
+    date: '',
+    duration: 30
   });
 
   // GERAÇÃO DE SLOTS DE 15 EM 15 MINUTOS
@@ -70,6 +76,36 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     e.dataTransfer.effectAllowed = "move";
   };
 
+  // FUNÇÃO CORRIGIDA: Prioriza duração salva no agendamento
+const getServiceDuration = (appointment: any) => {
+  if (!appointment) return 35;
+
+  // 1. Tenta pegar a duração que deveria estar no agendamento
+  if (appointment.duration) {
+    return Number(appointment.duration) + 5;
+  }
+
+  // 2. Se não tem no agendamento, procura na tabela de serviços (o que você já faz)
+  const serviceFromTable = services.find(s => 
+    s.name?.trim().toLowerCase() === appointment.service?.trim().toLowerCase()
+  );
+
+  if (serviceFromTable && serviceFromTable.duration) {
+    const d = typeof serviceFromTable.duration === 'string'
+      ? parseInt(serviceFromTable.duration.replace(/\D/g, ''))
+      : serviceFromTable.duration;
+    return d + 5;
+  }
+
+  // 3. SE CHEGOU AQUI, o serviço é manual (ex: "AAA") e o banco não salvou a duração.
+  // Como medida de emergência, vamos retornar 60min para encaixes manuais 
+  // ou manter os 30min padrão até você criar a coluna no banco.
+  return 35; 
+};
+  const getOccupiedSlotsCount = (durationWithRespiro: number) => {
+    return Math.ceil(durationWithRespiro / 15);
+  };
+
   const handleDrop = async (e: React.DragEvent, barberName: string, slotTime: string, targetDate: string) => {
     e.preventDefault();
     if (!draggingAppId) return;
@@ -85,7 +121,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
   };
 
   const handleOpenModal = (barber: string, time: string, date: string) => {
-    setNewBooking({ ...newBooking, barber, time, date, customerName: '', service: '', price: 0 });
+    setNewBooking({ ...newBooking, barber, time, date, customerName: '', service: '', price: 0, duration: 30 });
     setIsModalOpen(true);
   };
 
@@ -100,11 +136,26 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
 
   const handleFinalizeEncaixe = async () => {
     if (!newBooking.customerName || !newBooking.service) return alert("Preencha tudo!");
+
     setLoading(true);
     try {
-      await onSave({ ...newBooking, barbershop_id: barbershopId, status: 'confirmado', customerPhone: 'Balcão' });
+      const dataToSave = {
+        ...newBooking,
+        duration: Number(newBooking.duration) || 30,
+        barbershop_id: barbershopId,
+        status: 'confirmado',
+        customerPhone: 'Balcão'
+      };
+
+      console.log("Salvando agendamento:", dataToSave);
+      await onSave(dataToSave);
+
+      setNewBooking({
+        customerName: '', barber: '', time: '', service: '', price: 0, date: '', duration: 30
+      });
       setIsModalOpen(false);
     } catch (error) {
+      console.error("Erro ao salvar:", error);
       alert("Erro ao salvar.");
     } finally {
       setLoading(false);
@@ -144,7 +195,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
 
         <div className="min-w-[1000px]">
           <div className="grid grid-cols-[100px_repeat(auto-fit,minmax(140px,1fr))] gap-4 mb-8 sticky top-0 bg-[#0a0b0e] pb-4 border-b border-white/5 z-20">
-            <div className="flex items-center justify-center text-slate-600 font-black text-[10px] uppercase italic">Horário</div>
+            <div className="flex items-center justify-center text-slate-100 font-black text-[12px] uppercase italic">Horário</div>
             {(viewMode === 'day' ? barbers : weekDays).map((item, idx) => (
               <div key={idx} className="text-center p-4 bg-white/5 rounded-2xl border border-white/10">
                 <p className="text-amber-500 font-black uppercase italic text-xs">{viewMode === 'day' ? item.name : format(item, 'eee dd/MM', { locale: ptBR })}</p>
@@ -154,48 +205,60 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
 
           {timeSlots.map(slot => (
             <div key={slot} className="grid grid-cols-[100px_repeat(auto-fit,minmax(140px,1fr))] gap-4 mb-2 min-h-[60px]">
-              <div className="flex items-center justify-center font-mono text-[10px] font-bold text-slate-600 border-r border-white/5">{slot}</div>
-              
+              <div className="flex items-center justify-center font-mono text-[15px] font-bold text-slate-100 border-r border-white/5">{slot}</div>
+
               {(viewMode === 'day' ? barbers : weekDays).map((colItem, idx) => {
                 const targetDate = viewMode === 'day' ? format(currentDate, 'yyyy-MM-dd') : format(colItem as Date, 'yyyy-MM-dd');
                 const barberName = viewMode === 'day' ? colItem.name : selectedBarberForWeek;
-                
-                const slotApps = appointments.filter(a => {
+                const slotMin = timeToMinutes(slot);
+
+                const appStartingHere = appointments.find(a => {
+                  const matchDate = a.date === targetDate;
+                  const matchBarber = a.barber?.trim().toLowerCase() === barberName?.trim().toLowerCase();
+                  return matchDate && matchBarber && a.status !== 'cancelado' && timeToMinutes(a.time) === slotMin;
+                });
+
+                const isSlotOccupiedByOngoing = appointments.some(a => {
                   const matchDate = a.date === targetDate;
                   const matchBarber = a.barber?.trim().toLowerCase() === barberName?.trim().toLowerCase();
                   if (!matchDate || !matchBarber || a.status === 'cancelado') return false;
 
-                  const appMin = timeToMinutes(a.time);
-                  const slotMin = timeToMinutes(slot);
-                  // Agora a janela é de 15 minutos
-                  return appMin >= slotMin && appMin < slotMin + 15;
+                  const start = timeToMinutes(a.time);
+                  const duration = getServiceDuration(a); // CORRIGIDO: Passando objeto 'a'
+                  const end = start + duration;
+
+                  const occupied = slotMin > start && slotMin < end;
+                  if (occupied) {
+                    console.log(`Slot ${slot} bloqueado por: ${a.customerName} | Duração: ${duration}min`);
+                  }
+                  return occupied;
                 });
 
                 return (
-                  <div 
-                    key={idx} 
-                    className="relative bg-white/[0.01] rounded-xl p-0.5 flex flex-col gap-1 min-h-[60px] border border-white/[0.02]"
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => handleDrop(e, barberName, slot, targetDate)}
+                  <div
+                    key={idx}
+                    className={`relative rounded-xl p-0.5 flex flex-col min-h-[60px] border border-white/[0.02] ${isSlotOccupiedByOngoing ? 'bg-amber-500/5' : 'bg-white/[0.01]'}`}
                   >
-                    {slotApps.length > 0 ? (
-                      slotApps.map(app => (
-                        <div 
-                          key={app.id}
-                          draggable 
-                          onDragStart={(e) => handleDragStart(e, app.id)} 
-                          onClick={() => setSelectedApp(app)} 
-                          className={`flex-1 text-black rounded-lg p-2 shadow-md flex flex-col justify-center cursor-move hover:brightness-110 transition-all ${app.status === 'pendente' ? 'bg-amber-500/40 border border-dashed border-amber-600' : 'bg-amber-500'}`}
-                        >
-                          <div className="flex justify-between items-center leading-none mb-0.5">
-                            <span className="bg-black/20 px-1 rounded text-[7px] font-bold">{app.time}</span>
-                            {app.status === 'pendente' && <Clock size={8} />}
-                          </div>
-                          <p className="font-black text-[9px] uppercase truncate leading-tight">{app.customerName}</p>
-                          <p className="text-[7px] font-bold opacity-70 uppercase truncate leading-none">{app.service}</p>
+                    {appStartingHere ? (
+                      <div
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, appStartingHere.id)}
+                        onClick={() => setSelectedApp(appStartingHere)}
+                        style={{
+                          height: `${getOccupiedSlotsCount(getServiceDuration(appStartingHere)) * 62 - 4}px`, // CORRIGIDO
+                          zIndex: 50
+                        }}
+                        className={`absolute top-0 left-0 right-0 m-0.5 text-black rounded-lg p-2 shadow-xl flex flex-col cursor-move hover:brightness-110 transition-all ${appStartingHere.status === 'pendente' ? 'bg-amber-500/40 border border-dashed border-amber-600' : 'bg-amber-500'}`}
+                      >
+                        <div className="flex justify-between items-center leading-none mb-1">
+                          <span className="bg-black/20 px-1 rounded text-[8px] font-bold">{appStartingHere.time}</span>
                         </div>
-                      ))
-                    ) : (
+                        <p className="font-black text-[10px] uppercase truncate">{appStartingHere.customerName}</p>
+                        <p className="text-[7px] font-bold opacity-70 uppercase truncate">
+                          {appStartingHere.service} (+5min respiro)
+                        </p>
+                      </div>
+                    ) : !isSlotOccupiedByOngoing && (
                       <button onClick={() => handleOpenModal(barberName, slot, targetDate)} className="absolute inset-0 flex items-center justify-center group opacity-0 hover:opacity-100 transition-opacity">
                         <Plus size={14} className="text-amber-500/50" />
                       </button>
@@ -212,13 +275,15 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
       {selectedApp && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
           <div className="bg-[#0f1115] border border-white/10 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center">
-              <div className="flex justify-center mb-6"><div className="bg-amber-500/10 p-5 rounded-full text-amber-500"><User size={40}/></div></div>
-              <h4 className="text-2xl font-black text-white uppercase italic mb-2">{selectedApp.customerName}</h4>
-              <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-8">{selectedApp.service} - {selectedApp.date} às {selectedApp.time}</p>
-              <div className="grid grid-cols-2 gap-4">
-                 <button onClick={() => setSelectedApp(null)} className="bg-white/5 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Voltar</button>
-                 <button onClick={() => handleDelete(selectedApp.id)} className="bg-red-500 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Excluir</button>
-              </div>
+            <div className="flex justify-center mb-6"><div className="bg-amber-500/10 p-5 rounded-full text-amber-500"><User size={40} /></div></div>
+            <h4 className="text-2xl font-black text-white uppercase italic mb-2">{selectedApp.customerName}</h4>
+            <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-8">
+              {selectedApp.service} - {format(new Date(selectedApp.date + 'T00:00:00'), "dd-MM-yyyy")} às {selectedApp.time}
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <button onClick={() => setSelectedApp(null)} className="bg-white/5 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Voltar</button>
+              <button onClick={() => handleDelete(selectedApp.id)} className="bg-red-500 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Excluir</button>
+            </div>
           </div>
         </div>
       )}
@@ -232,12 +297,45 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
               <button onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-white"><X /></button>
             </div>
             <div className="space-y-6 leading-none">
-              <input className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white font-bold italic outline-none" placeholder="Nome do Cliente" value={newBooking.customerName} onChange={e => setNewBooking({...newBooking, customerName: e.target.value})} />
-              <select className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white font-bold italic outline-none" onChange={e => { const s = services.find(sv => sv.name === e.target.value); setNewBooking({...newBooking, service: e.target.value, price: s?.price || 0}); }}>
-                <option value="">Selecione o serviço</option>
-                {services.map(s => <option key={s.id} value={s.name}>{s.name} - R$ {s.price}</option>)}
-              </select>
-              <button onClick={handleFinalizeEncaixe} disabled={loading} className="w-full bg-amber-500 text-black py-5 rounded-2xl font-black uppercase text-xs italic hover:bg-amber-400 transition-colors">Confirmar</button>
+              <div className="space-y-2">
+                <label className="text-amber-500 text-[10px] uppercase ml-2">Cliente</label>
+                <input
+                  className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white font-bold italic outline-none focus:border-amber-500/50 transition-colors"
+                  placeholder="Ex: João Silva"
+                  value={newBooking.customerName}
+                  onChange={e => setNewBooking({ ...newBooking, customerName: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-amber-500 text-[10px] uppercase ml-2">Serviço</label>
+                <input
+                  className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white font-bold italic outline-none focus:border-amber-500/50 transition-colors"
+                  placeholder="Ex: Corte e Barba"
+                  value={newBooking.service}
+                  onChange={e => setNewBooking({ ...newBooking, service: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-amber-500 text-[10px] uppercase ml-2">Duração (minutos)</label>
+                <div className="flex items-center gap-4 bg-slate-900 border border-white/10 rounded-2xl p-4 focus-within:border-amber-500/50 transition-colors">
+                  <Clock size={20} className="text-amber-500" />
+                  <input
+                    type="number"
+                    step="5"
+                    min="5"
+                    className="bg-transparent w-full text-white font-bold italic outline-none"
+                    value={newBooking.duration}
+                    onChange={e => setNewBooking({ ...newBooking, duration: parseInt(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+              <button
+                onClick={handleFinalizeEncaixe}
+                disabled={loading || !newBooking.customerName || !newBooking.service}
+                className="w-full bg-amber-500 text-black py-5 rounded-2xl font-black uppercase text-xs italic hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? "Salvando..." : "Confirmar Encaixe"}
+              </button>
             </div>
           </div>
         </div>
