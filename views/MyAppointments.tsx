@@ -13,40 +13,13 @@ interface MyAppointmentsProps {
 const MyAppointments: React.FC<MyAppointmentsProps> = ({ onBack, customerName, customerPhone, userId, isAdmin }) => {
   const { appointments, loading, deleteAppointment } = useBooking();
 
-  // --- ÁREA DE DEBUG NO CONSOLE ---
-  useEffect(() => {
-    console.log("=== DEBUG MEUS AGENDAMENTOS ===");
-    console.log("Prop customerPhone recebida:", customerPhone);
-    console.log("Prop userId recebida:", userId);
-    console.log("Total de agendamentos no sistema:", appointments.length);
-    if (appointments.length > 0) {
-      console.log("Exemplo de agendamento no banco:", {
-        phoneNoBanco: appointments[0].customerPhone,
-        userIdNoBanco: appointments[0].user_id
-      });
-    }
-  }, [appointments, customerPhone, userId]);
-
-  // FILTRO INTELIGENTE
   const myAppointments = appointments.filter(app => {
     if (isAdmin) return true;
-
-    const matchUserId = userId && app.user_id === userId;
-
-    // Limpeza para comparação (Remove (), -, espaços)
-    const cleanAppPhone = app.customerPhone?.replace(/\D/g, "");
-    const cleanUserPhone = customerPhone?.replace(/\D/g, "");
-    
-    const matchPhone = cleanUserPhone && cleanAppPhone && cleanAppPhone === cleanUserPhone;
-
-    const isMatch = matchUserId || matchPhone;
-    
-    // Se você tiver agendamentos no banco mas nenhum aparece, 
-    // este log vai mostrar por que cada um foi rejeitado:
-    if (!isMatch && appointments.length > 0) {
-        // console.log(`Falha no match: Banco(${cleanAppPhone}) vs Usuário(${cleanUserPhone})`);
-    }
-
+      const matchUserId = userId && app.user_id === userId;
+      const cleanAppPhone = app.customerPhone?.replace(/\D/g, "");
+      const cleanUserPhone = customerPhone?.replace(/\D/g, "");
+      const matchPhone = cleanUserPhone && cleanAppPhone && cleanAppPhone === cleanUserPhone;
+      const isMatch = matchUserId || matchPhone;
     return isMatch;
   });
 
@@ -94,32 +67,31 @@ const MyAppointments: React.FC<MyAppointmentsProps> = ({ onBack, customerName, c
           {myAppointments.map((app) => (
             <div key={app.id} className="bg-zinc-900/50 backdrop-blur-md border border-zinc-800 rounded-[2.5rem] p-8 space-y-6 relative overflow-hidden transition-all hover:border-amber-500/30">
               <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.5)]" />
-              
+
               <div className="flex justify-between items-start">
                 <div className="space-y-3">
-                  <span className={`text-[9px] px-3 py-1 rounded-full font-black uppercase tracking-widest italic border ${
-                    app.status === 'confirmado' 
-                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' 
-                    : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
-                  }`}>
+                  <span className={`text-[9px] px-3 py-1 rounded-full font-black uppercase tracking-widest italic border ${app.status === 'confirmado'
+                      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                      : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                    }`}>
                     {app.status}
                   </span>
                   <h4 className="text-2xl font-black text-white uppercase italic tracking-tight leading-none">
                     {app.service}
                   </h4>
                 </div>
-                
+
                 {(isAdmin || app.status !== 'confirmado') ? (
-                  <button 
+                  <button
                     onClick={() => handleCancel(app.id)}
                     className="p-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-2xl transition-all shadow-lg"
                   >
                     <Trash2 size={24} />
                   </button>
                 ) : (
-                   <div className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl border border-emerald-500/20">
-                     <CheckCircle2 size={24} />
-                   </div>
+                  <div className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl border border-emerald-500/20">
+                    <CheckCircle2 size={24} />
+                  </div>
                 )}
               </div>
 

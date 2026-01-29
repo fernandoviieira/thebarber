@@ -56,10 +56,12 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
           if (barbersRes.data) setAvailableBarbers(barbersRes.data);
           if (servicesRes.data) setAvailableServices(servicesRes.data);
-          if (settingsRes.data) setShopSettings(settingsRes.data);
+          if (settingsRes.data) {
+            setShopSettings(settingsRes.data);
+          }
         }
       } catch (err) {
-        console.error("Erro ao carregar dados:", err);
+        console.error("❌ Erro ao carregar dados:", err);
       } finally {
         setLoading(false);
       }
@@ -89,6 +91,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   };
 
   const timeToMinutes = (t: string) => {
+    if (!t) return 0;
     const [h, m] = t.split(':').map(Number);
     return h * 60 + m;
   };
@@ -129,7 +132,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
   const renderStep1 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <h3 className="text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">O que vamos fazer?</h3>
+      <h3 className="text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter italic">O que vamos fazer?</h3>
       <div className="grid grid-cols-1 gap-3">
         {availableServices.map(service => (
           <button
@@ -157,7 +160,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
   const renderStep2 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <h3 className="text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">Qual profissional?</h3>
+      <h3 className="text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter italic">Qual profissional?</h3>
       <div className="grid grid-cols-2 gap-4">
         {availableBarbers.map(barber => (
           <button
@@ -180,13 +183,12 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   const renderStep3 = () => {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
-    
-    // 🔥 Pega hora e minuto atual para bloquear horários passados no dia de hoje
     const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
 
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <h3 className="text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">Melhor horário?</h3>
+        
         <div className="flex gap-3 overflow-x-auto pb-4 scrollbar-hide">
           {Array.from({ length: 30 }, (_, i) => {
             const d = new Date(); d.setDate(d.getDate() + i);
@@ -206,44 +208,55 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
           })}
         </div>
 
-        {selectedDate && (
-          <div className="grid grid-cols-4 gap-2">
-            {Array.from({ length: 24 * 4 }, (_, i) => {
-              const hour = Math.floor(i / 4);
-              const min = (i % 4) * 15;
-              const timeStr = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-              
-              const dayConfig = selectedBarber?.work_days?.[new Date(selectedDate + 'T12:00:00').getDay().toString()];
-              if (!dayConfig) return null;
+       {selectedDate && (
+  <div className="grid grid-cols-4 gap-2">
+    {Array.from({ length: 24 * 4 }, (_, i) => {
+      const hour = Math.floor(i / 4);
+      const min = (i % 4) * 15;
+      const timeStr = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+      
+      const dayConfig = selectedBarber?.work_days?.[new Date(selectedDate + 'T12:00:00').getDay().toString()];
+      if (!dayConfig || !dayConfig.active) return null;
 
-              const slotMin = timeToMinutes(timeStr);
-              const shopOpenMin = shopSettings ? timeToMinutes(shopSettings.opening_time) : 0;
-              const shopCloseMin = shopSettings ? timeToMinutes(shopSettings.closing_time) : 1440;
-              
-              const isOutsideShop = slotMin < shopOpenMin || slotMin >= shopCloseMin;
-              const isOutsideBarber = slotMin < timeToMinutes(dayConfig.start) || slotMin >= timeToMinutes(dayConfig.end);
-              const isOccupied = isTimeSlotOccupied(selectedDate, timeStr, selectedBarber!.name);
+      const slotMin = timeToMinutes(timeStr);
+      
+      // 1. Definição estrita dos limites (em minutos)
+      const shopOpenMin = shopSettings ? timeToMinutes(shopSettings.opening_time) : 0;
+      const shopCloseMin = shopSettings ? timeToMinutes(shopSettings.closing_time) - 15 : 1425;
+      
+      const barberStart = timeToMinutes(dayConfig.start);
+      const barberEnd = timeToMinutes(dayConfig.end) - 15;
 
-              // 🔥 REGRA: Se a data selecionada for HOJE, verifica se o horário do slot já passou
-              const isPastTime = selectedDate === todayStr && slotMin <= currentTotalMinutes;
+      // 2. Filtros de Exibição (Se retornar TRUE, o horário SOME da tela)
+      const isOutsideShop = slotMin < shopOpenMin || slotMin > shopCloseMin;
+      const isOutsideBarber = slotMin < barberStart || slotMin > barberEnd;
 
-              if (isOutsideShop || isOutsideBarber) return null;
+      // 3. Filtros de Bloqueio (Se retornar TRUE, o botão fica CINZA e IRRISCÁVEL)
+      const isOccupied = isTimeSlotOccupied(selectedDate, timeStr, selectedBarber!.name);
+      const isPastTime = selectedDate === todayStr && slotMin <= currentTotalMinutes;
 
-              return (
-                <button
-                  key={i} 
-                  disabled={isOccupied || isPastTime}
-                  onClick={() => setSelectedTime(timeStr)}
-                  className={`py-3 rounded-xl border transition-all text-[11px] font-black italic 
-                    ${selectedTime === timeStr ? 'bg-amber-500 text-black border-amber-500' : 
-                      (isOccupied || isPastTime) ? 'opacity-20 line-through cursor-not-allowed bg-black border-zinc-900' : 'bg-zinc-900 border-zinc-800 text-zinc-400'}`}
-                >
-                  {timeStr}
-                </button>
-              );
-            })}
-          </div>
-        )}
+      // TRAVA DE SEGURANÇA: Se estiver fora do horário da loja ou do barbeiro, NÃO RENDERIZA
+      if (isOutsideShop || isOutsideBarber) return null;
+
+      return (
+        <button
+          key={i} 
+          disabled={isOccupied || isPastTime}
+          onClick={() => setSelectedTime(timeStr)}
+          className={`py-3 rounded-xl border transition-all text-[11px] font-black italic 
+            ${selectedTime === timeStr 
+              ? 'bg-amber-500 text-black border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.4)] scale-105' 
+              : (isOccupied || isPastTime) 
+                ? 'opacity-10 line-through cursor-not-allowed bg-black border-zinc-900 text-zinc-800' 
+                : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-amber-500/50'
+            }`}
+        >
+          {timeStr}
+        </button>
+      );
+    })}
+  </div>
+)}
 
         <div className="flex gap-4">
           <button onClick={() => setStep(2)} className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic">Voltar</button>
@@ -271,7 +284,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     <div className="space-y-8 text-center py-8 animate-in zoom-in duration-500">
       <CheckCircle2 size={64} className="text-amber-500 mx-auto" />
       <h3 className="text-3xl font-black text-white uppercase italic tracking-tighter">Agendado!</h3>
-      <div className="bg-zinc-900/50 p-10 rounded-[3rem] border border-zinc-800 text-left space-y-4">
+      <div className="bg-zinc-900/50 p-10 rounded-[3rem] border border-zinc-800 text-left space-y-4 shadow-2xl">
         <div className="flex justify-between"><span className="text-[10px] font-black text-zinc-500 uppercase">Profissional</span><span className="font-black italic">{selectedBarber?.name}</span></div>
         <div className="flex justify-between"><span className="text-[10px] font-black text-zinc-500 uppercase">Data</span><span className="font-black italic">{new Date(selectedDate + 'T12:00:00').toLocaleDateString()}</span></div>
         <div className="flex justify-between"><span className="text-[10px] font-black text-zinc-500 uppercase">Horário</span><span className="font-black italic">{selectedTime}</span></div>
