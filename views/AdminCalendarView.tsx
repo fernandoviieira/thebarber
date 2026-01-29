@@ -41,7 +41,6 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     duration: 30
   });
 
-  // GERAÇÃO DE SLOTS DE 15 EM 15 MINUTOS
   const timeSlots = [];
   for (let hour = 8; hour <= 20; hour++) {
     for (let min of ['00', '15', '30', '45']) {
@@ -76,32 +75,25 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     e.dataTransfer.effectAllowed = "move";
   };
 
-  // FUNÇÃO CORRIGIDA: Prioriza duração salva no agendamento
-const getServiceDuration = (appointment: any) => {
-  if (!appointment) return 35;
+  const getServiceDuration = (appointment: any) => {
+    if (!appointment) return 35;
 
-  // 1. Tenta pegar a duração que deveria estar no agendamento
-  if (appointment.duration) {
-    return Number(appointment.duration) + 5;
-  }
+    if (appointment.duration) {
+      return Number(appointment.duration) + 5;
+    }
 
-  // 2. Se não tem no agendamento, procura na tabela de serviços (o que você já faz)
-  const serviceFromTable = services.find(s => 
-    s.name?.trim().toLowerCase() === appointment.service?.trim().toLowerCase()
-  );
+    const serviceFromTable = services.find(s =>
+      s.name?.trim().toLowerCase() === appointment.service?.trim().toLowerCase()
+    );
 
-  if (serviceFromTable && serviceFromTable.duration) {
-    const d = typeof serviceFromTable.duration === 'string'
-      ? parseInt(serviceFromTable.duration.replace(/\D/g, ''))
-      : serviceFromTable.duration;
-    return d + 5;
-  }
-
-  // 3. SE CHEGOU AQUI, o serviço é manual (ex: "AAA") e o banco não salvou a duração.
-  // Como medida de emergência, vamos retornar 60min para encaixes manuais 
-  // ou manter os 30min padrão até você criar a coluna no banco.
-  return 35; 
-};
+    if (serviceFromTable && serviceFromTable.duration) {
+      const d = typeof serviceFromTable.duration === 'string'
+        ? parseInt(serviceFromTable.duration.replace(/\D/g, ''))
+        : serviceFromTable.duration;
+      return d + 5;
+    }
+    return 35;
+  };
   const getOccupiedSlotsCount = (durationWithRespiro: number) => {
     return Math.ceil(durationWithRespiro / 15);
   };
@@ -223,11 +215,11 @@ const getServiceDuration = (appointment: any) => {
                   if (!matchDate || !matchBarber || a.status === 'cancelado') return false;
 
                   const start = timeToMinutes(a.time);
-                  const duration = getServiceDuration(a); // CORRIGIDO: Passando objeto 'a'
+                  const duration = getServiceDuration(a);
                   const end = start + duration;
 
                   const occupied = slotMin > start && slotMin < end;
-                
+
                   return occupied;
                 });
 
@@ -242,7 +234,7 @@ const getServiceDuration = (appointment: any) => {
                         onDragStart={(e) => handleDragStart(e, appStartingHere.id)}
                         onClick={() => setSelectedApp(appStartingHere)}
                         style={{
-                          height: `${getOccupiedSlotsCount(getServiceDuration(appStartingHere)) * 62 - 4}px`, // CORRIGIDO
+                          height: `${getOccupiedSlotsCount(getServiceDuration(appStartingHere)) * 62 - 4}px`,
                           zIndex: 50
                         }}
                         className={`absolute top-0 left-0 right-0 m-0.5 text-black rounded-lg p-2 shadow-xl flex flex-col cursor-move hover:brightness-110 transition-all ${appStartingHere.status === 'pendente' ? 'bg-amber-500/40 border border-dashed border-amber-600' : 'bg-amber-500'}`}

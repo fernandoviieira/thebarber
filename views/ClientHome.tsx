@@ -11,18 +11,16 @@ const ClientHome: React.FC<ClientHomeProps> = ({ onStartBooking }) => {
   const [realBarbers, setRealBarbers] = useState<any[]>([]);
   const [realServices, setRealServices] = useState<any[]>([]);
   const [shopSettings, setShopSettings] = useState<any>(null);
-  const [shopAddress, setShopAddress] = useState<string>(''); // 🔥 Estado para o endereço
+  const [shopAddress, setShopAddress] = useState<string>(''); 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function loadData() {
       setLoading(true);
       const slug = window.location.pathname.split('/')[1];
-
-      // 1. Buscamos o ID e o ADDRESS da barbearia
       const { data: barbershop } = await supabase
         .from('barbershops')
-        .select('id, address') // 🔥 Pegando o endereço aqui
+        .select('id, address')
         .eq('slug', slug)
         .single();
 

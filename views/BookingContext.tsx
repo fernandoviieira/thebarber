@@ -83,8 +83,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
   const addAppointment = async (data: Omit<Appointment, 'id'>) => {
     try {
-      // 1. Verificação de Conflito de Horário (REGRA DE OURO)
-      // Buscamos se já existe algum agendamento para o mesmo barbeiro, data e hora
       const { data: existingApp, error: checkError } = await supabase
         .from('appointments')
         .select('id')
@@ -92,7 +90,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         .eq('date', data.date)
         .eq('time', data.time)
         .eq('barbershop_id', data.barbershop_id)
-        .neq('status', 'cancelado'); // Permite agendar se o anterior foi cancelado
+        .neq('status', 'cancelado'); 
 
       if (checkError) throw checkError;
 
@@ -101,7 +99,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         return;
       }
 
-      // 2. Validação de Horário de Trabalho do Barbeiro
       if (data.status !== 'confirmado') {
         const { data: barberData, error: barberError } = await supabase
           .from('barbers')
@@ -111,7 +108,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
         if (barberError) throw barberError;
         
-        // Pegamos o primeiro barbeiro encontrado para evitar erro de múltiplas linhas
         const barberInfo = barberData?.[0];
 
         if (barberInfo?.work_days) {
@@ -136,7 +132,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      // 3. Inserção
       const { data: userData } = await supabase.auth.getUser();
       
       const { error: insertError } = await supabase

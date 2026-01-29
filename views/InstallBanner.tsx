@@ -7,9 +7,9 @@ export function InstallBanner() {
 
   useEffect(() => {
     const handler = (e: any) => {
-      e.preventDefault(); // Impede o banner padrão do Chrome
+      e.preventDefault(); 
       setDeferredPrompt(e);
-      setIsVisible(true); // Mostra o seu banner personalizado
+      setIsVisible(true); 
     };
 
     window.addEventListener('beforeinstallprompt', handler);
@@ -18,7 +18,7 @@ export function InstallBanner() {
 
   const handleInstall = async () => {
     if (!deferredPrompt) return;
-    deferredPrompt.prompt(); // Abre a caixinha de instalação
+    deferredPrompt.prompt(); 
     const { outcome } = await deferredPrompt.userChoice;
     if (outcome === 'accepted') {
       setIsVisible(false);

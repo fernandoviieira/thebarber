@@ -7,7 +7,7 @@ import {
 
 interface CashFlowProps {
     barbershopId: string;
-    appointments: any[]; 
+    appointments: any[];
 }
 
 const CashFlowModule: React.FC<CashFlowProps> = ({ barbershopId, appointments }) => {
@@ -49,16 +49,27 @@ const CashFlowModule: React.FC<CashFlowProps> = ({ barbershopId, appointments })
 
         if (active) {
             setCurrentSession(active);
-            const openingDate = active.opened_at.split('T')[0];
-            const salesToday = appointments.filter(app =>
-                app.status === 'confirmado' &&
-                app.date === openingDate
-            );
+            const openingDate = new Date(active.opened_at).toLocaleDateString('pt-BR');
+            const salesToday = appointments.filter(app => {
+                const appDate = new Date(app.date + 'T12:00:00').toLocaleDateString('pt-BR');
+                return app.status === 'confirmado' && appDate === openingDate;
+            });
+            const money = salesToday
+                .filter(s => s.payment_method?.toLowerCase().includes('dinheiro'))
+                .reduce((acc, curr) => acc + Number(curr.price || 0), 0);
 
-            const money = salesToday.filter(s => s.payment_method === 'dinheiro').reduce((acc, curr) => acc + Number(curr.price), 0);
-            const pix = salesToday.filter(s => s.payment_method === 'pix').reduce((acc, curr) => acc + Number(curr.price), 0);
-            const cards = salesToday.filter(s => ['credito', 'debito'].includes(s.payment_method)).reduce((acc, curr) => acc + Number(curr.price), 0);
-            const packages = salesToday.filter(s => s.payment_method === 'pacote').reduce((acc, curr) => acc + Number(curr.price), 0);
+            const pix = salesToday
+                .filter(s => s.payment_method?.toLowerCase().includes('pix'))
+                .reduce((acc, curr) => acc + Number(curr.price || 0), 0);
+
+            const cards = salesToday
+                .filter(s => s.payment_method?.toLowerCase().includes('credito') ||
+                    s.payment_method?.toLowerCase().includes('debito'))
+                .reduce((acc, curr) => acc + Number(curr.price || 0), 0);
+
+            const packages = salesToday
+                .filter(s => s.payment_method?.toLowerCase().includes('pacote'))
+                .reduce((acc, curr) => acc + Number(curr.price || 0), 0);
 
             setDayStats({
                 moneySales: money,
@@ -93,7 +104,7 @@ const CashFlowModule: React.FC<CashFlowProps> = ({ barbershopId, appointments })
     const handleCloseBox = async () => {
         if (!finalValue) return alert("Informe o valor que ficou na gaveta!");
         setActionLoading(true);
-        
+
         const valorNaGaveta = Number(finalValue);
         const valorEsperado = dayStats.totalExpected;
         const diferenca = valorNaGaveta - valorEsperado;
@@ -111,8 +122,8 @@ const CashFlowModule: React.FC<CashFlowProps> = ({ barbershopId, appointments })
 
             if (error) throw error;
 
-            alert(diferenca < 0 
-                ? `Caixa Fechado! Retirada de R$ ${Math.abs(diferenca).toFixed(2)} identificada.` 
+            alert(diferenca < 0
+                ? `Caixa Fechado! Retirada de R$ ${Math.abs(diferenca).toFixed(2)} identificada.`
                 : "Caixa Fechado com Sucesso!");
 
             setFinalValue('');

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   ShoppingCart, Loader2, HeartHandshake, Plus, Minus, Crown,
-  Search, User, Trash2, UserPlus, CheckCircle2, Banknote, QrCode, CreditCard, History, AlertTriangle
+  Search, User, Trash2, UserPlus, CheckCircle2, Banknote, QrCode,
+  CreditCard, History, AlertTriangle, Layers, Zap
 } from 'lucide-react';
 
 interface CheckoutProps {
@@ -23,7 +24,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   const [selectedBarber, setSelectedBarber] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [isVipMode, setIsVipMode] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'dinheiro' | 'pix' | 'debito' | 'credito' | 'pacote'>('dinheiro');
+  const [isMisto, setIsMisto] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'dinheiro' | 'pix' | 'debito' | 'credito' | 'pacote'>('pix');
   const [fees, setFees] = useState<any>({ fee_debito: 0, fee_credito: 0, fee_pix: 0, fee_dinheiro: 0 });
 
   const [splitValues, setSplitValues] = useState<Record<string, number>>({
@@ -37,12 +39,12 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   const [checkingCash, setCheckingCash] = useState(true);
 
   useEffect(() => {
+    if (barbers.length === 1) setSelectedBarber(barbers[0].name);
+  }, [barbers]);
+
+  useEffect(() => {
     const fetchSettings = async () => {
-      const { data } = await supabase
-        .from('barbershop_settings')
-        .select('*')
-        .eq('barbershop_id', barbershopId)
-        .maybeSingle();
+      const { data } = await supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle();
       if (data) setFees(data);
     };
     fetchSettings();
@@ -52,12 +54,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
   useEffect(() => {
     const checkCash = async () => {
-      const { data } = await supabase
-        .from('cash_flow')
-        .select('*')
-        .eq('barbershop_id', barbershopId)
-        .eq('status', 'open')
-        .maybeSingle();
+      const { data } = await supabase.from('cash_flow').select('*').eq('barbershop_id', barbershopId).eq('status', 'open').maybeSingle();
       setActiveCashSession(data);
       setCheckingCash(false);
     };
@@ -66,9 +63,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
   const activePkg = useMemo(() => {
     if (!selectedCustomer?.customer_packages) return null;
-    return selectedCustomer.customer_packages.find((p: any) =>
-      Number(p.used_credits) < Number(p.total_credits)
-    );
+    return selectedCustomer.customer_packages.find((p: any) => Number(p.used_credits) < Number(p.total_credits));
   }, [selectedCustomer]);
 
   const getItemPrice = (item: any) => {
@@ -78,15 +73,24 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     return Number(item.price || 0);
   };
 
-  // VALOR BRUTO (SOMENTE ITENS)
-  const totalFinal = pdvItems.reduce((acc, item) =>
-    acc + (Number(getItemPrice(item)) * Number(item.quantity)), 0
-  );
-
-  // SOMA DOS INPUTS DE PAGAMENTO
+  const totalFinal = pdvItems.reduce((acc, item) => acc + (Number(getItemPrice(item)) * Number(item.quantity)), 0);
+  const valorTotalAbsoluto = totalFinal + tip;
   const totalPagoInput = Object.values(splitValues).reduce((acc, curr) =>
     Number(acc) + Number(curr), 0
   ) as number;
+  const handleMethodToggle = (method: string) => {
+    if (!isMisto) {
+      setSplitValues({ dinheiro: 0, pix: 0, debito: 0, credito: 0, pacote: 0, [method]: valorTotalAbsoluto });
+      setPaymentMethod(method as any);
+    }
+  };
+
+  useEffect(() => {
+    if (!isMisto) {
+      const activeMethod = Object.keys(splitValues).find(key => splitValues[key] > 0) || 'pix';
+      setSplitValues({ dinheiro: 0, pix: 0, debito: 0, credito: 0, pacote: 0, [activeMethod]: valorTotalAbsoluto });
+    }
+  }, [valorTotalAbsoluto, isMisto]);
 
   const addItem = (item: any, type: 'servico' | 'produto') => {
     setPdvItems(prev => {
@@ -131,89 +135,81 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     if (!activeCashSession) return alert("CAIXA FECHADO!");
     if (!selectedBarber) return alert("Selecione o profissional!");
 
-    if (totalPagoInput < totalFinal && paymentMethod !== 'pacote') {
-      const confirm = window.confirm(`O valor informado (R$ ${totalPagoInput.toFixed(2)}) é menor que o total. Deseja finalizar?`);
-      if (!confirm) return;
-    }
-
     setLoading(true);
     try {
       const today = new Date().toISOString().split('T')[0];
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      let totalGatewayFee = 0;
+      (Object.entries(splitValues) as [string, number][]).forEach(([method, value]) => {
+        const feePercent = Number(fees[`fee_${method}`]) || 0;
+        totalGatewayFee += (Number(value) * (feePercent / 100));
+      });
 
       const methodsUsed = (Object.entries(splitValues) as [string, number][])
         .filter(([_, v]) => v > 0)
         .map(([k, v]) => `${k.toUpperCase()}(${v.toFixed(2)})`)
         .join(' + ') || paymentMethod;
 
-      // Criamos uma cópia do inventário atual para atualizar o estado no final
       let updatedInventory = [...localInventory];
 
       for (const item of pdvItems) {
-        // Lógica de Appointments
         for (let q = 0; q < item.quantity; q++) {
           await supabase.from('appointments').insert([{
             barbershop_id: barbershopId,
             customer_name: isVipMode && selectedCustomer ? selectedCustomer.name : "Venda Direta",
-            service: item.name,
+            service: String(item.name),
             barber: selectedBarber,
             date: today,
             time: time,
-            price: getItemPrice(item),
+            price: String(getItemPrice(item)),
             payment_method: methodsUsed,
             status: 'confirmado',
             customer_phone: selectedCustomer?.phone || 'Balcão',
-            is_package_redemption: paymentMethod === 'pacote' && item.type === 'servico',
+            gateway_fee: totalGatewayFee / (pdvItems.length + (tip > 0 ? 1 : 0)),
+            is_package_redemption: !!(paymentMethod === 'pacote' && item.type === 'servico'),
             tip_amount: 0
           }]);
         }
 
-        // Lógica de Estoque
         if (item.type === 'produto') {
           const prodIndex = updatedInventory.findIndex(p => p.id === item.originalId);
           if (prodIndex !== -1) {
             const newStock = updatedInventory[prodIndex].current_stock - item.quantity;
-
-            // Atualiza no Banco
-            await supabase
-              .from('inventory')
-              .update({ current_stock: newStock })
-              .eq('id', item.originalId);
-
-            // Atualiza na nossa cópia local
-            updatedInventory[prodIndex] = {
-              ...updatedInventory[prodIndex],
-              current_stock: newStock
-            };
+            await supabase.from('inventory').update({ current_stock: newStock }).eq('id', item.originalId);
+            updatedInventory[prodIndex] = { ...updatedInventory[prodIndex], current_stock: newStock };
           }
         }
       }
 
-      // Gorjeta
       if (tip > 0) {
         await supabase.from('appointments').insert([{
-          barbershop_id: barbershopId, service: "Caixinha", barber: selectedBarber, date: today, time: time,
-          price: tip, payment_method: methodsUsed, status: 'confirmado', tip_amount: tip
+          barbershop_id: barbershopId,
+          customer_name: isVipMode && selectedCustomer ? selectedCustomer.name : "Venda Direta",
+          customer_phone: selectedCustomer?.phone || 'Balcão',
+          service: "Caixinha (Gorjeta)",
+          barber: selectedBarber,
+          date: today,
+          time: time,
+          price: String(tip.toFixed(2)),
+          payment_method: methodsUsed,
+          status: 'confirmado',
+          gateway_fee: 0,
+          tip_amount: Number(tip),
+          is_package_redemption: false
         }]);
       }
 
-      // Sincroniza o estado local com os novos valores de estoque
       setLocalInventory(updatedInventory);
-
-      // Finalização
-      onSuccess(); // Aqui o pai deve atualizar os dados globais se necessário
+      onSuccess();
       setPdvItems([]);
       setSplitValues({ dinheiro: 0, pix: 0, debito: 0, credito: 0, pacote: 0 });
       setTip(0);
-
+      setIsMisto(false);
       alert("Venda finalizada com sucesso!");
-    } catch (err) {
-      console.error(err);
-      alert("Erro ao salvar.");
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { console.error(err); } finally { setLoading(false); }
   };
+
   const inputClassName = "bg-transparent text-right w-full outline-none font-black text-white text-lg appearance-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 
   return (
@@ -229,34 +225,35 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           </div>
         )}
 
-        {/* ... Seção de Barbeiros, Taxas e Catálogo permanecem iguais ... */}
-        <div className="bg-white/[0.03] border border-white/10 p-8 rounded-[2.5rem] space-y-6 mt-10">
-          <div className="flex items-center justify-between">
-            <h4 className="text-xl font-black text-white italic uppercase flex items-center gap-3">
-              <History className="text-blue-500" size={24} /> Configurar Taxas (%)
+        {/* SEÇÃO DE TAXAS COMPACTA */}
+        <div className="bg-white/[0.02] border border-white/5 p-4 rounded-[1.5rem] mt-6">
+          <div className="flex items-center justify-between mb-3 px-2">
+            <h4 className="text-[10px] font-black text-slate-500 italic uppercase flex items-center gap-2">
+              <History size={14} className="text-blue-500" /> Taxas da Maquininha (%)
             </h4>
-            <button onClick={saveFees} className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2 rounded-full text-[10px] uppercase font-black transition-all">
-              {loading ? <Loader2 className="animate-spin" size={14} /> : "Salvar Taxas"}
+            <button onClick={saveFees} className="text-blue-500 hover:text-white text-[9px] uppercase font-black transition-all">
+              {loading ? <Loader2 className="animate-spin" size={10} /> : "[ Atualizar ]"}
             </button>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-4 gap-2">
             {[
               { label: 'Débito', key: 'fee_debito' },
               { label: 'Crédito', key: 'fee_credito' },
               { label: 'PIX', key: 'fee_pix' },
               { label: 'Dinheiro', key: 'fee_dinheiro' }
             ].map((f) => (
-              <div key={f.key} className="bg-black/40 p-4 rounded-3xl border border-white/5">
-                <label className="text-[9px] font-black text-slate-500 uppercase mb-2 block">{f.label}</label>
-                <div className="flex items-center gap-2">
-                  <input type="number" value={fees[f.key] || 0} onChange={(e) => setFees({ ...fees, [f.key]: Number(e.target.value) })} className="bg-transparent text-white font-black text-xl outline-none w-full appearance-none" />
-                  <span className="text-slate-600 font-black">%</span>
+              <div key={f.key} className="bg-black/20 p-2 px-3 rounded-xl border border-white/5 flex items-center justify-between">
+                <label className="text-[8px] font-black text-slate-600 uppercase italic">{f.label}</label>
+                <div className="flex items-center gap-1">
+                  <input type="number" value={fees[f.key] || 0} onChange={(e) => setFees({ ...fees, [f.key]: Number(e.target.value) })} className="bg-transparent text-white font-black text-xs outline-none w-8 text-right appearance-none" />
+                  <span className="text-slate-700 text-[8px]">%</span>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
+        {/* CLIENTE E GORJETA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="bg-white/[0.03] border border-white/10 p-2 rounded-[2.5rem] flex flex-col">
             <div className="flex p-1 gap-1">
@@ -270,7 +267,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             <div className="p-4 pt-2 font-black">
               {isVipMode ? (
                 !selectedCustomer ? (
-                  <select className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 px-4 text-xs font-bold outline-none italic" onChange={(e) => setSelectedCustomer(customers.find(c => c.id === e.target.value))}>
+                  <select className="w-full bg-black/40 border border-white/10 rounded-2xl py-4 px-4 text-xs font-bold outline-none italic text-white" onChange={(e) => setSelectedCustomer(customers.find(c => c.id === e.target.value))}>
                     <option value="">Localizar Cliente...</option>
                     {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
@@ -278,7 +275,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                   <div className="flex items-center justify-between bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
                     <div className="flex items-center gap-3">
                       <div className="bg-amber-500 p-2 rounded-xl text-black"><User size={20} /></div>
-                      <div className="leading-none">
+                      <div className="leading-none text-white">
                         <p className="text-xs font-black uppercase italic">{selectedCustomer.name}</p>
                         {activePkg && <p className="text-[9px] text-amber-500 font-bold mt-1 uppercase italic">Saldo: {activePkg.total_credits - activePkg.used_credits} cortes</p>}
                       </div>
@@ -299,6 +296,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           </div>
         </div>
 
+        {/* BARBEIROS */}
         <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
           {barbers.map(b => (
             <button key={b.id} onClick={() => setSelectedBarber(b.name)} className={`p-4 rounded-2xl border text-[10px] font-black uppercase transition-all ${selectedBarber === b.name ? 'bg-amber-500 text-black border-amber-500 shadow-xl' : 'bg-white/5 border-white/10 text-slate-500 hover:border-white/20'}`}>
@@ -307,6 +305,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           ))}
         </div>
 
+        {/* BUSCA E CATÁLOGO COMPLETO */}
         <div className="space-y-6 text-white italic">
           <div className="relative group">
             <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
@@ -317,26 +316,12 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
               <h4 className="text-[10px] font-black uppercase tracking-[0.4em] pl-4 text-amber-500/50">Serviços</h4>
               <div className="space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar">
                 {services.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())).map(s => (
-                  <button
-                    key={s.id}
-                    onClick={() => addItem(s, 'servico')}
-                    className="w-full flex justify-between p-5 bg-amber-500/5 border-l-4 border-l-amber-500 border-y border-r border-white/5 rounded-3xl hover:bg-amber-500 hover:text-black transition-all leading-none group"
-                  >
-                    <div className="text-left">
-                      <p className="text-xs uppercase font-black italic group-hover:text-black transition-colors">
-                        {s.name}
-                      </p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest bg-amber-500/20 text-amber-500 group-hover:bg-black/20 group-hover:text-black">
-                          Procedimento
-                        </span>
-                      </div>
+                  <button key={s.id} onClick={() => addItem(s, 'servico')} className="w-full flex justify-between p-5 bg-amber-500/5 border-l-4 border-l-amber-500 border-y border-r border-white/5 rounded-3xl hover:bg-amber-500 hover:text-black transition-all group">
+                    <div className="text-left leading-none">
+                      <p className="text-xs uppercase font-black italic">{s.name}</p>
+                      <span className="text-[8px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest bg-amber-500/20 text-amber-500 mt-2 inline-block">Procedimento</span>
                     </div>
-                    <div className="flex flex-col items-end justify-center">
-                      <span className="font-black italic text-xs text-amber-500 group-hover:text-black">
-                        R$ {Number(s.price).toFixed(2)}
-                      </span>
-                    </div>
+                    <span className="font-black italic text-xs text-amber-500 group-hover:text-black">R$ {Number(s.price).toFixed(2)}</span>
                   </button>
                 ))}
               </div>
@@ -345,24 +330,12 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
               <h4 className="text-[10px] font-black uppercase tracking-[0.4em] pl-4 text-blue-400/50">Produtos</h4>
               <div className="space-y-2 max-h-[350px] overflow-y-auto custom-scrollbar">
                 {localInventory.filter(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())).map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => addItem(p, 'produto')}
-                    className="w-full flex justify-between p-5 bg-blue-500/5 border-l-4 border-l-blue-500 border-y border-r border-white/5 rounded-3xl hover:bg-blue-600 hover:text-white transition-all leading-none group"
-                  >
-                    <div className="text-left">
-                      <p className="text-xs uppercase font-black italic group-hover:text-white transition-colors">{p.name}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-tighter ${p.current_stock > 5 ? 'bg-blue-500/20 text-blue-400' : 'bg-red-500/20 text-red-400'}`}>
-                          Estoque: {p.current_stock}
-                        </span>
-                      </div>
+                  <button key={p.id} onClick={() => addItem(p, 'produto')} className="w-full flex justify-between p-5 bg-blue-500/5 border-l-4 border-l-blue-500 border-y border-r border-white/5 rounded-3xl hover:bg-blue-600 hover:text-white transition-all group">
+                    <div className="text-left leading-none">
+                      <p className="text-xs uppercase font-black italic">{p.name}</p>
+                      <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase mt-2 inline-block ${p.current_stock > 5 ? 'bg-blue-500/20 text-blue-400' : 'bg-red-500/20 text-red-400'}`}>Estoque: {p.current_stock}</span>
                     </div>
-                    <div className="flex flex-col items-end justify-center">
-                      <span className="font-black italic text-xs text-blue-400 group-hover:text-white">
-                        R$ {Number(p.price_sell).toFixed(2)}
-                      </span>
-                    </div>
+                    <span className="font-black italic text-xs text-blue-400 group-hover:text-white">R$ {Number(p.price_sell).toFixed(2)}</span>
                   </button>
                 ))}
               </div>
@@ -371,19 +344,20 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         </div>
       </div>
 
-      {/* COLUNA CHECKOUT */}
+      {/* COLUNA CHECKOUT LATERAL */}
       <div className="w-full lg:w-[550px]">
         <div className="sticky top-6 bg-[#0f1115] border border-white/10 rounded-[3rem] p-10 space-y-8 shadow-2xl">
           <h4 className="text-2xl font-black text-white italic uppercase flex items-center gap-4">
             <ShoppingCart className="text-amber-500" size={28} /> Checkout
           </h4>
 
-          <div className="space-y-4 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+          {/* ITENS NO CARRINHO */}
+          <div className="space-y-4 max-h-[250px] overflow-y-auto custom-scrollbar pr-2">
             {pdvItems.map(item => (
               <div key={item.id} className="flex items-center justify-between p-5 bg-white/[0.03] rounded-3xl border border-white/5 font-bold italic">
                 <div className="flex-1 mr-4 leading-tight">
                   <p className="text-xs font-black uppercase text-white truncate italic">{item.name}</p>
-                  <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">{getItemPrice(item) === 0 ? "ISENTO (COMBO)" : `R$ ${getItemPrice(item).toFixed(2)}`}</p>
+                  <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">R$ {Number(item.price).toFixed(2)}</p>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-3 bg-black/40 p-2 px-3 rounded-2xl border border-white/5">
@@ -395,15 +369,12 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                 </div>
               </div>
             ))}
-
-            {/* GORJETA NO CARRINHO */}
             {tip > 0 && (
               <div className="flex items-center justify-between p-5 bg-green-500/10 rounded-3xl border border-green-500/20 font-bold italic animate-in fade-in slide-in-from-right-2">
                 <div className="flex items-center gap-3 text-green-500">
                   <HeartHandshake size={20} />
-                  <div className="leading-none">
-                    <p className="text-xs font-black uppercase italic">Gorjeta / Caixinha</p>
-                    <p className="text-[9px] uppercase font-bold mt-1 tracking-widest">Valor do Cliente</p>
+                  <div className="leading-none text-white">
+                    <p className="text-xs font-black uppercase italic">Gorjeta</p>
                   </div>
                 </div>
                 <p className="text-xl font-black text-white italic">R$ {tip.toFixed(2)}</p>
@@ -411,55 +382,64 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             )}
           </div>
 
-          <div className="space-y-5 pt-6 border-t border-white/5">
-            <p className="text-xs uppercase font-black text-slate-500 text-center tracking-[0.2em]">Recebimento Misto</p>
+          {/* PAGAMENTO */}
+          <div className="pt-6 border-t border-white/5 space-y-6">
+            <div onClick={() => setIsMisto(!isMisto)} className="flex items-center justify-between bg-white/5 p-4 rounded-2xl cursor-pointer border border-white/5 hover:bg-white/10 transition-all">
+              <div className="flex items-center gap-3">
+                <Layers size={18} className={isMisto ? "text-amber-500" : "text-slate-500"} />
+                <span className="text-[10px] uppercase font-black italic text-white">Habilitar Pagamento Misto</span>
+              </div>
+              <div className={`w-8 h-4 rounded-full relative transition-all ${isMisto ? 'bg-amber-500' : 'bg-slate-700'}`}>
+                <div className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all ${isMisto ? 'right-0.5' : 'left-0.5'}`} />
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 gap-3">
               {[
-                { id: 'dinheiro', icon: <Banknote size={18} />, label: 'Dinheiro', feeKey: 'fee_dinheiro' },
-                { id: 'pix', icon: <QrCode size={18} />, label: 'PIX', feeKey: 'fee_pix' },
-                { id: 'debito', icon: <CreditCard size={18} />, label: 'Débito', feeKey: 'fee_debito' },
-                { id: 'credito', icon: <CreditCard size={18} />, label: 'Crédito', feeKey: 'fee_credito' }
+                { id: 'dinheiro', icon: <Banknote size={18} />, label: 'Dinheiro', fee: 'fee_dinheiro' },
+                { id: 'pix', icon: <QrCode size={18} />, label: 'PIX', fee: 'fee_pix' },
+                { id: 'debito', icon: <CreditCard size={18} />, label: 'Débito', fee: 'fee_debito' },
+                { id: 'credito', icon: <CreditCard size={18} />, label: 'Crédito', fee: 'fee_credito' }
               ].map(m => (
-                <div key={m.id} className="flex items-center gap-4 bg-black/40 p-4 rounded-3xl border border-white/5 group hover:border-amber-500/30 transition-all">
-                  <span className={`${splitValues[m.id] > 0 ? 'text-amber-500' : 'text-slate-600'}`}>{m.icon}</span>
-                  <div className="flex flex-col flex-1 leading-none">
-                    <span className="text-[14px] uppercase font-black text-white italic">{m.label}</span>
-                    <span className="text-[10px] text-slate-500 uppercase font-bold tracking-tight">Taxa: {fees[m.feeKey] || 0}%</span>
+                <div
+                  key={m.id}
+                  onClick={() => handleMethodToggle(m.id)}
+                  className={`flex items-center gap-4 bg-black/40 p-4 rounded-3xl border transition-all cursor-pointer ${splitValues[m.id] > 0 ? 'border-amber-500' : 'border-white/5'} ${!isMisto && splitValues[m.id] === 0 ? 'opacity-50' : 'opacity-100'}`}
+                >
+                  <span className={splitValues[m.id] > 0 ? 'text-amber-500' : 'text-slate-600'}>{m.icon}</span>
+                  <div className="flex-1 leading-none">
+                    <p className="text-xs uppercase font-black italic text-white">{m.label}</p>
+                    <p className="text-[8px] text-slate-500 uppercase font-bold">Taxa: {fees[m.fee] || 0}%</p>
                   </div>
-                  <div className="w-32">
-                    <input
-                      type="number"
-                      placeholder="0.00"
-                      className={`${inputClassName} text-right text-xl`}
-                      value={splitValues[m.id] || ''}
-                      onChange={(e) => {
-                        setPaymentMethod(m.id as any);
-                        setSplitValues({ ...splitValues, [m.id]: Number(e.target.value) });
-                      }}
-                    />
-                  </div>
+                  <input
+                    type="number"
+                    disabled={!isMisto}
+                    value={splitValues[m.id] || ''}
+                    onChange={(e) => setSplitValues({ ...splitValues, [m.id]: Number(e.target.value) })}
+                    className="bg-transparent text-right w-24 outline-none font-black text-white text-lg"
+                    placeholder="0.00"
+                  />
+                  <Zap size={14} className={splitValues[m.id] > 0 ? "text-amber-500" : "text-slate-800"} />
                 </div>
               ))}
             </div>
 
+            {/* RESUMO DE VALORES */}
             <div className="text-center bg-black/40 py-8 rounded-[3rem] border border-white/5">
-              <p className="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 italic leading-none">Total Geral Bruto</p>
-              <h3 className="text-6xl font-black text-white italic tabular-nums leading-none">R$ {totalFinal.toFixed(2)}</h3>
-              {totalPagoInput > 0 && (
-                <p className={`text-[10px] font-black uppercase mt-4 italic tracking-widest ${totalPagoInput >= totalFinal ? 'text-green-500' : 'text-amber-500'}`}>
-                  {/* AJUSTE: O cálculo de "RESTANTE" agora só considera o valor dos ITENS */}
-                  {totalPagoInput >= totalFinal ? 'PAGAMENTO OK' : `RESTANTE R$ ${(totalFinal - totalPagoInput).toFixed(2)}`}
+              <p className="text-xs font-black text-slate-500 uppercase mb-2 leading-none">Total Geral a Receber</p>
+              <h3 className="text-6xl font-black text-white italic tabular-nums leading-none">R$ {valorTotalAbsoluto.toFixed(2)}</h3>
+
+              {isMisto && Number(totalPagoInput) > 0 && (
+                <p className={`text-[10px] font-black uppercase mt-4 italic tracking-widest ${Number(totalPagoInput) >= valorTotalAbsoluto ? 'text-green-500' : 'text-amber-500'}`}>
+                  {Number(totalPagoInput) >= valorTotalAbsoluto ? 'PAGAMENTO OK' : `RESTANTE R$ ${(valorTotalAbsoluto - Number(totalPagoInput)).toFixed(2)}`}
                 </p>
               )}
             </div>
 
             <button
-              disabled={loading || totalPagoInput <= 0 || !activeCashSession}
+              disabled={loading || !activeCashSession || valorTotalAbsoluto <= 0 || (isMisto && totalPagoInput < valorTotalAbsoluto)}
               onClick={handleFinalize}
-              className={`w-full py-8 rounded-[2.5rem] font-black uppercase text-sm tracking-[0.4em] transition-all flex items-center justify-center gap-4 ${!activeCashSession || totalPagoInput <= 0
-                ? 'bg-white/5 text-slate-500 cursor-not-allowed border border-white/5'
-                : 'bg-white text-black shadow-2xl hover:bg-slate-100 hover:scale-[1.01]'
-                }`}
+              className={`w-full py-8 rounded-[2.5rem] font-black uppercase text-sm tracking-[0.4em] transition-all flex items-center justify-center gap-4 ${loading || !activeCashSession || (isMisto && totalPagoInput < valorTotalAbsoluto) ? 'bg-white/5 text-slate-700 cursor-not-allowed' : 'bg-white text-black shadow-2xl hover:scale-[1.01]'}`}
             >
               {loading ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={22} /> Finalizar Lançamento</>}
             </button>

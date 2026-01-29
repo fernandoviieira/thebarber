@@ -271,8 +271,6 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
   );
 };
 
-// --- COMPONENTES AUXILIARES ---
-
 const TabBtn = ({ active, label, onClick }: any) => (
   <button onClick={onClick} className={`px-10 py-4 rounded-xl font-black uppercase tracking-[0.2em] text-[10px] transition-all duration-300 ${active ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30' : 'text-zinc-600 hover:text-white'}`}>
     {label}
@@ -290,8 +288,6 @@ const HeaderSection = ({ title, subtitle, actionLabel, onAction, icon }: any) =>
     </button>
   </div>
 );
-
-// --- DEFINIÇÕES DOS MODAIS (CORREÇÃO DO ERRO) ---
 
 const BarberModal = ({ title, data, setData, onSave, onClose }: any) => {
   const daysOfWeek = [

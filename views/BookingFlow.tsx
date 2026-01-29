@@ -219,23 +219,14 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       if (!dayConfig || !dayConfig.active) return null;
 
       const slotMin = timeToMinutes(timeStr);
-      
-      // 1. Definição estrita dos limites (em minutos)
       const shopOpenMin = shopSettings ? timeToMinutes(shopSettings.opening_time) : 0;
       const shopCloseMin = shopSettings ? timeToMinutes(shopSettings.closing_time) - 15 : 1425;
-      
       const barberStart = timeToMinutes(dayConfig.start);
       const barberEnd = timeToMinutes(dayConfig.end) - 15;
-
-      // 2. Filtros de Exibição (Se retornar TRUE, o horário SOME da tela)
       const isOutsideShop = slotMin < shopOpenMin || slotMin > shopCloseMin;
       const isOutsideBarber = slotMin < barberStart || slotMin > barberEnd;
-
-      // 3. Filtros de Bloqueio (Se retornar TRUE, o botão fica CINZA e IRRISCÁVEL)
       const isOccupied = isTimeSlotOccupied(selectedDate, timeStr, selectedBarber!.name);
       const isPastTime = selectedDate === todayStr && slotMin <= currentTotalMinutes;
-
-      // TRAVA DE SEGURANÇA: Se estiver fora do horário da loja ou do barbeiro, NÃO RENDERIZA
       if (isOutsideShop || isOutsideBarber) return null;
 
       return (

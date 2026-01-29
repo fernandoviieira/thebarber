@@ -13,7 +13,7 @@ interface Expense {
   description: string;
   amount: number;
   category: string;
-  payment_method: string; // Novo campo
+  payment_method: string; 
   date: string;
 }
 

@@ -50,17 +50,11 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
             if (barbersData && salesData) {
                 setReportData(barbersData.map(barber => {
                     const mySales = salesData.filter(sale => sale.barber === barber.name);
-                    
-                    // LÓGICA DE CÁLCULO HÍBRIDA (PRODUTO FIXO / SERVIÇO %)
                     const comissaoTotalCalculada = mySales.reduce((acc, sale) => {
-                        // 1. Se for comissão de produto já salva no Checkout, usa o valor fixo
                         if (sale.product_commission && Number(sale.product_commission) > 0) {
                             return acc + Number(sale.product_commission);
                         }
-                        // 2. Se for caixinha pura lançada como item, ignora (pois entra no tip_amount)
                         if (sale.service === "Caixinha / Gorjeta") return acc;
-                        
-                        // 3. Caso contrário, aplica a % do barbeiro sobre o serviço
                         return acc + (Number(sale.price) * (barber.commission_rate / 100));
                     }, 0);
 
@@ -172,9 +166,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                     <div className="py-20 flex flex-col items-center gap-4 text-amber-500 font-black text-[10px] tracking-[0.5em]"><Loader2 className="animate-spin" size={40} /> PROCESSANDO...</div>
                 ) : (
                     filteredReportData.map(barber => {
-                        // Total líquido = (Comissão Serviços + Comissão Produtos) + Gorjetas - Vales
                         const totalLiquido = barber.totalComissaoCalculada + barber.totalGorjetas - (barber.expenses || 0);
-
                         return (
                             <div key={barber.id} className="group">
                                 <div

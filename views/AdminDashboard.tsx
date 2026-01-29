@@ -40,7 +40,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const [barbers, setBarbers] = useState<any[]>([]);
   const [availableServices, setAvailableServices] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
-  const [allExpenses, setAllExpenses] = useState<any[]>([]); // 🔥 NOVO ESTADO
+  const [allExpenses, setAllExpenses] = useState<any[]>([]); 
   const [loadingData, setLoadingData] = useState(true);
   const [customCommissions, setCustomCommissions] = useState<Record<string, number>>({});
 
@@ -197,13 +197,11 @@ const analyzeWithSarah = async () => {
       data: "Período Selecionado",
       faturamentoBruto: totalBruto,
       lucroLiquido: lucroLiquidoRealFinal,
-      status: lucroLiquidoRealFinal < 0 ? "PREJUÍZO" : "LUCRO", // Agora ela sabe o estado real
+      status: lucroLiquidoRealFinal < 0 ? "PREJUÍZO" : "LUCRO", 
       barbeiros: barberPerformance.map(b => ({ nome: b.name, atendimentos: b.count, faturamento: b.bruto }))
     };
     const { data, error } = await supabase.functions.invoke('get-ai-insights', { body: payload });
     if (error) throw error;
-    
-    // Efeito de digitação (opcional, mas muito profissional)
     if (data && data.insight) {
       setSarahMessage(data.insight);
     }
@@ -214,10 +212,9 @@ const analyzeWithSarah = async () => {
   }
 };
 
-  // 🔥 Função para fechar sidebar ao clicar em item (mobile)
   const handleTabChange = (tab: typeof activeTab) => {
     setActiveTab(tab);
-    setIsSidebarOpen(false); // Fecha sidebar no mobile
+    setIsSidebarOpen(false);
   };
 
   if (bookingLoading || loadingData) return (
@@ -340,9 +337,7 @@ const analyzeWithSarah = async () => {
                       dateFormat="dd/MM/yyyy"
                       className="bg-transparent text-white text-xs lg:text-sm font-bold outline-none cursor-pointer w-full min-w-0"
                       placeholderText="Selecione o período"
-                      // 🔥 CORREÇÃO CRÍTICA: Remove portal no mobile
                       withPortal={false}
-                      // 🔥 Adiciona popperPlacement para mobile
                       popperPlacement="bottom-start"
                       popperModifiers={[
                         {

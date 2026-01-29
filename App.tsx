@@ -25,37 +25,31 @@ const App: React.FC = () => {
   const [userName, setUserName] = useState('');
   const [barbershopId, setBarbershopId] = useState<string | null>(null);
   const [urlSlug, setUrlSlug] = useState<string | null>(null);
-  
+
   const hasRedirected = useRef(false);
 
- useEffect(() => {
-    // 1. DETECTOR DE ROTA DINÂMICA
+  useEffect(() => {
     const path = window.location.pathname.split('/')[1];
     const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
-    
-    // --- LÓGICA DE PERSISTÊNCIA PWA ---
-    // Se estiver em uma rota de cliente (slug), salva no celular
+
     if (path && !reservedRoutes.includes(path)) {
       localStorage.setItem('last_visited_slug', path);
       setUrlSlug(path);
-      setView('client'); 
-    } 
-    // Se abrir na raiz "/" (comum no PWA) e tiver um slug salvo, redireciona
+      setView('client');
+    }
     else if (path === '' && localStorage.getItem('last_visited_slug')) {
       const savedSlug = localStorage.getItem('last_visited_slug');
       window.location.replace(`/${savedSlug}`);
-      return; // Interrompe para processar o redirecionamento
+      return;
     }
     else if (path === 'registrar') {
       setView('create_barbershop');
     }
-    // ----------------------------------
 
-    // 2. GESTÃO DE SESSÃO
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       if (session) {
-        fetchProfile(session, true, path); 
+        fetchProfile(session, true, path);
       } else {
         setLoading(false);
       }
@@ -75,7 +69,7 @@ const App: React.FC = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
+  const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
@@ -100,12 +94,11 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
         if (isUserAdmin) {
           setIsAdmin(true);
 
-          // LÓGICA DE ADMIN: Se ele logar, ele DEVE ir para o admin, a menos que esteja tentando acessar uma unidade alheia
-          const isOwnerOrGeneral = !normalizedCurrentPath || 
-                                   normalizedCurrentPath === '' || 
-                                   normalizedCurrentPath === 'admin' ||
-                                   normalizedCurrentPath === 'registrar' || 
-                                   normalizedCurrentPath === myBarbershopSlug;
+          const isOwnerOrGeneral = !normalizedCurrentPath ||
+            normalizedCurrentPath === '' ||
+            normalizedCurrentPath === 'admin' ||
+            normalizedCurrentPath === 'registrar' ||
+            normalizedCurrentPath === myBarbershopSlug;
 
           if (isOwnerOrGeneral) {
             if (allowRedirect && !hasRedirected.current) {
@@ -114,9 +107,8 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
               hasRedirected.current = true;
             }
           } else {
-            // Se o Admin tentar entrar no link de OUTRA barbearia
             console.warn("⚠️ Admin tentando acessar unidade de terceiros como cliente.");
-            setIsAdmin(false); // Trata como cliente temporariamente para essa unidade
+            setIsAdmin(false);
             if (allowRedirect && !hasRedirected.current) {
               setView('client');
               hasRedirected.current = true;
@@ -151,11 +143,11 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
     if (window.confirm("Deseja realmente sair?")) {
       hasRedirected.current = false;
       await supabase.auth.signOut();
-      
+
       setBarbershopId(null);
       setIsAdmin(false);
       setUserName('');
-      
+
       if (urlSlug) {
         setView('client');
       } else {
@@ -172,15 +164,15 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
   );
 
   if (!session) return (
-    <Login 
-      onLoginSuccess={async () => { 
-        hasRedirected.current = false; 
+    <Login
+      onLoginSuccess={async () => {
+        hasRedirected.current = false;
         const { data: { session: newSession } } = await supabase.auth.getSession();
         if (newSession) {
           setSession(newSession);
           fetchProfile(newSession, true, window.location.pathname.split('/')[1]);
         }
-      }} 
+      }}
     />
   );
 
@@ -190,7 +182,7 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
 
         {/* Banner de Instalação Proativo */}
         <InstallBanner />
-        
+
         {view !== 'create_barbershop' && (
           <Header
             view={isAdmin ? 'admin' : 'client'}
@@ -199,14 +191,14 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
             isAdmin={isAdmin}
           />
         )}
-        
+
         <main className="flex-1">
           {view === 'client' && urlSlug && <ClientHome onStartBooking={() => navigateTo('booking')} />}
 
           {view === 'admin' && isAdmin && barbershopId && <AdminDashboard barbershopId={barbershopId} />}
 
           {view === 'create_barbershop' && isAdmin && <CreateBarbershop />}
-          
+
           {view === 'settings' && isAdmin && barbershopId && (
             <AdminSettings barbershopId={barbershopId} />
           )}
@@ -219,15 +211,14 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
           )}
 
           {view === 'my_appointments' && (
-    <MyAppointments
-      onBack={() => setView('profile')}
-      customerName={userName}
-      // ADICIONE ESTA LINHA ABAIXO 
-      customerPhone={userPhone || session?.user?.phone || ""} 
-      userId={session?.user?.id || ""}
-      isAdmin={isAdmin} 
-    />
-  )}
+            <MyAppointments
+              onBack={() => setView('profile')}
+              customerName={userName}
+              customerPhone={userPhone || session?.user?.phone || ""}
+              userId={session?.user?.id || ""}
+              isAdmin={isAdmin}
+            />
+          )}
           {view === 'profile' && (
             <div className="max-w-xl mx-auto px-4 py-12 animate-in fade-in slide-in-from-bottom duration-700 pb-32 text-center">
               <div className="flex flex-col items-center space-y-6 mb-12">
@@ -288,13 +279,13 @@ const fetchProfile = async (currentSession: any, allowRedirect: boolean, current
 
         <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-zinc-950/95 backdrop-blur-3xl border-t border-zinc-800/50 px-10 py-5 flex justify-between items-center z-50">
           {isAdmin ? (
-             <button onClick={() => navigateTo('admin')} className={`p-4 rounded-2xl transition-all ${view === 'admin' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/40' : 'bg-zinc-900 text-zinc-500'}`}>
+            <button onClick={() => navigateTo('admin')} className={`p-4 rounded-2xl transition-all ${view === 'admin' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/40' : 'bg-zinc-900 text-zinc-500'}`}>
               <LayoutDashboard size={26} strokeWidth={3} />
-             </button>
+            </button>
           ) : (
-             <button onClick={() => navigateTo('client')} className={`p-4 rounded-2xl ${view === 'client' ? 'text-amber-500' : 'text-zinc-500'}`}>
+            <button onClick={() => navigateTo('client')} className={`p-4 rounded-2xl ${view === 'client' ? 'text-amber-500' : 'text-zinc-500'}`}>
               <Calendar size={26} strokeWidth={2.5} />
-             </button>
+            </button>
           )}
 
           {!isAdmin && (

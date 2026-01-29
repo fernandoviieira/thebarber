@@ -12,7 +12,6 @@ const InventoryModule = ({ barbershopId }: { barbershopId: string | null }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Estado do produto com o novo campo de comissão
   const [newProduct, setNewProduct] = useState({
     name: '', 
     category: '', 
@@ -20,7 +19,7 @@ const InventoryModule = ({ barbershopId }: { barbershopId: string | null }) => {
     min_stock: 5, 
     price_cost: '', 
     price_sell: '',
-    commission_rate: 0 // NOVO CAMPO
+    commission_rate: 0 
   });
 
   useEffect(() => {
@@ -39,7 +38,6 @@ const InventoryModule = ({ barbershopId }: { barbershopId: string | null }) => {
     setLoading(false);
   };
 
-  // Função para abrir o modal em modo edição
   const handleEditClick = (product: any) => {
     setEditingId(product.id);
     setNewProduct({
@@ -66,14 +64,12 @@ const InventoryModule = ({ barbershopId }: { barbershopId: string | null }) => {
 
     let error;
     if (editingId) {
-      // Lógica de Edição
       const { error: updateError } = await supabase
         .from('inventory')
         .update(productData)
         .eq('id', editingId);
       error = updateError;
     } else {
-      // Lógica de Novo Produto
       const { error: insertError } = await supabase
         .from('inventory')
         .insert([productData]);

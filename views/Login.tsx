@@ -47,7 +47,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     try {
       if (isRegister) {
-        // --- FLUXO DE CADASTRO ---
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -81,12 +80,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           }
         }
       } else {
-        // --- FLUXO DE LOGIN NORMAL ---
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) throw signInError;
-        
-        // Avisa ao App.tsx que o login deu certo. 
-        // O App.tsx vai decidir se mostra a Home do Cliente ou o Dashboard baseado na URL.
         onLoginSuccess();
       }
     } catch (err: any) {
