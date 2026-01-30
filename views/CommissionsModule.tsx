@@ -50,14 +50,21 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
             if (barbersData && salesData) {
                 setReportData(barbersData.map(barber => {
                     const mySales = salesData.filter(sale => sale.barber === barber.name);
+                    
+                    // CÁLCULO DA COMISSÃO (SERVIÇOS E PRODUTOS)
                     const comissaoTotalCalculada = mySales.reduce((acc, sale) => {
+                        // 1. Comissão fixa de produto
                         if (sale.product_commission && Number(sale.product_commission) > 0) {
                             return acc + Number(sale.product_commission);
                         }
+                        // 2. Ignora registro de gorjeta no cálculo de comissão percentual
                         if (sale.service === "Caixinha / Gorjeta") return acc;
+                        
+                        // 3. Comissão percentual padrão
                         return acc + (Number(sale.price) * (barber.commission_rate / 100));
                     }, 0);
 
+                    // SOMA DAS GORJETAS (Repasse 100%)
                     const totalGorjetas = mySales.reduce((acc, sale) => acc + (Number(sale.tip_amount) || 0), 0);
 
                     return {
@@ -122,7 +129,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 </div>
 
                 <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full xl:w-auto">
-                    {/* Filtro de Barbeiro */}
                     <div className="flex flex-col gap-1 flex-1">
                         <span className="text-[8px] font-black uppercase tracking-widest text-slate-500 ml-2">Profissional</span>
                         <div className="bg-slate-900/80 border border-white/10 rounded-xl md:rounded-2xl px-4 py-3 flex items-center gap-3">
@@ -140,7 +146,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                         </div>
                     </div>
 
-                    {/* DatePicker Responsivo */}
                     <div className="bg-slate-900/80 border border-white/10 rounded-xl md:rounded-[2rem] p-3 md:p-4 flex items-center shadow-2xl flex-1">
                         <div className="flex items-center gap-3 px-2 md:px-4">
                             <CalendarIcon size={20} className="text-amber-500 shrink-0" />
@@ -256,17 +261,24 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                 <tbody className="divide-y divide-white/5">
                                                     {barber.detalhes.map((v: any) => {
                                                         const isProduct = v.product_commission && v.product_commission > 0;
-                                                        const comissaoItem = isProduct ? v.product_commission : (v.service === "Caixinha / Gorjeta" ? 0 : (v.price * (barber.currentRate / 100)));
+                                                        const isTip = v.service === "Caixinha / Gorjeta" || Number(v.tip_amount) > 0;
+                                                        
+                                                        // Cálculo exibição da comissão na linha
+                                                        const comissaoItem = isProduct 
+                                                            ? v.product_commission 
+                                                            : (isTip ? v.tip_amount : (v.price * (barber.currentRate / 100)));
                                                         
                                                         return (
                                                             <tr key={v.id} className="hover:bg-white/[0.03] transition-colors">
                                                                 <td className="px-6 py-3 text-[9px] text-slate-400 font-bold">{new Date(v.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                                                                 <td className="px-6 py-3 text-[10px] font-black uppercase text-white tracking-tighter flex items-center gap-2">
-                                                                    {isProduct ? <Package size={10} className="text-blue-400"/> : <Scissors size={10} className="text-amber-500"/>}
+                                                                    {isProduct ? <Package size={10} className="text-blue-400"/> : 
+                                                                     isTip ? <Wallet size={10} className="text-green-500"/> : 
+                                                                     <Scissors size={10} className="text-amber-500"/>}
                                                                     {v.service}
                                                                 </td>
                                                                 <td className="px-6 py-3 text-right text-[10px] font-bold tabular-nums text-slate-400">R$ {Number(v.price).toFixed(2)}</td>
-                                                                <td className="px-6 py-3 text-right text-[11px] font-black text-amber-500 tabular-nums">R$ {Number(comissaoItem).toFixed(2)}</td>
+                                                                <td className={`px-6 py-3 text-right text-[11px] font-black tabular-nums ${isTip ? 'text-green-500' : 'text-amber-500'}`}>R$ {Number(comissaoItem).toFixed(2)}</td>
                                                             </tr>
                                                         );
                                                     })}
@@ -298,7 +310,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 </div>
             )}
 
-            {/* Print Area remains same logic, optimized styles */}
             <div id="print-area" className="hidden print:block bg-white text-black p-0 font-sans">
                 {filteredReportData.map((barber, index) => {
                     const isLast = index === filteredReportData.length - 1;
@@ -365,13 +376,14 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                     <tbody>
                                         {barber.detalhes.map((v: any) => {
                                              const isProd = v.product_commission && v.product_commission > 0;
-                                             const comVal = isProd ? v.product_commission : (v.service === "Caixinha / Gorjeta" ? 0 : (v.price * (barber.currentRate / 100)));
+                                             const isTipPrint = v.service === "Caixinha / Gorjeta" || Number(v.tip_amount) > 0;
+                                             const comVal = isProd ? v.product_commission : (isTipPrint ? v.tip_amount : (v.price * (barber.currentRate / 100)));
                                              return (
                                                 <tr key={v.id} className="border-b border-gray-100">
                                                     <td className="py-2">{new Date(v.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                                                    <td className="py-2 font-bold uppercase">{v.service}</td>
+                                                    <td className="py-2 font-bold uppercase">{v.service} {isTipPrint && "(GORJETA)"}</td>
                                                     <td className="py-2 text-right text-gray-400">R$ {Number(v.price).toFixed(2)}</td>
-                                                    <td className="py-2 text-right font-bold">R$ {Number(comVal).toFixed(2)}</td>
+                                                    <td className={`py-2 text-right font-bold ${isTipPrint ? 'text-green-600' : ''}`}>R$ {Number(comVal).toFixed(2)}</td>
                                                 </tr>
                                              )
                                         })}

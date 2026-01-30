@@ -14,7 +14,7 @@ interface CheckoutProps {
   customers: any[];
   machineFees: any;
   onSuccess: () => void;
-  initialAppointment?: any | null; 
+  initialAppointment?: any | null;
 }
 
 const CheckoutModule: React.FC<CheckoutProps> = ({
@@ -46,11 +46,11 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         setSelectedBarber(initialAppointment.barber);
       }
       if (initialAppointment.customerName) {
-        const foundCustomer = customers.find(c => 
+        const foundCustomer = customers.find(c =>
           c.name.toLowerCase() === initialAppointment.customerName.toLowerCase() ||
           c.phone === initialAppointment.customerPhone
         );
-        
+
         if (foundCustomer) {
           setIsVipMode(true);
           setSelectedCustomer(foundCustomer);
@@ -59,7 +59,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         }
       }
 
-      const serviceObj = services.find(s => 
+      const serviceObj = services.find(s =>
         s.name.toLowerCase() === initialAppointment.service.toLowerCase()
       );
 
@@ -75,11 +75,11 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           quantity: 1
         }]);
       }
-      
+
       const valorInicial = Number(initialAppointment.price) || 0;
       setSplitValues(prev => ({ ...prev, pix: valorInicial }));
     }
-  }, [initialAppointment, services]); 
+  }, [initialAppointment, services]);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -171,7 +171,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   const handleFinalize = async () => {
     if (!activeCashSession) return alert("CAIXA FECHADO!");
     if (!selectedBarber) return alert("Selecione o profissional!");
-    
+
     const canFinalize = hasComboInCart || (totalPagoInput >= valorTotalAbsoluto);
     if (valorTotalAbsoluto > 0 && !canFinalize) return alert("O valor pago é menor que o total!");
 
@@ -181,16 +181,21 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const vendaIdUnica = `VENDA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
+      // Define um telefone padrão para evitar o erro de NOT NULL do banco
+      const fallbackPhone = initialAppointment?.customerPhone || 'Balcão';
+      const finalPhone = selectedCustomer?.phone || fallbackPhone;
+
       const methodsUsed = hasComboInCart ? "PACOTE" : (Object.entries(splitValues) as [string, number][])
         .filter(([_, v]) => v > 0)
         .map(([k, v]) => `${k.toUpperCase()}(${v.toFixed(2)})`)
         .join(' + ') || paymentMethod.toUpperCase();
 
+      // --- 1. SALVAR SERVIÇOS E PRODUTOS ---
       for (const item of pdvItems) {
         for (let q = 0; q < item.quantity; q++) {
           const isPackageRedemption = !!(activePkg && item.type === 'servico');
 
-          const { error } = await supabase.from('appointments').insert([{
+          const { error: itemError } = await supabase.from('appointments').insert({
             venda_id: vendaIdUnica,
             barbershop_id: barbershopId,
             customer_name: selectedCustomer ? selectedCustomer.name : (initialAppointment?.customerName || "Venda Direta"),
@@ -198,60 +203,67 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             barber: selectedBarber,
             date: today,
             time: time,
-            price: String(getItemPrice(item)),
+            price: Number(getItemPrice(item)),
             payment_method: methodsUsed,
             status: 'confirmado',
-            customer_phone: selectedCustomer?.phone || initialAppointment?.customerPhone || 'Balcão',
+            customer_phone: finalPhone, // Garantido que não é nulo
             is_package_redemption: isPackageRedemption,
             tip_amount: 0
-          }]);
+          });
 
-          if (error) throw error;
+          if (itemError) throw itemError;
         }
       }
 
+      // --- 2. SALVAR A GORJETA (APENAS UM REGISTRO) ---
+      if (tip > 0) {
+        const { error: tipError } = await supabase.from('appointments').insert({
+          venda_id: vendaIdUnica,
+          barbershop_id: barbershopId,
+          customer_name: selectedCustomer ? selectedCustomer.name : (initialAppointment?.customerName || "Venda Direta"),
+          service: "Caixinha / Gorjeta",
+          barber: selectedBarber,
+          date: today,
+          time: time,
+          price: 0,
+          payment_method: methodsUsed,
+          status: 'confirmado',
+          customer_phone: finalPhone, // Garantido que não é nulo
+          tip_amount: Number(tip)
+        });
+
+        if (tipError) throw tipError;
+      }
+
+      // --- 3. ATUALIZAR AGENDAMENTO INICIAL SE EXISTIR ---
       if (initialAppointment?.id) {
         await supabase.from('appointments')
-          .update({ 
-            status: 'finalizado', 
+          .update({
+            status: 'finalizado',
             venda_id: vendaIdUnica
           })
           .eq('id', initialAppointment.id);
       }
 
-      if (tip > 0) {
-        await supabase.from('appointments').insert([{
-          venda_id: vendaIdUnica,
-          barbershop_id: barbershopId,
-          customer_name: selectedCustomer ? selectedCustomer.name : (initialAppointment?.customerName || "Venda Direta"),
-          service: "Caixinha (Gorjeta)",
-          barber: selectedBarber,
-          date: today,
-          time: time,
-          price: String(tip.toFixed(2)),
-          payment_method: methodsUsed,
-          status: 'confirmado',
-          tip_amount: Number(tip)
-        }]);
-      }
-
+      // --- SUCESSO ---
       onSuccess();
       setPdvItems([]);
       setSplitValues({ dinheiro: 0, debito: 0, credito: 0, pacote: 0, pix: 0 });
       setTip(0);
       setIsMisto(false);
       alert("Venda finalizada com sucesso!");
-    } catch (err: any) { 
-      alert(`Erro ao salvar: ${err.message}`); 
-    } finally { 
-      setLoading(false); 
+    } catch (err: any) {
+      console.error("Erro completo:", err);
+      alert(`Erro ao salvar: ${err.message || 'Verifique o console'}`);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="flex flex-col lg:flex-row gap-8 p-6 bg-[#0a0b0e] min-h-screen text-slate-200 font-bold italic">
       <div className="flex-1 space-y-6 overflow-y-auto custom-scrollbar pr-2 pb-10">
-        
+
         {!activeCashSession && !checkingCash && (
           <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-[2rem] flex items-center gap-4 animate-pulse">
             <AlertTriangle className="text-red-500" size={32} />
@@ -299,14 +311,14 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
           <div className="bg-white/[0.03] border border-white/10 p-4 rounded-[2rem]">
             <div className="flex items-center justify-between mb-2">
-               <label className="text-[9px] font-black text-green-500 uppercase italic flex items-center gap-2">
-                <Coins size={14}/> Gorjeta (Caixinha)
-               </label>
-               <div className="flex gap-1">
-                  <button onClick={() => setTip(prev => prev + 5)} className="bg-green-500/10 text-green-500 text-[8px] px-2 py-1 rounded-md border border-green-500/20 hover:bg-green-500 hover:text-white">+R$5</button>
-                  <button onClick={() => setTip(prev => prev + 10)} className="bg-green-500/10 text-green-500 text-[8px] px-2 py-1 rounded-md border border-green-500/20 hover:bg-green-500 hover:text-white">+R$10</button>
-                  <button onClick={() => setTip(0)} className="bg-red-500/10 text-red-500 text-[8px] px-2 py-1 rounded-md border border-red-500/20 hover:bg-red-500 hover:text-white">Limpar</button>
-               </div>
+              <label className="text-[9px] font-black text-green-500 uppercase italic flex items-center gap-2">
+                <Coins size={14} /> Gorjeta (Caixinha)
+              </label>
+              <div className="flex gap-1">
+                <button onClick={() => setTip(prev => prev + 5)} className="bg-green-500/10 text-green-500 text-[8px] px-2 py-1 rounded-md border border-green-500/20 hover:bg-green-500 hover:text-white">+R$5</button>
+                <button onClick={() => setTip(prev => prev + 10)} className="bg-green-500/10 text-green-500 text-[8px] px-2 py-1 rounded-md border border-green-500/20 hover:bg-green-500 hover:text-white">+R$10</button>
+                <button onClick={() => setTip(0)} className="bg-red-500/10 text-red-500 text-[8px] px-2 py-1 rounded-md border border-red-500/20 hover:bg-red-500 hover:text-white">Limpar</button>
+              </div>
             </div>
             <div className="flex items-center gap-3 bg-black/20 p-3 rounded-2xl border border-white/5">
               <input type="number" value={tip || ''} onChange={e => setTip(Number(e.target.value))} className="bg-transparent text-right w-full outline-none font-black text-white text-xl" placeholder="0.00" />
@@ -327,7 +339,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
             <input type="text" placeholder="Pesquisar..." className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-14 text-sm text-white outline-none focus:border-amber-500/50" onChange={e => setSearchQuery(e.target.value)} />
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <h4 className="text-[9px] font-black uppercase tracking-widest pl-2 text-amber-500/50">Serviços</h4>
@@ -379,8 +391,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
           <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
             {pdvItems.map(item => {
-               const currentPrice = getItemPrice(item);
-               return (
+              const currentPrice = getItemPrice(item);
+              return (
                 <div key={item.id} className="flex items-center justify-between p-4 bg-white/[0.02] rounded-2xl border border-white/5 font-bold italic">
                   <div className="flex-1 mr-2 truncate">
                     <p className="text-[10px] font-black uppercase text-white truncate italic">{item.name}</p>

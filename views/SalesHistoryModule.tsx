@@ -238,13 +238,13 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
                       <div className="text-amber-500 text-[10px] font-black">{sale.time}</div>
                     </td>
                     <td className="px-8 py-4">
-                      <span className="bg-white/5 px-2 py-1 rounded text-[9px] font-black text-slate-400 border border-white/5">#{visualId}</span>
+                      <span className="bg-white/5 px-2 py-1 rounded text-[12px] font-black text-slate-400 border border-white/5">#{visualId}</span>
                     </td>
                     <td className="px-8 py-4 text-xs font-black text-white uppercase italic leading-none">{sale.customer_name || 'Venda Direta'}</td>
                     <td className="px-8 py-4">
                       <div className="flex flex-col gap-1">
                          {sale.serviceList.map((item: any, idx: number) => (
-                           <div key={idx} className="flex items-center gap-2 text-[9px] font-bold text-slate-400 uppercase leading-none italic">
+                           <div key={idx} className="flex items-center gap-2 text-[12px] font-bold text-slate-400 uppercase leading-none italic">
                               {item.name.toLowerCase().includes('pomada') ? <Package size={10}/> : <Scissors size={10}/>}
                               {item.name}
                            </div>
@@ -254,7 +254,7 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
                     <td className="px-8 py-4">
                       <div className={`mx-auto w-fit flex items-center gap-2 px-3 py-1 rounded-lg border border-white/5 ${payment.bg} ${payment.color}`}>
                         {payment.icon}
-                        <span className="text-[9px] font-black uppercase italic tracking-tighter">{payment.label}</span>
+                        <span className="text-[12px]  font-black uppercase italic tracking-tighter">{payment.label}</span>
                       </div>
                     </td>
                     <td className="px-8 py-4 text-right">
