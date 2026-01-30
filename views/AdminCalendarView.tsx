@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, X, User, Clock, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { supabase } from '@/lib/supabase'; // Importe o seu cliente supabase
+import { Plus, X, User, Clock, Loader2, ChevronLeft, ChevronRight, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { addDays, startOfWeek, format, addWeeks, subWeeks, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -12,6 +13,7 @@ interface CalendarProps {
   onSave: (newAppointment: any) => Promise<void>;
   onDelete: (appointmentId: string) => Promise<void>;
   onUpdate: (appointmentId: string, updates: any) => Promise<void>;
+  onFinalize: (appointment: any) => void;
 }
 
 const AdminCalendarView: React.FC<CalendarProps> = ({
@@ -22,7 +24,8 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
   selectedDate,
   onSave,
   onDelete,
-  onUpdate
+  onUpdate,
+  onFinalize
 }) => {
   const [viewMode, setViewMode] = useState<'day' | 'week'>('day');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -31,23 +34,43 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
   const [loading, setLoading] = useState(false);
   const [draggingAppId, setDraggingAppId] = useState<string | null>(null);
   const [selectedBarberForWeek, setSelectedBarberForWeek] = useState<string>(barbers[0]?.name || '');
+  
+  const [openingTime, setOpeningTime] = useState('08:00');
+  const [closingTime, setClosingTime] = useState('20:00');
+
   const [newBooking, setNewBooking] = useState({
-    customerName: '',
-    barber: '',
-    time: '',
-    service: '',
-    price: 0,
-    date: '',
-    duration: 30
+    customerName: '', barber: '', time: '', service: '', price: 0, date: '', duration: 30
   });
 
-  const timeSlots = [];
-  for (let hour = 8; hour <= 20; hour++) {
-    for (let min of ['00', '15', '30', '45']) {
-      if (hour === 20 && min !== '00') break;
-      timeSlots.push(`${hour.toString().padStart(2, '0')}:${min}`);
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const { data, error } = await supabase
+        .from('barbershop_settings')
+        .select('opening_time, closing_time')
+        .eq('barbershop_id', barbershopId)
+        .maybeSingle();
+
+      if (data && !error) {
+        if (data.opening_time) setOpeningTime(data.opening_time.slice(0, 5));
+        if (data.closing_time) setClosingTime(data.closing_time.slice(0, 5));
+      }
+    };
+    fetchSettings();
+  }, [barbershopId]);
+
+  const timeSlots = useMemo(() => {
+    const slots = [];
+    const [startHour] = openingTime.split(':').map(Number);
+    const [endHour] = closingTime.split(':').map(Number);
+
+    for (let hour = startHour; hour <= endHour; hour++) {
+      for (let min of ['00', '15', '30', '45']) {
+        if (hour === endHour && min !== '00') break;
+        slots.push(`${hour.toString().padStart(2, '0')}:${min}`);
+      }
     }
-  }
+    return slots;
+  }, [openingTime, closingTime]);
 
   const timeToMinutes = (t: string) => {
     const [h, m] = t.split(':').map(Number);
@@ -70,32 +93,10 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
   const navigateNext = () => setCurrentDate(viewMode === 'day' ? addDays(currentDate, 1) : addWeeks(currentDate, 1));
   const navigatePrev = () => setCurrentDate(viewMode === 'day' ? subDays(currentDate, 1) : subWeeks(currentDate, 1));
 
-  const handleDragStart = (e: React.DragEvent, id: string) => {
+  const handleDragStart = (e: React.DragEvent, id: string, status: string) => {
+    if (status === 'finalizado') return e.preventDefault();
     setDraggingAppId(id);
     e.dataTransfer.effectAllowed = "move";
-  };
-
-  const getServiceDuration = (appointment: any) => {
-    if (!appointment) return 35;
-
-    if (appointment.duration) {
-      return Number(appointment.duration) + 5;
-    }
-
-    const serviceFromTable = services.find(s =>
-      s.name?.trim().toLowerCase() === appointment.service?.trim().toLowerCase()
-    );
-
-    if (serviceFromTable && serviceFromTable.duration) {
-      const d = typeof serviceFromTable.duration === 'string'
-        ? parseInt(serviceFromTable.duration.replace(/\D/g, ''))
-        : serviceFromTable.duration;
-      return d + 5;
-    }
-    return 35;
-  };
-  const getOccupiedSlotsCount = (durationWithRespiro: number) => {
-    return Math.ceil(durationWithRespiro / 15);
   };
 
   const handleDrop = async (e: React.DragEvent, barberName: string, slotTime: string, targetDate: string) => {
@@ -112,46 +113,50 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     }
   };
 
-  const handleOpenModal = (barber: string, time: string, date: string) => {
-    setNewBooking({ ...newBooking, barber, time, date, customerName: '', service: '', price: 0, duration: 30 });
-    setIsModalOpen(true);
-  };
-
   const handleDelete = async (id: string) => {
     if (window.confirm("Deseja excluir este agendamento?")) {
       setLoading(true);
-      await onDelete(id);
-      setLoading(false);
-      setSelectedApp(null);
+      try {
+        await onDelete(id);
+        setSelectedApp(null);
+      } catch (error) {
+        alert("Erro ao excluir.");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleServiceChange = (serviceName: string) => {
+    const selectedService = services.find(s => s.name === serviceName);
+    if (selectedService) {
+      const rawDuration = typeof selectedService.duration === 'string'
+        ? parseInt(selectedService.duration.replace(/\D/g, ''))
+        : selectedService.duration;
+      setNewBooking({ ...newBooking, service: selectedService.name, price: Number(selectedService.price) || 0, duration: rawDuration || 30 });
     }
   };
 
   const handleFinalizeEncaixe = async () => {
     if (!newBooking.customerName || !newBooking.service) return alert("Preencha tudo!");
-
     setLoading(true);
     try {
-      const dataToSave = {
-        ...newBooking,
-        duration: Number(newBooking.duration) || 30,
-        barbershop_id: barbershopId,
-        status: 'confirmado',
-        customerPhone: 'Balcão'
-      };
-
-      await onSave(dataToSave);
-
-      setNewBooking({
-        customerName: '', barber: '', time: '', service: '', price: 0, date: '', duration: 30
-      });
+      await onSave({ ...newBooking, barbershop_id: barbershopId, status: 'confirmado', customerPhone: 'Balcão', created_by_admin: true });
       setIsModalOpen(false);
+      setNewBooking({ customerName: '', barber: '', time: '', service: '', price: 0, date: '', duration: 30 });
     } catch (error) {
-      console.error("Erro ao salvar:", error);
       alert("Erro ao salvar.");
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
+
+  const getServiceDuration = (appointment: any) => {
+    if (!appointment) return 35;
+    if (appointment.duration) return Number(appointment.duration) + 5;
+    const serviceFromTable = services.find(s => s.name?.trim().toLowerCase() === appointment.service?.trim().toLowerCase());
+    return (serviceFromTable?.duration ? parseInt(String(serviceFromTable.duration).replace(/\D/g, '')) : 30) + 5;
+  };
+
+  const getOccupiedSlotsCount = (durationWithRespiro: number) => Math.ceil(durationWithRespiro / 15);
 
   if (!barbers || barbers.length === 0) return null;
 
@@ -169,11 +174,6 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
             <h4 className="text-white font-black uppercase italic tracking-tighter">
               {viewMode === 'day' ? format(currentDate, "dd 'de' MMMM", { locale: ptBR }) : `Semana de ${format(weekStart, "dd/MM")}`}
             </h4>
-            {viewMode === 'week' && (
-              <select value={selectedBarberForWeek} onChange={(e) => setSelectedBarberForWeek(e.target.value)} className="bg-transparent text-amber-500 text-[9px] uppercase border-none focus:ring-0 cursor-pointer outline-none">
-                {barbers.map(b => <option key={b.id} value={b.name} className="bg-[#0a0b0e]">{b.name}</option>)}
-              </select>
-            )}
           </div>
           <button onClick={navigateNext} className="p-2 hover:bg-white/5 rounded-full text-amber-500 transition-colors"><ChevronRight /></button>
         </div>
@@ -204,51 +204,44 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                 const slotMin = timeToMinutes(slot);
 
                 const appStartingHere = appointments.find(a => {
-                  const matchDate = a.date === targetDate;
-                  const matchBarber = a.barber?.trim().toLowerCase() === barberName?.trim().toLowerCase();
-                  return matchDate && matchBarber && a.status !== 'cancelado' && timeToMinutes(a.time) === slotMin;
+                  return a.date === targetDate && a.barber?.trim().toLowerCase() === barberName?.trim().toLowerCase() && a.status !== 'cancelado' && timeToMinutes(a.time) === slotMin;
                 });
 
-                const isSlotOccupiedByOngoing = appointments.some(a => {
-                  const matchDate = a.date === targetDate;
-                  const matchBarber = a.barber?.trim().toLowerCase() === barberName?.trim().toLowerCase();
-                  if (!matchDate || !matchBarber || a.status === 'cancelado') return false;
-
-                  const start = timeToMinutes(a.time);
-                  const duration = getServiceDuration(a);
-                  const end = start + duration;
-
-                  const occupied = slotMin > start && slotMin < end;
-
-                  return occupied;
-                });
+                const isByAdmin = appStartingHere?.created_by_admin === true;
+                const isFinalized = appStartingHere?.status === 'finalizado';
 
                 return (
                   <div
                     key={idx}
-                    className={`relative rounded-xl p-0.5 flex flex-col min-h-[60px] border border-white/[0.02] ${isSlotOccupiedByOngoing ? 'bg-amber-500/5' : 'bg-white/[0.01]'}`}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => handleDrop(e, barberName, slot, targetDate)}
+                    className="relative rounded-xl p-0.5 flex flex-col min-h-[60px] bg-white/[0.01]"
                   >
                     {appStartingHere ? (
                       <div
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, appStartingHere.id)}
+                        draggable={!isFinalized}
+                        onDragStart={(e) => handleDragStart(e, appStartingHere.id, appStartingHere.status)}
                         onClick={() => setSelectedApp(appStartingHere)}
-                        style={{
-                          height: `${getOccupiedSlotsCount(getServiceDuration(appStartingHere)) * 62 - 4}px`,
-                          zIndex: 50
-                        }}
-                        className={`absolute top-0 left-0 right-0 m-0.5 text-black rounded-lg p-2 shadow-xl flex flex-col cursor-move hover:brightness-110 transition-all ${appStartingHere.status === 'pendente' ? 'bg-amber-500/40 border border-dashed border-amber-600' : 'bg-amber-500'}`}
+                        style={{ height: `${getOccupiedSlotsCount(getServiceDuration(appStartingHere)) * 62 - 4}px`, zIndex: 50 }}
+                        className={`absolute top-0 left-0 right-0 m-0.5 text-black rounded-lg p-2 shadow-xl flex flex-col transition-all 
+                          ${isFinalized
+                            ? 'bg-emerald-500 cursor-default opacity-80'
+                            : isByAdmin
+                              ? 'bg-amber-500 cursor-move hover:brightness-110'
+                              : 'bg-cyan-400 cursor-move hover:brightness-110'}`}
                       >
                         <div className="flex justify-between items-center leading-none mb-1">
                           <span className="bg-black/20 px-1 rounded text-[8px] font-bold">{appStartingHere.time}</span>
+                          {isFinalized && <ShieldCheck size={10} className="text-black/60" />}
                         </div>
                         <p className="font-black text-[10px] uppercase truncate">{appStartingHere.customerName}</p>
-                        <p className="text-[7px] font-bold opacity-70 uppercase truncate">
-                          {appStartingHere.service} (+5min respiro)
-                        </p>
+                        <p className="text-[7px] font-bold opacity-70 uppercase truncate">{appStartingHere.service}</p>
                       </div>
-                    ) : !isSlotOccupiedByOngoing && (
-                      <button onClick={() => handleOpenModal(barberName, slot, targetDate)} className="absolute inset-0 flex items-center justify-center group opacity-0 hover:opacity-100 transition-opacity">
+                    ) : (
+                      <button onClick={() => {
+                        setNewBooking(prev => ({ ...prev, time: slot, date: targetDate, barber: barberName }));
+                        setIsModalOpen(true);
+                      }} className="absolute inset-0 flex items-center justify-center group opacity-0 hover:opacity-100 transition-opacity">
                         <Plus size={14} className="text-amber-500/50" />
                       </button>
                     )}
@@ -260,18 +253,48 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
         </div>
       </div>
 
-      {/* MODAL GESTÃO */}
+      {/* MODAL GESTÃO (Com o Alerta Emerald visível) */}
       {selectedApp && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
           <div className="bg-[#0f1115] border border-white/10 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center">
-            <div className="flex justify-center mb-6"><div className="bg-amber-500/10 p-5 rounded-full text-amber-500"><User size={40} /></div></div>
+            <div className="flex justify-center mb-6">
+              <div className={`p-5 rounded-full ${selectedApp.status === 'finalizado' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
+                {selectedApp.status === 'finalizado' ? <ShieldCheck size={40} /> : <User size={40} />}
+              </div>
+            </div>
+            
             <h4 className="text-2xl font-black text-white uppercase italic mb-2">{selectedApp.customerName}</h4>
             <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mb-8">
-              {selectedApp.service} - {format(new Date(selectedApp.date + 'T00:00:00'), "dd-MM-yyyy")} às {selectedApp.time}
+              {selectedApp.service} - {selectedApp.time}
             </p>
+
+            {selectedApp.status === 'finalizado' ? (
+              /* AQUI A OPÇÃO 1 PARA MÁXIMA VISIBILIDADE */
+              <div className="bg-emerald-500 border-l-4 border-emerald-300 py-5 px-6 rounded-2xl mb-8 shadow-[0_0_25px_rgba(16,185,129,0.3)]">
+                <div className="flex items-center gap-3">
+                  <div className="bg-white/20 p-2 rounded-full">
+                    <ShieldCheck size={20} className="text-white" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-white text-[12px] font-black uppercase italic leading-none">Pagamento Confirmado</p>
+                    <p className="text-emerald-100/60 text-[9px] mt-1 font-mono uppercase tracking-wider">ID: {selectedApp.venda_id || 'N/A'}</p>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <button 
+                onClick={() => { onFinalize(selectedApp); setSelectedApp(null); }}
+                className="w-full bg-green-500 hover:bg-green-600 text-black py-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all mb-4"
+              >
+                <CheckCircle2 size={16} /> Finalizar Atendimento
+              </button>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
-              <button onClick={() => setSelectedApp(null)} className="bg-white/5 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Voltar</button>
-              <button onClick={() => handleDelete(selectedApp.id)} className="bg-red-500 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Excluir</button>
+              <button onClick={() => setSelectedApp(null)} className="bg-white/5 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Fechar</button>
+              {selectedApp.status !== 'finalizado' && (
+                <button onClick={() => handleDelete(selectedApp.id)} className="bg-red-500 text-white py-4 rounded-2xl font-black uppercase text-[10px]">Excluir</button>
+              )}
             </div>
           </div>
         </div>
@@ -295,15 +318,23 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                   onChange={e => setNewBooking({ ...newBooking, customerName: e.target.value })}
                 />
               </div>
+              
               <div className="space-y-2">
                 <label className="text-amber-500 text-[10px] uppercase ml-2">Serviço</label>
-                <input
-                  className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white font-bold italic outline-none focus:border-amber-500/50 transition-colors"
-                  placeholder="Ex: Corte e Barba"
+                <select
+                  className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-white font-bold italic outline-none focus:border-amber-500/50 transition-colors appearance-none"
                   value={newBooking.service}
-                  onChange={e => setNewBooking({ ...newBooking, service: e.target.value })}
-                />
+                  onChange={e => handleServiceChange(e.target.value)}
+                >
+                  <option value="" disabled className="text-slate-500">Selecione um serviço</option>
+                  {services.map(s => (
+                    <option key={s.id} value={s.name} className="bg-slate-900 text-white">
+                      {s.name} - R$ {Number(s.price).toFixed(2)}
+                    </option>
+                  ))}
+                </select>
               </div>
+
               <div className="space-y-2">
                 <label className="text-amber-500 text-[10px] uppercase ml-2">Duração (minutos)</label>
                 <div className="flex items-center gap-4 bg-slate-900 border border-white/10 rounded-2xl p-4 focus-within:border-amber-500/50 transition-colors">
@@ -318,10 +349,11 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                   />
                 </div>
               </div>
+
               <button
                 onClick={handleFinalizeEncaixe}
                 disabled={loading || !newBooking.customerName || !newBooking.service}
-                className="w-full bg-amber-500 text-black py-5 rounded-2xl font-black uppercase text-xs italic hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full bg-amber-500 text-black py-5 rounded-2xl font-black uppercase text-xs italic hover:bg-amber-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Salvando..." : "Confirmar Encaixe"}
               </button>

@@ -277,7 +277,7 @@ const App: React.FC = () => {
           )}
         </main>
 
-        <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-zinc-950/95 backdrop-blur-3xl border-t border-zinc-800/50 px-10 py-5 flex justify-between items-center z-50">
+        {/* <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-zinc-950/95 backdrop-blur-3xl border-t border-zinc-800/50 px-10 py-5 flex justify-between items-center z-50">
           {isAdmin ? (
             <button onClick={() => navigateTo('admin')} className={`p-4 rounded-2xl transition-all ${view === 'admin' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/40' : 'bg-zinc-900 text-zinc-500'}`}>
               <LayoutDashboard size={26} strokeWidth={3} />
@@ -297,7 +297,7 @@ const App: React.FC = () => {
           <button onClick={() => navigateTo('profile')} className={`p-4 rounded-2xl transition-all ${(view === 'profile' || view === 'my_appointments' || view === 'settings') ? 'text-amber-500' : 'text-zinc-500'}`}>
             <User size={26} strokeWidth={2.5} />
           </button>
-        </nav>
+        </nav> */}
       </div>
     </BookingProvider>
   );

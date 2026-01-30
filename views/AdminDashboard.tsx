@@ -27,11 +27,11 @@ interface AdminDashboardProps {
 const SidebarItem = ({ icon, label, active, onClick }: any) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center gap-3 lg:gap-4 px-4 lg:px-6 py-3 lg:py-4 transition-all relative group ${active ? 'text-amber-500 bg-amber-500/5' : 'text-slate-500 hover:text-slate-300'}`}
+    className={`w-full flex items-center gap-3 lg:gap-4 px-4 lg:px-6 py-3.5 lg:py-4 transition-all relative group min-h-[44px] ${active ? 'text-amber-500 bg-amber-500/5' : 'text-slate-500 hover:text-slate-300'}`}
   >
     {active && <div className="absolute left-0 w-1 h-6 lg:h-8 bg-amber-500 rounded-r-full shadow-[0_0_15px_rgba(245,158,11,0.5)]" />}
-    <div className={`${active ? 'scale-110' : 'group-hover:scale-110'} transition-transform`}>{icon}</div>
-    <span className="text-[10px] lg:text-[11px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em]">{label}</span>
+    <div className={`${active ? 'scale-110' : 'group-hover:scale-110'} transition-transform flex-shrink-0`}>{icon}</div>
+    <span className="text-[10px] lg:text-[11px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] text-left">{label}</span>
   </button>
 );
 
@@ -43,6 +43,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const [allExpenses, setAllExpenses] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [customCommissions, setCustomCommissions] = useState<Record<string, number>>({});
+  const [pendingCheckoutApp, setPendingCheckoutApp] = useState<any | null>(null);
 
   const [isSarahAnalyzing, setIsSarahAnalyzing] = useState(false);
   const [sarahMessage, setSarahMessage] = useState<string | null>(null);
@@ -190,14 +191,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
   const lucroLiquidoRealFinal = totalLiquidoReal - totalComissoes - totalExpenses;
   const custosOperacionais = (totalBruto - totalLiquidoReal) + totalComissoes;
-
-  console.log({
-  bruto: totalBruto,
-  operacional: custosOperacionais,
-  despesas: totalExpenses,
-  lucro: lucroLiquidoRealFinal
-});
-
+  
   const analyzeWithSarah = async () => {
     setIsSarahAnalyzing(true);
     setSarahMessage(null);
@@ -226,9 +220,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     setIsSidebarOpen(false);
   };
 
+  const handleFinalizeFromCalendar = (appointment: any) => {
+    setPendingCheckoutApp(appointment);
+    setActiveTab('lancamento');
+  };
+
   if (bookingLoading || loadingData) return (
-    <div className="flex flex-col items-center justify-center h-screen bg-[#0f1115] text-amber-500 font-black uppercase text-[10px] tracking-[0.5em]">
-      <Loader2 className="animate-spin mb-4" size={48} /> Sincronizando...
+    <div className="flex flex-col items-center justify-center h-screen bg-[#0f1115] text-amber-500 font-black uppercase text-[10px] tracking-[0.5em] px-4">
+      <Loader2 className="animate-spin mb-4" size={40} /> 
+      <span className="text-center">Sincronizando...</span>
     </div>
   );
 
@@ -254,35 +254,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
         transition-transform duration-300 ease-in-out
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
       `}>
-        <div className="p-6 lg:p-8 mb-4">
+        <div className="p-4 lg:p-8 mb-2 lg:mb-4">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-lg lg:text-xl font-black text-white tracking-tighter italic uppercase">
+            <div className="flex-1 min-w-0">
+              <h1 className="text-base lg:text-xl font-black text-white tracking-tighter italic uppercase truncate">
                 {barbershopName || 'Barber'}
               </h1>
-              <p className="text-[8px] text-slate-600 font-black uppercase tracking-[0.3em] mt-1">SaaS Edition v1.0</p>
+              <p className="text-[8px] text-slate-600 font-black uppercase tracking-[0.2em] lg:tracking-[0.3em] mt-1">SaaS Edition v1.0</p>
             </div>
             {/* 🔥 BOTÃO FECHAR NO MOBILE */}
             <button
               onClick={() => setIsSidebarOpen(false)}
-              className="lg:hidden p-2 hover:bg-white/5 rounded-lg transition-colors"
+              className="lg:hidden p-2 hover:bg-white/5 rounded-lg transition-colors flex-shrink-0 ml-2"
             >
               <X size={20} className="text-slate-400" />
             </button>
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto custom-scrollbar">
-          <SidebarItem icon={<Banknote size={18} />} label="Fluxo de Caixa" active={activeTab === 'caixa'} onClick={() => handleTabChange('caixa')} />
-          <SidebarItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => handleTabChange('dashboard')} />
-          <SidebarItem icon={<CalendarDays size={18} />} label="Agendamentos" active={activeTab === 'agendamentos'} onClick={() => handleTabChange('agendamentos')} />
-          <SidebarItem icon={<ReceiptText size={18} />} label="Lançar Venda" active={activeTab === 'lancamento'} onClick={() => handleTabChange('lancamento')} />
-          <SidebarItem icon={<DollarSign size={18} />} label="Comissões" active={activeTab === 'comissoes'} onClick={() => handleTabChange('comissoes')} />
-          <SidebarItem icon={<Users size={18} />} label="Clientes" active={activeTab === 'clientes'} onClick={() => handleTabChange('clientes')} />
-          <SidebarItem icon={<Package size={18} />} label="Estoque" active={activeTab === 'estoque'} onClick={() => handleTabChange('estoque')} />
-          <SidebarItem icon={<MinusCircle size={18} />} label="Despesas" active={activeTab === 'despesas'} onClick={() => handleTabChange('despesas')} />
-          <SidebarItem icon={<History size={18} />} label="Histórico" active={activeTab === 'historico'} onClick={() => handleTabChange('historico')} />
-          <SidebarItem icon={<Settings size={18} />} label="Configurações" active={activeTab === 'config'} onClick={() => handleTabChange('config')} />
+        <nav className="flex-1 space-y-0.5 overflow-y-auto custom-scrollbar">
+          <SidebarItem icon={<Banknote size={16} lg:size={18} />} label="Fluxo de Caixa" active={activeTab === 'caixa'} onClick={() => handleTabChange('caixa')} />
+          <SidebarItem icon={<LayoutDashboard size={16} lg:size={18} />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => handleTabChange('dashboard')} />
+          <SidebarItem icon={<CalendarDays size={16} lg:size={18} />} label="Agendamentos" active={activeTab === 'agendamentos'} onClick={() => handleTabChange('agendamentos')} />
+          <SidebarItem icon={<ReceiptText size={16} lg:size={18} />} label="Lançar Venda" active={activeTab === 'lancamento'} onClick={() => handleTabChange('lancamento')} />
+          <SidebarItem icon={<DollarSign size={16} lg:size={18} />} label="Comissões" active={activeTab === 'comissoes'} onClick={() => handleTabChange('comissoes')} />
+          <SidebarItem icon={<Users size={16} lg:size={18} />} label="Clientes" active={activeTab === 'clientes'} onClick={() => handleTabChange('clientes')} />
+          <SidebarItem icon={<Package size={16} lg:size={18} />} label="Estoque" active={activeTab === 'estoque'} onClick={() => handleTabChange('estoque')} />
+          <SidebarItem icon={<MinusCircle size={16} lg:size={18} />} label="Despesas" active={activeTab === 'despesas'} onClick={() => handleTabChange('despesas')} />
+          <SidebarItem icon={<History size={16} lg:size={18} />} label="Histórico" active={activeTab === 'historico'} onClick={() => handleTabChange('historico')} />
+          <SidebarItem icon={<Settings size={16} lg:size={18} />} label="Configurações" active={activeTab === 'config'} onClick={() => handleTabChange('config')} />
         </nav>
       </aside>
 
@@ -290,53 +290,51 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
       <main className="flex-1 overflow-y-auto relative bg-[#0f1115] custom-scrollbar w-full">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
 
-          {/* 🔥 BOTÃO HAMBURGUER MOBILE - AJUSTADO */}
+          {/* 🔥 BOTÃO HAMBURGUER MOBILE - OTIMIZADO */}
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className="lg:hidden fixed top-5 left-5 z-[60] p-3 bg-amber-500 text-black rounded-xl shadow-2xl shadow-amber-500/40 hover:scale-110 active:scale-95 transition-all flex items-center justify-center border border-amber-600"
+            className="lg:hidden fixed top-4 left-4 z-[60] p-3 bg-amber-500 text-black rounded-xl shadow-2xl shadow-amber-500/40 hover:scale-110 active:scale-95 transition-all flex items-center justify-center border border-amber-600 min-w-[44px] min-h-[44px]"
           >
-            <Menu size={24} strokeWidth={3} />
+            <Menu size={22} strokeWidth={3} />
           </button>
 
           {/* TÍTULO HISTÓRICO */}
           {activeTab === 'historico' && (
-            <header className="border-b border-white/5 pb-6 lg:pb-8 mb-6 lg:mb-8">
-              <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
+            <header className="border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
+              <h2 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
                 Livro de <span className="text-amber-500">Caixa</span>
               </h2>
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mt-2">Relatório detalhado de todas as transações</p>
+              <p className="text-[9px] lg:text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] lg:tracking-[0.3em] mt-2">Relatório detalhado de todas as transações</p>
             </header>
           )}
 
           {/* HEADER DASHBOARD/AGENDAMENTOS */}
           {(activeTab === 'dashboard' || activeTab === 'agendamentos') && (
-            <header className="flex flex-col gap-6 border-b border-white/5 pb-6 lg:pb-8 mb-6 lg:mb-8">
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 w-fit px-3 lg:px-4 py-1.5 rounded-full border border-amber-500/20">
-                  <Activity size={14} className="animate-pulse" />
-                  <span className="text-[9px] lg:text-[10px] font-black uppercase tracking-[0.2em]">Visão Geral</span>
+            <header className="flex flex-col gap-4 lg:gap-6 border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
+              <div className="space-y-2 lg:space-y-3">
+                <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 w-fit px-2.5 lg:px-4 py-1.5 rounded-full border border-amber-500/20">
+                  <Activity size={12} className="animate-pulse flex-shrink-0" />
+                  <span className="text-[8px] lg:text-[10px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em]">Visão Geral</span>
                 </div>
-                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
+                <h2 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
                   {activeTab === 'dashboard' ? 'Performance' : 'Agenda'} <span className="text-amber-500">{activeTab === 'dashboard' ? 'Center' : 'Geral'}</span>
                 </h2>
               </div>
 
-
-
-              {/* 🔥 CONTROLES RESPONSIVOS */}
+              {/* 🔥 CONTROLES RESPONSIVOS OTIMIZADOS */}
               {activeTab === 'dashboard' && (
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 lg:gap-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 lg:gap-4">
                   <button
                     onClick={analyzeWithSarah}
                     disabled={isSarahAnalyzing}
-                    className="bg-slate-900 border border-white/5 p-3 lg:p-4 rounded-xl lg:rounded-2xl hover:border-amber-500/50 shadow-xl transition-all flex items-center justify-center"
+                    className="bg-slate-900 border border-white/5 p-3 lg:p-4 rounded-xl lg:rounded-2xl hover:border-amber-500/50 shadow-xl transition-all flex items-center justify-center min-h-[48px] lg:min-h-auto"
                   >
-                    {isSarahAnalyzing ? <Loader2 className="animate-spin text-amber-500" size={20} /> : <BrainCircuit className="text-amber-500" size={20} />}
+                    {isSarahAnalyzing ? <Loader2 className="animate-spin text-amber-500" size={18} /> : <BrainCircuit className="text-amber-500" size={18} />}
                   </button>
 
-                  {/* 🔥 DATEPICKER RESPONSIVO */}
-                  <div className="bg-slate-900 border border-white/10 p-3 lg:p-4 rounded-xl lg:rounded-2xl flex items-center gap-3 lg:gap-4 shadow-xl hover:border-amber-500/30 transition-all relative">
-                    <CalendarIcon size={16} className="text-amber-500 flex-shrink-0" />
+                  {/* 🔥 DATEPICKER RESPONSIVO OTIMIZADO */}
+                  <div className="bg-slate-900 border border-white/10 p-3 lg:p-4 rounded-xl lg:rounded-2xl flex items-center gap-2 lg:gap-4 shadow-xl hover:border-amber-500/30 transition-all relative min-h-[48px]">
+                    <CalendarIcon size={14} className="text-amber-500 flex-shrink-0" />
                     <DatePicker
                       selectsRange={true}
                       startDate={startDate}
@@ -344,7 +342,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
                       onChange={(update) => setDateRange(update)}
                       locale={ptBR}
                       dateFormat="dd/MM/yyyy"
-                      className="bg-transparent text-white text-xs lg:text-sm font-bold outline-none cursor-pointer w-full min-w-0"
+                      className="bg-transparent text-white text-xs sm:text-sm font-bold outline-none cursor-pointer w-full min-w-0"
                       placeholderText="Selecione o período"
                       withPortal={false}
                       popperPlacement="bottom-start"
@@ -366,39 +364,39 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
           {/* DASHBOARD CONTENT */}
           {activeTab === 'dashboard' && (
-            <div className="space-y-8 lg:space-y-12 animate-in fade-in duration-700">
+            <div className="space-y-6 lg:space-y-12 animate-in fade-in duration-700">
 
               {/* APROVAÇÕES PENDENTES */}
               {pendingApps.length > 0 && (
-                <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl lg:rounded-[3rem] p-6 lg:p-8">
-                  <div className="flex items-center gap-3 mb-6">
-                    <Clock className="text-amber-500" size={18} />
-                    <h4 className="text-lg lg:text-xl font-black text-white uppercase italic tracking-tighter">
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl lg:rounded-2xl xl:rounded-[3rem] p-4 lg:p-8">
+                  <div className="flex items-center gap-2 lg:gap-3 mb-4 lg:mb-6 flex-wrap">
+                    <Clock className="text-amber-500 flex-shrink-0" size={16} />
+                    <h4 className="text-base lg:text-xl font-black text-white uppercase italic tracking-tighter">
                       Solicitações <span className="text-amber-500">Pendentes</span>
                     </h4>
-                    <span className="bg-amber-500 text-black text-[10px] font-black px-2 py-0.5 rounded-full animate-bounce">
+                    <span className="bg-amber-500 text-black text-[9px] lg:text-[10px] font-black px-2 py-0.5 rounded-full animate-bounce">
                       {pendingApps.length}
                     </span>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-4">
+                  <div className="grid grid-cols-1 gap-3 lg:gap-4">
                     {pendingApps.map(app => (
-                      <div key={app.id} className="bg-slate-900/60 border border-white/5 p-4 lg:p-5 rounded-xl lg:rounded-[2rem] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 group hover:border-amber-500/30 transition-all">
-                        <div className="flex-1">
-                          <p className="text-amber-500 font-black text-[10px] uppercase mb-1">{app.time} - {new Date(app.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
-                          <h5 className="text-white font-black uppercase italic text-sm lg:text-base">{app.customerName}</h5>
-                          <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest">{app.service} com {app.barber}</p>
+                      <div key={app.id} className="bg-slate-900/60 border border-white/5 p-4 lg:p-5 rounded-xl lg:rounded-[2rem] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 lg:gap-4 group hover:border-amber-500/30 transition-all">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-amber-500 font-black text-[9px] lg:text-[10px] uppercase mb-1 truncate">{app.time} - {new Date(app.date + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
+                          <h5 className="text-white font-black uppercase italic text-sm lg:text-base truncate">{app.customerName}</h5>
+                          <p className="text-[8px] lg:text-[9px] text-slate-500 font-bold uppercase tracking-widest truncate">{app.service} com {app.barber}</p>
                         </div>
                         <div className="flex gap-2 w-full sm:w-auto">
                           <button
                             onClick={() => handleReject(app.id)}
-                            className="flex-1 sm:flex-none p-2.5 lg:p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
+                            className="flex-1 sm:flex-none p-2.5 lg:p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all min-h-[44px] flex items-center justify-center"
                           >
                             <X size={18} />
                           </button>
                           <button
                             onClick={() => handleApprove(app.id)}
-                            className="flex-1 sm:flex-none p-2.5 lg:p-3 rounded-xl bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white transition-all shadow-lg shadow-green-500/10"
+                            className="flex-1 sm:flex-none p-2.5 lg:p-3 rounded-xl bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white transition-all shadow-lg shadow-green-500/10 min-h-[44px] flex items-center justify-center"
                           >
                             <CheckCircle2 size={18} />
                           </button>
@@ -409,38 +407,31 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
                 </div>
               )}
 
-              {/* 🔥 GRID ESTATÍSTICAS RESPONSIVO */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-8">
-                {/* Faturamento total que entrou */}
-                <StatCard label="Faturamento" value={totalBruto} icon={<DollarSign size={20} />} variant="amber" />
-
-                {/* Mostra APENAS taxas e comissões (Despesas agora ficam fora daqui) */}
-                <StatCard label="Comissões e taxas" value={custosOperacionais} icon={<CreditCard size={20} />} variant="slate" />
-
-                {/* O lucro real descontando taxas, comissões E despesas */}
-                <StatCard label="Líquido Real" value={lucroLiquidoRealFinal} icon={<TrendingUp size={20} />} variant="green" />
-
-                {/* Card exclusivo de despesas */}
-                <StatCard label="Despesas" value={totalExpenses} icon={<MinusCircle size={20} />} variant="red" />
+              {/* 🔥 GRID ESTATÍSTICAS RESPONSIVO OTIMIZADO */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-8">
+                <StatCard label="Faturamento" value={totalBruto} icon={<DollarSign size={18} />} variant="amber" />
+                <StatCard label="Comissões e taxas" value={custosOperacionais} icon={<CreditCard size={18} />} variant="slate" />
+                <StatCard label="Líquido Real" value={lucroLiquidoRealFinal} icon={<TrendingUp size={18} />} variant="green" />
+                <StatCard label="Despesas" value={totalExpenses} icon={<MinusCircle size={18} />} variant="red" />
               </div>
 
-              {/* 🔥 RANKING E SARAH RESPONSIVO */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-10">
-                <div className="lg:col-span-2 bg-[#0a0b0e] border border-white/5 rounded-2xl lg:rounded-[3rem] p-6 lg:p-10 shadow-2xl">
-                  <div className="flex justify-between items-center mb-6 lg:mb-10">
-                    <h4 className="text-lg lg:text-xl font-black text-white uppercase italic tracking-tighter">Ranking de Performance</h4>
-                    <TrendingUp className="text-amber-500" size={20} />
+              {/* 🔥 RANKING E SARAH RESPONSIVO OTIMIZADO */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-10">
+                <div className="lg:col-span-2 bg-[#0a0b0e] border border-white/5 rounded-xl lg:rounded-2xl xl:rounded-[3rem] p-4 lg:p-10 shadow-2xl">
+                  <div className="flex justify-between items-center mb-4 lg:mb-10">
+                    <h4 className="text-base lg:text-xl font-black text-white uppercase italic tracking-tighter">Ranking de Performance</h4>
+                    <TrendingUp className="text-amber-500 flex-shrink-0" size={18} />
                   </div>
-                  <div className="space-y-6 lg:space-y-8">
+                  <div className="space-y-4 lg:space-y-8">
                     {barberPerformance.map((b) => (
                       <div key={b.id}>
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-2 mb-3">
-                          <span className="text-[11px] lg:text-[12px] font-black text-white uppercase tracking-widest">
-                            {b.name} <span className="text-slate-600 ml-2 font-bold">({b.count} Atendimentos)</span>
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-1 lg:gap-2 mb-2 lg:mb-3">
+                          <span className="text-[10px] lg:text-[12px] font-black text-white uppercase tracking-widest truncate max-w-full">
+                            {b.name} <span className="text-slate-600 ml-1 lg:ml-2 font-bold">({b.count} Atendimentos)</span>
                           </span>
-                          <span className="text-base lg:text-lg font-black text-amber-500 italic tabular-nums">R$ {b.bruto.toFixed(2)}</span>
+                          <span className="text-sm lg:text-lg font-black text-amber-500 italic tabular-nums flex-shrink-0">R$ {b.bruto.toFixed(2)}</span>
                         </div>
-                        <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                        <div className="h-1.5 lg:h-2 w-full bg-white/5 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-amber-500 rounded-full transition-all duration-1000 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
                             style={{ width: `${(b.bruto / (totalBruto || 1)) * 100}%` }}
@@ -451,20 +442,20 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
                   </div>
                 </div>
 
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl lg:rounded-[3rem] p-6 lg:p-10 flex flex-col justify-between shadow-2xl">
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl lg:rounded-2xl xl:rounded-[3rem] p-4 lg:p-10 flex flex-col justify-between shadow-2xl">
                   <div>
-                    <div className="flex items-center gap-3 mb-6 lg:mb-8 text-amber-500">
-                      <BrainCircuit size={24} />
-                      <h4 className="text-lg lg:text-xl font-black uppercase italic tracking-tighter leading-none">Sarah Insights</h4>
+                    <div className="flex items-center gap-2 lg:gap-3 mb-4 lg:mb-8 text-amber-500">
+                      <BrainCircuit size={20} className="flex-shrink-0" />
+                      <h4 className="text-base lg:text-xl font-black uppercase italic tracking-tighter leading-none">Sarah Insights</h4>
                     </div>
-                    <p className="text-xs lg:text-[14px] font-bold text-white leading-relaxed">
+                    <p className="text-xs lg:text-[14px] font-bold text-white leading-relaxed break-words">
                       {sarahMessage || "Clique no botão abaixo para analisar a performance."}
                     </p>
                   </div>
                   <button
                     onClick={analyzeWithSarah}
                     disabled={isSarahAnalyzing}
-                    className="w-full mt-6 lg:mt-10 bg-amber-500 text-black py-4 lg:py-5 rounded-xl lg:rounded-2xl font-black uppercase text-[10px] lg:text-[11px] tracking-widest hover:scale-105 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="w-full mt-4 lg:mt-10 bg-amber-500 text-black py-3.5 lg:py-5 rounded-xl lg:rounded-2xl font-black uppercase text-[10px] lg:text-[11px] tracking-widest hover:scale-105 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px] flex items-center justify-center"
                   >
                     {isSarahAnalyzing ? "Analisando..." : "Atualizar Insights"}
                   </button>
@@ -481,8 +472,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
               inventory={inventory}
               customers={allCustomers}
               machineFees={machineFees}
+              initialAppointment={pendingCheckoutApp}
               onSuccess={() => {
                 fetchAppointments(barbershopId!);
+                setPendingCheckoutApp(null);
               }}
             />
           )}
@@ -500,12 +493,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
           )}
 
           {activeTab === 'agendamentos' && (
-            <div className="space-y-6 lg:space-y-8 animate-in fade-in duration-700">
+            <div className="space-y-4 lg:space-y-8 animate-in fade-in duration-700">
               <AdminCalendarView
                 barbers={barbers}
                 appointments={appointments.filter(app => app.barbershop_id === barbershopId)}
                 services={availableServices}
                 barbershopId={barbershopId!}
+                onFinalize={handleFinalizeFromCalendar}
                 onSave={async (newBooking) => {
                   await addAppointment(newBooking);
                   if (fetchAppointments) await fetchAppointments(barbershopId!);
@@ -527,20 +521,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
               />
             </div>
           )}
-
+          
           {activeTab === 'caixa' && (
             <CashFlowModule
               barbershopId={barbershopId!}
               appointments={appointments.filter(app => app.barbershop_id === barbershopId)}
             />
           )}
+          
           {activeTab === 'despesas' && (
-            <div className="space-y-6 lg:space-y-8 animate-in fade-in duration-700">
-              <header className="border-b border-white/5 pb-6 lg:pb-8 mb-6 lg:mb-8">
-                <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
+            <div className="space-y-4 lg:space-y-8 animate-in fade-in duration-700">
+              <header className="border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
+                <h2 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
                   Gestão de <span className="text-red-500">Custos</span>
                 </h2>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mt-2">Controle de saídas e despesas fixas/variáveis</p>
+                <p className="text-[9px] lg:text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] lg:tracking-[0.3em] mt-2">Controle de saídas e despesas fixas/variáveis</p>
               </header>
 
               <ExpensesModule
@@ -549,9 +544,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
                   fetchAppointments(barbershopId!);
                 }}
               />
-
             </div>
           )}
+          
           {activeTab === 'clientes' && <CustomersModule barbershopId={barbershopId} />}
           {activeTab === 'comissoes' && <CommissionsModule barbershopId={barbershopId} />}
           {activeTab === 'estoque' && <InventoryModule barbershopId={barbershopId} />}
@@ -566,7 +561,7 @@ const StatCard = ({ label, value, icon, variant = 'default' }: any) => {
   const isNegative = value < 0;
   const variants = {
     default: 'bg-[#111319] border-white/5 text-white hover:border-amber-500/30',
-    amber: 'bg-gradient-to-br from-amber-400 to-amber-600 border-amber-300 text-black scale-[1.02] shadow-amber-500/20',
+    amber: 'bg-gradient-to-br from-amber-400 to-amber-600 border-amber-300 text-black scale-[1.01] lg:scale-[1.02] shadow-amber-500/20',
     red: 'bg-red-500/10 border-red-500/20 text-red-500 hover:border-red-500/50',
     green: 'bg-green-500/10 border-green-500/20 text-green-500 hover:border-green-500/50',
     slate: 'bg-slate-800/40 border-slate-700/50 text-slate-400 hover:border-slate-500/50'
@@ -574,27 +569,27 @@ const StatCard = ({ label, value, icon, variant = 'default' }: any) => {
   const activeVariant = isNegative ? 'bg-red-600 border-red-400 text-white shadow-[0_0_30px_rgba(220,38,38,0.4)]' : variants[variant as keyof typeof variants];
 
   return (
-    <div className={`p-6 lg:p-8 rounded-[2rem] border transition-all duration-500 shadow-2xl relative overflow-hidden group 
+    <div className={`p-4 sm:p-5 lg:p-8 rounded-xl lg:rounded-[2rem] border transition-all duration-500 shadow-2xl relative overflow-hidden group 
       ${activeVariant} 
       ${isNegative ? 'animate-pulse' : ''} 
     `}>
 
       {isNegative && (
-        <div className="absolute top-2 right-4">
-          <span className="text-[8px] font-black uppercase tracking-widest animate-bounce">Atenção: Prejuízo</span>
+        <div className="absolute top-1.5 right-2 lg:top-2 lg:right-4">
+          <span className="text-[7px] lg:text-[8px] font-black uppercase tracking-widest animate-bounce">Atenção: Prejuízo</span>
         </div>
       )}
 
-      <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full blur-3xl opacity-10 transition-colors bg-white" />
+      <div className="absolute -right-4 -top-4 w-20 lg:w-24 h-20 lg:h-24 rounded-full blur-3xl opacity-10 transition-colors bg-white" />
 
-      <div className="flex justify-between items-start mb-6">
-        <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${variant === 'amber' && !isNegative ? 'text-black/60' : 'text-slate-500'}`}>{label}</p>
-        <div className={`p-3 rounded-2xl ${variant === 'amber' && !isNegative ? 'bg-black/10' : 'bg-white/5'}`}>{icon}</div>
+      <div className="flex justify-between items-start mb-4 lg:mb-6">
+        <p className={`text-[9px] lg:text-[10px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] ${variant === 'amber' && !isNegative ? 'text-black/60' : 'text-slate-500'}`}>{label}</p>
+        <div className={`p-2 lg:p-3 rounded-xl lg:rounded-2xl ${variant === 'amber' && !isNegative ? 'bg-black/10' : 'bg-white/5'} flex-shrink-0`}>{icon}</div>
       </div>
 
       <div className="flex items-baseline gap-1">
-        <span className={`text-sm font-bold opacity-40`}>R$</span>
-        <h3 className="text-3xl lg:text-4xl font-black italic tracking-tighter tabular-nums leading-none">
+        <span className={`text-xs lg:text-sm font-bold opacity-40`}>R$</span>
+        <h3 className="text-xl sm:text-2xl lg:text-4xl font-black italic tracking-tighter tabular-nums leading-none break-all">
           {value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
         </h3>
       </div>

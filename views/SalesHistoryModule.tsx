@@ -23,10 +23,7 @@ const filteredSales = useMemo(() => {
     const baseFilter = appointments.filter(app => app.status === 'confirmado');
 
     const grouped = baseFilter.reduce((acc: any[], current) => {
-      // 1. Tenta encontrar o ID da venda em qualquer uma das chaves possíveis
       const rawId = current.venda_id || current.vendaId || current.id_venda || current.order_id;
-      
-      // 2. Chave de fallback (Cliente + Data + Hora) caso o ID seja nulo
       const fallbackKey = `${current.customer_name}-${current.date}-${current.time}`;
       const groupKey = rawId ? String(rawId).trim() : fallbackKey;
       
@@ -46,7 +43,6 @@ const filteredSales = useMemo(() => {
       } else {
         acc.push({
           ...current,
-          // 3. Forçamos o salvamento do ID encontrado para garantir que apareça na coluna
           displayId: rawId || null, 
           price: Number(current.price),
           serviceList: [{ name: current.service, price: Number(current.price) }],
@@ -59,7 +55,6 @@ const filteredSales = useMemo(() => {
     return grouped.sort((a, b) => new Date(b.date + 'T' + b.time).getTime() - new Date(a.date + 'T' + a.time).getTime());
   }, [appointments, searchTerm, paymentFilter, dateFilter, barberFilter]);
 
-  // Lista de barbeiros para o filtro
   const barbersList = useMemo(() => {
     const names = appointments.map(app => app.barber).filter(Boolean);
     return ['todos', ...Array.from(new Set(names))];
@@ -172,9 +167,6 @@ const filteredSales = useMemo(() => {
             <tbody className="divide-y divide-white/[0.02]">
               {filteredSales.map((sale) => {
                 const payment = getPaymentDetails(sale.payment_method || sale.paymentMethod);
-                
-                // USANDO O displayId QUE CAPTURAMOS NO REDUCE
-                // Se for um UUID muito longo, pegamos só o final. Se for número pequeno, exibe inteiro.
                 const visualId = sale.displayId 
                   ? (String(sale.displayId).length > 8 ? String(sale.displayId).slice(-6) : sale.displayId)
                   : 'AVULSO';

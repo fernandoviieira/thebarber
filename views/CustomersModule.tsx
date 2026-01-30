@@ -36,7 +36,6 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
 
   const handleCreateCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Garante que o phone não seja nulo enviando 'Balcão' ou vazio se não preenchido
     const { data: customer, error: custError } = await supabase
       .from('customers')
       .insert([{ 
@@ -59,7 +58,7 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
         package_name: newCustomer.packageName,
         total_credits: Number(newCustomer.total_credits),
         price_paid: Number(newCustomer.price_paid),
-        used_credits: 0 // Garantindo que começa com 0
+        used_credits: 0
       }]);
     }
 
@@ -70,7 +69,6 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
 
   const handleDeleteCustomer = async (customerId: string, customerName: string) => {
     if (confirm(`ATENÇÃO: Deseja realmente excluir o cliente "${customerName}"? Isso apagará todos os pacotes vinculados.`)) {
-      // Primeiro apaga os pacotes (por causa da chave estrangeira)
       await supabase.from('customer_packages').delete().eq('customer_id', customerId);
       const { error } = await supabase.from('customers').delete().eq('id', customerId);
       

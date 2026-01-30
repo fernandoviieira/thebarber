@@ -14,10 +14,11 @@ interface CheckoutProps {
   customers: any[];
   machineFees: any;
   onSuccess: () => void;
+  initialAppointment?: any | null; 
 }
 
 const CheckoutModule: React.FC<CheckoutProps> = ({
-  barbershopId, barbers, services, inventory, customers, onSuccess
+  barbershopId, barbers, services, inventory, customers, onSuccess, initialAppointment
 }) => {
   const [pdvItems, setPdvItems] = useState<any[]>([]);
   const [localInventory, setLocalInventory] = useState<any[]>(inventory);
@@ -39,6 +40,48 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   const [checkingCash, setCheckingCash] = useState(true);
 
   useEffect(() => {
+    if (initialAppointment && services.length > 0) {
+      setPdvItems([]);
+      if (initialAppointment.barber) {
+        setSelectedBarber(initialAppointment.barber);
+      }
+      if (initialAppointment.customerName) {
+        const foundCustomer = customers.find(c => 
+          c.name.toLowerCase() === initialAppointment.customerName.toLowerCase() ||
+          c.phone === initialAppointment.customerPhone
+        );
+        
+        if (foundCustomer) {
+          setIsVipMode(true);
+          setSelectedCustomer(foundCustomer);
+        } else {
+          setIsVipMode(false);
+        }
+      }
+
+      const serviceObj = services.find(s => 
+        s.name.toLowerCase() === initialAppointment.service.toLowerCase()
+      );
+
+      if (serviceObj) {
+        addItem(serviceObj, 'servico');
+      } else {
+        setPdvItems([{
+          id: `temp-${Date.now()}`,
+          originalId: initialAppointment.id,
+          name: initialAppointment.service,
+          price: Number(initialAppointment.price) || 0,
+          type: 'servico',
+          quantity: 1
+        }]);
+      }
+      
+      const valorInicial = Number(initialAppointment.price) || 0;
+      setSplitValues(prev => ({ ...prev, pix: valorInicial }));
+    }
+  }, [initialAppointment, services]); 
+
+  useEffect(() => {
     const fetchSettings = async () => {
       const { data } = await supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle();
       if (data) setFees(data);
@@ -47,7 +90,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   }, [barbershopId]);
 
   useEffect(() => {
-    if (barbers.length === 1) setSelectedBarber(barbers[0].name);
+    if (barbers.length === 1 && !selectedBarber) setSelectedBarber(barbers[0].name);
   }, [barbers]);
 
   useEffect(() => {
@@ -136,8 +179,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     try {
       const today = new Date().toISOString().split('T')[0];
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-      // GERAÇÃO DO ID ÚNICO DA VENDA (COMANDA)
       const vendaIdUnica = `VENDA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
       const methodsUsed = hasComboInCart ? "PACOTE" : (Object.entries(splitValues) as [string, number][])
@@ -145,15 +186,14 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         .map(([k, v]) => `${k.toUpperCase()}(${v.toFixed(2)})`)
         .join(' + ') || paymentMethod.toUpperCase();
 
-      // 1. Inserir Itens (Serviços e Produtos)
       for (const item of pdvItems) {
         for (let q = 0; q < item.quantity; q++) {
           const isPackageRedemption = !!(activePkg && item.type === 'servico');
 
           const { error } = await supabase.from('appointments').insert([{
-            venda_id: vendaIdUnica, // ID DA COMANDA
+            venda_id: vendaIdUnica,
             barbershop_id: barbershopId,
-            customer_name: isVipMode && selectedCustomer ? selectedCustomer.name : "Venda Direta",
+            customer_name: selectedCustomer ? selectedCustomer.name : (initialAppointment?.customerName || "Venda Direta"),
             service: isPackageRedemption ? `${item.name} (Combo)` : String(item.name),
             barber: selectedBarber,
             date: today,
@@ -161,28 +201,29 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             price: String(getItemPrice(item)),
             payment_method: methodsUsed,
             status: 'confirmado',
-            customer_phone: selectedCustomer?.phone || 'Balcão',
+            customer_phone: selectedCustomer?.phone || initialAppointment?.customerPhone || 'Balcão',
             is_package_redemption: isPackageRedemption,
             tip_amount: 0
           }]);
 
           if (error) throw error;
-
-          if (isPackageRedemption && activePkg) {
-            await supabase.from('customer_packages')
-              .update({ used_credits: Number(activePkg.used_credits) + 1 })
-              .eq('id', activePkg.id);
-          }
         }
       }
 
-      // 2. Inserir Gorjeta (dentro da mesma venda_id)
+      if (initialAppointment?.id) {
+        await supabase.from('appointments')
+          .update({ 
+            status: 'finalizado', 
+            venda_id: vendaIdUnica
+          })
+          .eq('id', initialAppointment.id);
+      }
+
       if (tip > 0) {
-        const { error: tipError } = await supabase.from('appointments').insert([{
-          venda_id: vendaIdUnica, // MESMO ID DA COMANDA
+        await supabase.from('appointments').insert([{
+          venda_id: vendaIdUnica,
           barbershop_id: barbershopId,
-          customer_name: isVipMode && selectedCustomer ? selectedCustomer.name : "Venda Direta",
-          customer_phone: selectedCustomer?.phone || 'Balcão',
+          customer_name: selectedCustomer ? selectedCustomer.name : (initialAppointment?.customerName || "Venda Direta"),
           service: "Caixinha (Gorjeta)",
           barber: selectedBarber,
           date: today,
@@ -190,10 +231,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           price: String(tip.toFixed(2)),
           payment_method: methodsUsed,
           status: 'confirmado',
-          tip_amount: Number(tip),
-          is_package_redemption: false
+          tip_amount: Number(tip)
         }]);
-        if (tipError) throw tipError;
       }
 
       onSuccess();
@@ -203,8 +242,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       setIsMisto(false);
       alert("Venda finalizada com sucesso!");
     } catch (err: any) { 
-      console.error("Erro detalhado do Supabase:", err);
-      alert(`Erro ao salvar: ${err.message || 'Verifique o banco de dados'}`); 
+      alert(`Erro ao salvar: ${err.message}`); 
     } finally { 
       setLoading(false); 
     }

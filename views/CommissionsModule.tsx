@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-    Users, ChevronDown, ChevronUp, Download, Wallet, Save,
-    Loader2, Percent, Calendar as CalendarIcon, Scissors, MinusCircle, Printer, Filter, Package
+  Users, ChevronDown, ChevronUp, Wallet, Save,
+  Loader2, Percent, Calendar as CalendarIcon, Scissors, MinusCircle, Printer, Filter, Package
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
@@ -114,24 +114,25 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
         : reportData.filter(b => b.id === selectedBarberId);
 
     return (
-        <div className="space-y-8 animate-in fade-in slide-in-from-right-4 duration-500">
-            <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-8 border-b border-white/5 pb-10 print:hidden">
-                <div className="space-y-2">
-                    <h2 className="text-6xl font-black text-white italic uppercase tracking-tighter leading-none">Fechamento <span className="text-amber-500">PRO</span></h2>
-                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] ml-1">Gestão de Comissões e Adiantamentos</p>
+        <div className="space-y-6 md:space-y-8 animate-in fade-in slide-in-from-right-4 duration-500 pb-20 md:pb-0">
+            <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 border-b border-white/5 pb-8 print:hidden">
+                <div className="space-y-1">
+                    <h2 className="text-3xl md:text-6xl font-black text-white italic uppercase tracking-tighter leading-none">Fechamento <span className="text-amber-500">PRO</span></h2>
+                    <p className="text-[8px] md:text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] md:tracking-[0.4em] ml-1">Gestão de Comissões e Vales</p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-4">
-                    <div className="flex flex-col gap-1">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-500 ml-2">Selecionar Profissional</span>
-                        <div className="bg-slate-900/80 border border-white/10 rounded-2xl px-4 py-3 flex items-center gap-3 hover:border-amber-500/40 transition-all">
-                            <Filter size={18} className="text-amber-500" />
+                <div className="flex flex-col md:flex-row items-stretch md:items-center gap-4 w-full xl:w-auto">
+                    {/* Filtro de Barbeiro */}
+                    <div className="flex flex-col gap-1 flex-1">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-slate-500 ml-2">Profissional</span>
+                        <div className="bg-slate-900/80 border border-white/10 rounded-xl md:rounded-2xl px-4 py-3 flex items-center gap-3">
+                            <Filter size={16} className="text-amber-500" />
                             <select
                                 value={selectedBarberId}
                                 onChange={(e) => setSelectedBarberId(e.target.value)}
-                                className="bg-transparent text-white font-black text-sm outline-none cursor-pointer uppercase appearance-none flex-1"
+                                className="bg-transparent text-white font-black text-xs md:text-sm outline-none cursor-pointer uppercase appearance-none flex-1"
                             >
-                                <option value="all" className="bg-slate-900">Todos os Profissionais</option>
+                                <option value="all" className="bg-slate-900">Todos</option>
                                 {reportData.map(b => (
                                     <option key={b.id} value={b.id} className="bg-slate-900">{b.name}</option>
                                 ))}
@@ -139,20 +140,20 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                         </div>
                     </div>
 
-                    <div className="bg-slate-900/80 border border-white/10 rounded-[2.5rem] p-4 flex items-center shadow-2xl group transition-all hover:border-amber-500/30">
-                        <div className="flex items-center gap-4 px-6 py-2">
-                            <CalendarIcon size={24} className="text-amber-500" />
-                            <div className="flex flex-col">
-                                <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Selecionar Período</span>
+                    {/* DatePicker Responsivo */}
+                    <div className="bg-slate-900/80 border border-white/10 rounded-xl md:rounded-[2rem] p-3 md:p-4 flex items-center shadow-2xl flex-1">
+                        <div className="flex items-center gap-3 px-2 md:px-4">
+                            <CalendarIcon size={20} className="text-amber-500 shrink-0" />
+                            <div className="flex flex-col min-w-0">
+                                <span className="text-[7px] md:text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Período</span>
                                 <DatePicker
                                     selectsRange={true}
                                     startDate={startDate}
                                     endDate={endDate}
                                     onChange={(update) => setDateRange(update)}
                                     locale={ptBR}
-                                    dateFormat="dd/MM/yyyy"
-                                    monthsShown={2}
-                                    className="bg-transparent text-white font-black text-lg outline-none cursor-pointer w-[250px]"
+                                    dateFormat="dd/MM/yy"
+                                    className="bg-transparent text-white font-black text-sm md:text-base outline-none cursor-pointer w-full"
                                     shouldCloseOnSelect={false}
                                 />
                             </div>
@@ -161,7 +162,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 </div>
             </header>
 
-            <div className="grid grid-cols-1 gap-6 print:hidden">
+            <div className="grid grid-cols-1 gap-4 md:gap-6 print:hidden">
                 {loading ? (
                     <div className="py-20 flex flex-col items-center gap-4 text-amber-500 font-black text-[10px] tracking-[0.5em]"><Loader2 className="animate-spin" size={40} /> PROCESSANDO...</div>
                 ) : (
@@ -171,95 +172,101 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                             <div key={barber.id} className="group">
                                 <div
                                     onClick={() => setExpandedBarber(expandedBarber === barber.id ? null : barber.id)}
-                                    className={`bg-slate-900/40 border border-white/5 rounded-[3rem] p-8 hover:border-amber-500/30 transition-all cursor-pointer flex items-center justify-between ${expandedBarber === barber.id ? 'border-amber-500/50 rounded-b-none bg-slate-900' : ''}`}
+                                    className={`bg-slate-900/40 border border-white/5 rounded-2xl md:rounded-[3rem] p-4 md:p-8 hover:border-amber-500/30 transition-all cursor-pointer flex flex-col md:flex-row items-center justify-between gap-4 ${expandedBarber === barber.id ? 'border-amber-500/50 rounded-b-none bg-slate-900' : ''}`}
                                 >
-                                    <div className="flex items-center gap-8">
-                                        <div className="w-20 h-20 rounded-[2rem] bg-gradient-to-br from-slate-800 to-black flex items-center justify-center text-amber-500 border border-white/5 shadow-2xl"><Users size={32} /></div>
-                                        <div>
-                                            <h4 className="text-3xl font-black text-white uppercase italic tracking-tighter">{barber.name}</h4>
-                                            <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">{barber.atendimentos} atendimentos</p>
+                                    <div className="flex items-center gap-4 md:gap-8 w-full md:w-auto">
+                                        <div className="w-12 h-12 md:w-20 md:h-20 rounded-xl md:rounded-[2rem] bg-gradient-to-br from-slate-800 to-black flex items-center justify-center text-amber-500 border border-white/5 shadow-2xl shrink-0"><Users size={24} /></div>
+                                        <div className="min-w-0">
+                                            <h4 className="text-xl md:text-3xl font-black text-white uppercase italic tracking-tighter truncate">{barber.name}</h4>
+                                            <p className="text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">{barber.atendimentos} atendimentos</p>
+                                        </div>
+                                        <div className="ml-auto md:hidden">
+                                            {expandedBarber === barber.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-12">
-                                        <div className="text-right">
-                                            <p className="text-[10px] font-black text-slate-500 uppercase mb-1">Comissões Acumuladas</p>
-                                            <p className="text-xl font-black text-white italic tabular-nums">R$ {barber.totalComissaoCalculada.toFixed(2)}</p>
+                                    
+                                    <div className="flex flex-wrap md:flex-nowrap items-center justify-between md:justify-end gap-4 md:gap-12 w-full md:w-auto border-t border-white/5 pt-4 md:border-0 md:pt-0">
+                                        <div className="text-left md:text-right">
+                                            <p className="text-[8px] md:text-[10px] font-black text-slate-500 uppercase mb-1">Comissão</p>
+                                            <p className="text-sm md:text-xl font-black text-white italic tabular-nums">R$ {barber.totalComissaoCalculada.toFixed(2)}</p>
                                         </div>
                                         <div className="text-right text-green-500">
-                                            <p className="text-[10px] font-black uppercase mb-1 opacity-60">Gorjetas</p>
-                                            <p className="text-xl font-black italic tabular-nums">+ R$ {barber.totalGorjetas.toFixed(2)}</p>
+                                            <p className="text-[8px] md:text-[10px] font-black uppercase mb-1 opacity-60">Gorjetas</p>
+                                            <p className="text-sm md:text-xl font-black italic tabular-nums">+ R$ {barber.totalGorjetas.toFixed(2)}</p>
                                         </div>
-                                        <div className="bg-amber-500 px-10 py-5 rounded-[2rem] text-center shadow-xl min-w-[200px]">
-                                            <p className="text-[10px] font-black text-black/40 uppercase mb-1 italic leading-none">Total Líquido</p>
-                                            <p className="text-4xl font-black text-black italic leading-none tabular-nums">R$ {totalLiquido.toFixed(2)}</p>
+                                        <div className="bg-amber-500 px-6 md:px-10 py-3 md:py-5 rounded-xl md:rounded-[2rem] text-center shadow-xl w-full md:w-auto min-w-[140px] md:min-w-[200px]">
+                                            <p className="text-[8px] md:text-[10px] font-black text-black/40 uppercase mb-1 italic leading-none">Saldo Final</p>
+                                            <p className="text-2xl md:text-4xl font-black text-black italic leading-none tabular-nums">R$ {totalLiquido.toFixed(2)}</p>
                                         </div>
-                                        {expandedBarber === barber.id ? <ChevronUp className="text-amber-500" /> : <ChevronDown className="text-slate-700" />}
+                                        <div className="hidden md:block">
+                                            {expandedBarber === barber.id ? <ChevronUp className="text-amber-500" /> : <ChevronDown className="text-slate-700" />}
+                                        </div>
                                     </div>
                                 </div>
 
                                 {expandedBarber === barber.id && (
-                                    <div className="bg-black/60 border-x border-b border-white/10 rounded-b-[3rem] overflow-hidden animate-in slide-in-from-top-4 duration-300 p-8 space-y-8">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 bg-white/[0.02] p-8 rounded-[2rem] border border-white/5">
-                                            <div className="space-y-4">
+                                    <div className="bg-black/60 border-x border-b border-white/10 rounded-b-2xl md:rounded-b-[3rem] overflow-hidden animate-in slide-in-from-top-4 duration-300 p-4 md:p-8 space-y-6 md:space-y-8">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 bg-white/[0.02] p-4 md:p-8 rounded-2xl md:rounded-[2rem] border border-white/5">
+                                            <div className="space-y-3">
                                                 <div className="flex items-center gap-2 text-amber-500">
-                                                    <Percent size={18} />
-                                                    <span className="text-xs font-black uppercase italic">Taxa de Comissão Serviços (%)</span>
+                                                    <Percent size={14} />
+                                                    <span className="text-[10px] font-black uppercase italic">Comissão Serviços (%)</span>
                                                 </div>
                                                 <input
                                                     type="number"
                                                     value={barber.currentRate}
                                                     onChange={(e) => updateLocalValue(barber.id, 'currentRate', Number(e.target.value))}
-                                                    className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-amber-500 font-black text-2xl outline-none focus:border-amber-500/50"
+                                                    className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-amber-500 font-black text-xl outline-none"
                                                 />
                                             </div>
-                                            <div className="space-y-4">
+                                            <div className="space-y-3">
                                                 <div className="flex items-center gap-2 text-red-500">
-                                                    <MinusCircle size={18} />
-                                                    <span className="text-xs font-black uppercase italic">Lançar Vale/Adiantamento (R$)</span>
+                                                    <MinusCircle size={14} />
+                                                    <span className="text-[10px] font-black uppercase italic">Vale / Adiantamento (R$)</span>
                                                 </div>
                                                 <input
                                                     type="number"
                                                     value={barber.expenses}
                                                     onChange={(e) => updateLocalValue(barber.id, 'expenses', Number(e.target.value))}
-                                                    className="w-full bg-slate-900 border border-white/10 rounded-2xl p-4 text-red-500 font-black text-2xl outline-none focus:border-red-500/50"
+                                                    className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-red-500 font-black text-xl outline-none"
                                                 />
                                             </div>
-                                            <div className="md:col-span-2 flex justify-end">
+                                            <div className="md:col-span-2 flex justify-end pt-2">
                                                 <button 
                                                     onClick={() => saveBarberChanges(barber.id)}
                                                     disabled={isSaving === barber.id}
-                                                    className="flex items-center gap-3 bg-amber-500 hover:bg-amber-400 text-black px-8 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all shadow-lg active:scale-95 disabled:opacity-50"
+                                                    className="w-full md:w-auto flex items-center justify-center gap-3 bg-amber-500 text-black px-8 py-4 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all"
                                                 >
                                                     {isSaving === barber.id ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
-                                                    Salvar Dados de {barber.name.split(' ')[0]}
+                                                    Salvar Dados
                                                 </button>
                                             </div>
                                         </div>
 
-                                        <div className="max-h-[300px] overflow-y-auto custom-scrollbar rounded-2xl border border-white/5 relative">
-                                            <table className="w-full text-left border-separate border-spacing-0">
+                                        <div className="overflow-x-auto custom-scrollbar rounded-xl border border-white/5">
+                                            <table className="w-full text-left border-separate border-spacing-0 min-w-[600px]">
                                                 <thead className="sticky top-0 z-10">
-                                                    <tr className="bg-slate-900 shadow-sm">
-                                                        <th className="px-10 py-5 bg-slate-900 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">Data/Horário</th>
-                                                        <th className="px-10 py-5 bg-slate-900 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5">Serviço / Produto</th>
-                                                        <th className="px-10 py-5 bg-slate-900 text-[9px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-white/5 text-right">Preço</th>
-                                                        <th className="px-10 py-5 bg-slate-900 text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] border-b border-white/5 text-right italic">Comissão</th>
+                                                    <tr className="bg-slate-900">
+                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5">Data</th>
+                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5">Serviço / Produto</th>
+                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 text-right">Preço</th>
+                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-amber-500 uppercase tracking-widest border-b border-white/5 text-right italic">Comissão</th>
                                                     </tr>
                                                 </thead>
-                                                <tbody className="divide-y divide-white/5 bg-transparent">
+                                                <tbody className="divide-y divide-white/5">
                                                     {barber.detalhes.map((v: any) => {
                                                         const isProduct = v.product_commission && v.product_commission > 0;
                                                         const comissaoItem = isProduct ? v.product_commission : (v.service === "Caixinha / Gorjeta" ? 0 : (v.price * (barber.currentRate / 100)));
                                                         
                                                         return (
                                                             <tr key={v.id} className="hover:bg-white/[0.03] transition-colors">
-                                                                <td className="px-10 py-4 text-[10px] text-slate-400 font-bold">{new Date(v.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
-                                                                <td className="px-10 py-4 text-xs font-black uppercase text-white tracking-tighter flex items-center gap-2">
-                                                                    {isProduct ? <Package size={12} className="text-blue-400"/> : <Scissors size={12} className="text-amber-500"/>}
+                                                                <td className="px-6 py-3 text-[9px] text-slate-400 font-bold">{new Date(v.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
+                                                                <td className="px-6 py-3 text-[10px] font-black uppercase text-white tracking-tighter flex items-center gap-2">
+                                                                    {isProduct ? <Package size={10} className="text-blue-400"/> : <Scissors size={10} className="text-amber-500"/>}
                                                                     {v.service}
                                                                 </td>
-                                                                <td className="px-10 py-4 text-right text-xs font-bold tabular-nums text-slate-400">R$ {Number(v.price).toFixed(2)}</td>
-                                                                <td className="px-10 py-4 text-right text-sm font-black text-amber-500 tabular-nums">R$ {Number(comissaoItem).toFixed(2)}</td>
+                                                                <td className="px-6 py-3 text-right text-[10px] font-bold tabular-nums text-slate-400">R$ {Number(v.price).toFixed(2)}</td>
+                                                                <td className="px-6 py-3 text-right text-[11px] font-black text-amber-500 tabular-nums">R$ {Number(comissaoItem).toFixed(2)}</td>
                                                             </tr>
                                                         );
                                                     })}
@@ -275,22 +282,23 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
             </div>
 
             {!loading && filteredReportData.length > 0 && (
-                <div className="bg-amber-500 rounded-[4rem] p-12 flex flex-col xl:flex-row justify-between items-center shadow-[0_30px_90px_rgba(245,158,11,0.3)] mt-12 print:hidden">
-                    <div className="flex items-center gap-10">
-                        <div className="p-8 bg-black rounded-[2.5rem] shadow-2xl"><Wallet size={48} className="text-amber-500" /></div>
+                <div className="bg-amber-500 rounded-2xl md:rounded-[4rem] p-6 md:p-12 flex flex-col xl:flex-row justify-between items-center shadow-2xl mt-8 md:mt-12 print:hidden gap-8">
+                    <div className="flex flex-col md:flex-row items-center gap-4 md:gap-10 text-center md:text-left">
+                        <div className="p-4 md:p-8 bg-black rounded-2xl md:rounded-[2.5rem] shadow-2xl"><Wallet size={32} className="text-amber-500 md:w-12 md:h-12" /></div>
                         <div>
-                            <p className="text-[12px] font-black text-black/50 uppercase tracking-[0.3em] mb-3">Total Líquido a Repassar</p>
-                            <h3 className="text-7xl font-black text-black italic leading-none tabular-nums">
+                            <p className="text-[10px] md:text-[12px] font-black text-black/50 uppercase tracking-[0.2em] md:tracking-[0.3em] mb-1 md:mb-3">Repasse Total Período</p>
+                            <h3 className="text-4xl md:text-7xl font-black text-black italic leading-none tabular-nums">
                                 R$ {filteredReportData.reduce((acc, b) => acc + (b.totalComissaoCalculada + b.totalGorjetas - (b.expenses || 0)), 0).toFixed(2)}
                             </h3>
                         </div>
                     </div>
-                    <button onClick={handlePrint} className="mt-10 xl:mt-0 bg-black text-amber-500 px-14 py-7 rounded-[2.5rem] font-black uppercase text-sm tracking-widest flex items-center gap-4 hover:scale-105 transition-all shadow-2xl">
-                        <Printer size={24} /> Imprimir {selectedBarberId === 'all' ? 'Recibos' : 'Recibo Selecionado'}
+                    <button onClick={handlePrint} className="w-full md:w-auto bg-black text-amber-500 px-8 md:px-14 py-5 md:py-7 rounded-xl md:rounded-[2.5rem] font-black uppercase text-xs md:text-sm tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all">
+                        <Printer size={20} /> Imprimir Recibos
                     </button>
                 </div>
             )}
 
+            {/* Print Area remains same logic, optimized styles */}
             <div id="print-area" className="hidden print:block bg-white text-black p-0 font-sans">
                 {filteredReportData.map((barber, index) => {
                     const isLast = index === filteredReportData.length - 1;
@@ -377,7 +385,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                         </div>
                     );
                 })}
-            </div>
+           </div>
 
             <style>{`
                 @media print {
@@ -389,12 +397,16 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                     .print-content-box { width: 100% !important; page-break-inside: avoid !important; padding-bottom: 20px; border-bottom: 1px dashed #ccc; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color: black !important; }
                 }
-                .react-datepicker { background-color: #0f1115 !important; border: 1px solid rgba(255,255,255,0.1) !important; border-radius: 2rem !important; padding: 20px !important; }
-                .react-datepicker__header { background-color: #0f1115 !important; }
-                .react-datepicker__current-month, .react-datepicker__day-name { color: #94a3b8 !important; font-weight: 800 !important; }
+                .react-datepicker { background-color: #0f1115 !important; border: 1px solid rgba(255,255,255,0.1) !important; border-radius: 1.5rem !important; }
+                .react-datepicker__header { background-color: #0f1115 !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+                .react-datepicker__current-month, .react-datepicker__day-name { color: #94a3b8 !important; }
                 .react-datepicker__day { color: #f8fafc !important; }
+                .react-datepicker__day:hover { background-color: #1e293b !important; }
                 .react-datepicker__day--in-range { background-color: rgba(245, 158, 11, 0.2) !important; }
-                .react-datepicker__day--selected, .react-datepicker__day--range-start, .react-datepicker__day--range-end { background-color: #f59e0b !important; color: #000 !important; }
+                .react-datepicker__day--selected { background-color: #f59e0b !important; color: #000 !important; }
+                .custom-scrollbar::-webkit-scrollbar { height: 4px; width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
             `}</style>
         </div>
     );

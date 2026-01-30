@@ -10,18 +10,19 @@ export interface Appointment {
   date: string;
   time: string;
   price: number;
-  status: 'pendente' | 'confirmado';
+  status: 'pendente' | 'confirmado' | 'finalizado';
   payment_method?: string;
   barbershop_id: string;
   user_id?: string;
   duration?: number;
   venda_id?: string;
+  created_by_admin?: boolean;
 }
 
 interface BookingContextType {
   appointments: Appointment[];
   addAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<void>;
-  updateStatus: (id: string, status: 'pendente' | 'confirmado') => Promise<void>;
+  updateStatus: (id: string, status: string) => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
   fetchAppointments: (barbershopId?: string) => Promise<void>;
   loading: boolean;
@@ -63,12 +64,13 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         date: app.date,
         time: app.time,
         price: Number(app.price),
-        status: app.status as 'pendente' | 'confirmado',
+        status: app.status,
         barbershop_id: app.barbershop_id,
         payment_method: app.payment_method,
         user_id: app.user_id,
         duration: app.duration,
         venda_id: app.venda_id,
+        created_by_admin: app.created_by_admin,
       }));
 
       setAppointments(formattedData);
@@ -97,19 +99,17 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       if (checkError) throw checkError;
 
       if (existingApp && existingApp.length > 0) {
-        alert(`Indisponível: O barbeiro ${data.barber} já possui um agendamento às ${data.time} no dia selecionado.`);
+        alert(`Indisponível: O barbeiro ${data.barber} já possui um agendamento às ${data.time}.`);
         return;
       }
 
-      if (data.status !== 'confirmado') {
-        const { data: barberData, error: barberError } = await supabase
+      if (data.status !== 'confirmado' && !data.created_by_admin) {
+        const { data: barberData } = await supabase
           .from('barbers')
           .select('work_days')
           .eq('name', data.barber)
           .eq('barbershop_id', data.barbershop_id);
 
-        if (barberError) throw barberError;
-        
         const barberInfo = barberData?.[0];
 
         if (barberInfo?.work_days) {
@@ -119,16 +119,13 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
           const dayConfig = barberInfo.work_days[dayOfWeek];
 
           if (!dayConfig || !dayConfig.active) {
-            alert(`O barbeiro ${data.barber} não atende neste dia da semana.`);
+            alert(`O barbeiro ${data.barber} não atende neste dia.`);
             return;
           }
 
           const currentMin = timeToMinutes(data.time);
-          const startMin = timeToMinutes(dayConfig.start);
-          const endMin = timeToMinutes(dayConfig.end);
-
-          if (currentMin < startMin || currentMin >= endMin) {
-            alert(`Horário fora da jornada: ${data.barber} atende das ${dayConfig.start} às ${dayConfig.end}.`);
+          if (currentMin < timeToMinutes(dayConfig.start) || currentMin >= timeToMinutes(dayConfig.end)) {
+            alert(`Fora da jornada: ${data.barber} atende das ${dayConfig.start} às ${dayConfig.end}.`);
             return;
           }
         }
@@ -149,7 +146,8 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
           status: data.status,
           barbershop_id: data.barbershop_id,
           user_id: userData.user?.id,
-          duration: data.duration
+          duration: data.duration,
+          created_by_admin: data.created_by_admin ?? false
         }]);
 
       if (insertError) throw insertError;
@@ -162,7 +160,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const updateStatus = async (id: string, status: 'pendente' | 'confirmado') => {
+  const updateStatus = async (id: string, status: string) => {
     try {
       const { error } = await supabase
         .from('appointments')
@@ -170,7 +168,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         .eq('id', id);
 
       if (error) throw error;
-      setAppointments(prev => prev.map(app => app.id === id ? { ...app, status } : app));
+      setAppointments(prev => prev.map(app => app.id === id ? { ...app, status: status as any } : app));
     } catch (err) {
       console.error("Erro ao atualizar status:", err);
     }
