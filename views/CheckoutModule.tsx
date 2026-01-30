@@ -161,14 +161,17 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
   // --- TEM COMBO NO CARRINHO ---
   const hasComboInCart = useMemo(() => {
-    return pdvItems.some(item => item.type === 'servico' && activePkg);
+    return pdvItems.some(item =>
+      item.type === 'servico' &&
+      activePkg
+    );
   }, [pdvItems, activePkg]);
-
-  // --- CALCULAR PREÇO DO ITEM (CONSIDERANDO COMBO) ---
   const getItemPrice = useCallback((item: any) => {
     if (item.type === 'servico' && activePkg) {
-      const alreadyUsed = Number(activePkg.used_credits) || 0;
-      return alreadyUsed === 0 ? Number(activePkg.price_paid) : 0;
+      const creditosRestantes = Number(activePkg.total_credits) - Number(activePkg.used_credits);
+      if (creditosRestantes > 0) {
+        return 0;
+      }
     }
     return Number(item.price || item.price_sell || 0);
   }, [activePkg]);
@@ -197,7 +200,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
   // --- CÁLCULO DE VALOR LÍQUIDO POR ITEM (CONSIDERANDO PAGAMENTO MISTO) ---
   const calculateItemNetValue = useCallback((itemGrossPrice: number) => {
-    // Se for combo ou preço zero, não aplica taxa
     if (hasComboInCart || itemGrossPrice === 0) {
       return itemGrossPrice;
     }
@@ -268,27 +270,19 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   }, [hasComboInCart, isMisto, valorTotalAbsoluto]);
 
   // --- FORÇAR MÉTODO PACOTE QUANDO TEM COMBO ---
+  // AJUSTE este useEffect:
   useEffect(() => {
     if (hasComboInCart) {
       setPaymentMethod('pacote');
       setSplitValues({
-        dinheiro: 0,
-        pix: 0,
-        debito: 0,
-        credito: 0,
-        pacote: valorTotalAbsoluto
+        dinheiro: 0, pix: 0, debito: 0, credito: 0,
+        pacote: valorTotalAbsoluto // valorTotalAbsoluto será 0 se for só o serviço do combo
       });
-    } else if (paymentMethod === 'pacote') {
+    } else if (paymentMethod === 'pacote' && !hasComboInCart) {
+      // Só muda para PIX se NÃO tiver combo no carrinho e o método atual for pacote
       setPaymentMethod('pix');
-      setSplitValues({
-        dinheiro: 0,
-        debito: 0,
-        credito: 0,
-        pacote: 0,
-        pix: valorTotalAbsoluto
-      });
     }
-  }, [hasComboInCart, valorTotalAbsoluto, paymentMethod]);
+  }, [hasComboInCart, valorTotalAbsoluto]);
 
   // --- ATUALIZAR QUANTIDADE ---
   const handleUpdateQuantity = useCallback((originalId: string, delta: number) => {
