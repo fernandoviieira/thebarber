@@ -40,7 +40,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const [barbers, setBarbers] = useState<any[]>([]);
   const [availableServices, setAvailableServices] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
-  const [allExpenses, setAllExpenses] = useState<any[]>([]); 
+  const [allExpenses, setAllExpenses] = useState<any[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [customCommissions, setCustomCommissions] = useState<Record<string, number>>({});
 
@@ -182,35 +182,44 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     0
   );
 
+
   const totalComissoes = barberPerformance.reduce(
     (acc, curr) => acc + curr.comissaoValor,
     0
   );
 
   const lucroLiquidoRealFinal = totalLiquidoReal - totalComissoes - totalExpenses;
+  const custosOperacionais = (totalBruto - totalLiquidoReal) + totalComissoes;
 
-const analyzeWithSarah = async () => {
-  setIsSarahAnalyzing(true);
-  setSarahMessage(null);
-  try {
-    const payload = {
-      data: "Período Selecionado",
-      faturamentoBruto: totalBruto,
-      lucroLiquido: lucroLiquidoRealFinal,
-      status: lucroLiquidoRealFinal < 0 ? "PREJUÍZO" : "LUCRO", 
-      barbeiros: barberPerformance.map(b => ({ nome: b.name, atendimentos: b.count, faturamento: b.bruto }))
-    };
-    const { data, error } = await supabase.functions.invoke('get-ai-insights', { body: payload });
-    if (error) throw error;
-    if (data && data.insight) {
-      setSarahMessage(data.insight);
+  console.log({
+  bruto: totalBruto,
+  operacional: custosOperacionais,
+  despesas: totalExpenses,
+  lucro: lucroLiquidoRealFinal
+});
+
+  const analyzeWithSarah = async () => {
+    setIsSarahAnalyzing(true);
+    setSarahMessage(null);
+    try {
+      const payload = {
+        data: "Período Selecionado",
+        faturamentoBruto: totalBruto,
+        lucroLiquido: lucroLiquidoRealFinal,
+        status: lucroLiquidoRealFinal < 0 ? "PREJUÍZO" : "LUCRO",
+        barbeiros: barberPerformance.map(b => ({ nome: b.name, atendimentos: b.count, faturamento: b.bruto }))
+      };
+      const { data, error } = await supabase.functions.invoke('get-ai-insights', { body: payload });
+      if (error) throw error;
+      if (data && data.insight) {
+        setSarahMessage(data.insight);
+      }
+    } catch (e: any) {
+      setSarahMessage("Desculpe, tive um problema ao processar seus dados. Vamos tentar novamente?");
+    } finally {
+      setIsSarahAnalyzing(false);
     }
-  } catch (e: any) {
-    setSarahMessage("Desculpe, tive um problema ao processar seus dados. Vamos tentar novamente?");
-  } finally {
-    setIsSarahAnalyzing(false);
-  }
-};
+  };
 
   const handleTabChange = (tab: typeof activeTab) => {
     setActiveTab(tab);
@@ -402,9 +411,16 @@ const analyzeWithSarah = async () => {
 
               {/* 🔥 GRID ESTATÍSTICAS RESPONSIVO */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-8">
+                {/* Faturamento total que entrou */}
                 <StatCard label="Faturamento" value={totalBruto} icon={<DollarSign size={20} />} variant="amber" />
-                <StatCard label="Comissões e taxas" value={totalBruto - lucroLiquidoRealFinal} icon={<CreditCard size={20} />} variant="slate" />
+
+                {/* Mostra APENAS taxas e comissões (Despesas agora ficam fora daqui) */}
+                <StatCard label="Comissões e taxas" value={custosOperacionais} icon={<CreditCard size={20} />} variant="slate" />
+
+                {/* O lucro real descontando taxas, comissões E despesas */}
                 <StatCard label="Líquido Real" value={lucroLiquidoRealFinal} icon={<TrendingUp size={20} />} variant="green" />
+
+                {/* Card exclusivo de despesas */}
                 <StatCard label="Despesas" value={totalExpenses} icon={<MinusCircle size={20} />} variant="red" />
               </div>
 

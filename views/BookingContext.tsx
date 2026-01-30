@@ -15,6 +15,7 @@ export interface Appointment {
   barbershop_id: string;
   user_id?: string;
   duration?: number;
+  venda_id?: string;
 }
 
 interface BookingContextType {
@@ -66,7 +67,8 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         barbershop_id: app.barbershop_id,
         payment_method: app.payment_method,
         user_id: app.user_id,
-        duration: app.duration
+        duration: app.duration,
+        venda_id: app.venda_id,
       }));
 
       setAppointments(formattedData);
