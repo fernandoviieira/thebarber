@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import {
   Plus, Trash2, Clock, X, UserPlus, 
   DollarSign, Tag, Briefcase, Edit3, 
-  Store, Power, AlertTriangle, Save, Loader2
+  Power, AlertTriangle, Save, Loader2
 } from 'lucide-react';
 
 interface AdminSettingsProps {
@@ -50,10 +50,19 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
 
     if (barbersRes.data) setBarbers(barbersRes.data);
     if (servicesRes.data) setServices(servicesRes.data);
+    
     if (settingsRes.data) {
       setSettings(settingsRes.data);
     } else {
-      setSettings({ is_closed: false, opening_time: '08:00', closing_time: '20:00' });
+      setSettings({ 
+        is_closed: false, 
+        opening_time: '08:00', 
+        closing_time: '20:00',
+        fee_dinheiro: 0,
+        fee_pix: 0,
+        fee_debito: 1.99,
+        fee_credito: 4.99
+      });
     }
     setLoading(false);
   }
@@ -66,11 +75,25 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
         barbershop_id: barbershopId, 
         is_closed: settings.is_closed,
         opening_time: settings.opening_time,
-        closing_time: settings.closing_time
+        closing_time: settings.closing_time,
+        fee_dinheiro: parseFloat(settings.fee_dinheiro) || 0,
+        fee_pix: parseFloat(settings.fee_pix) || 0,
+        fee_debito: parseFloat(settings.fee_debito) || 0,
+        fee_credito: parseFloat(settings.fee_credito) || 0
       });
     
-    if (!error) alert("Configurações da unidade atualizadas!");
+    if (!error) alert("Configurações da unidade e taxas atualizadas!");
     setIsSaving(false);
+  }
+
+  async function fetchBarbers() {
+    const { data } = await supabase.from('barbers').select('*').eq('barbershop_id', barbershopId);
+    if (data) setBarbers(data);
+  }
+
+  async function fetchServices() {
+    const { data } = await supabase.from('services').select('*').eq('barbershop_id', barbershopId);
+    if (data) setServices(data);
   }
 
   async function handleAddBarber() {
@@ -84,24 +107,6 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
     await supabase.from('barbers').update(editingBarber).eq('id', editingBarber.id);
     setEditingBarber(null);
     fetchBarbers();
-  }
-
-  async function fetchBarbers() {
-    const { data } = await supabase.from('barbers').select('*').eq('barbershop_id', barbershopId);
-    if (data) setBarbers(data);
-  }
-
-  async function fetchServices() {
-    const { data } = await supabase.from('services').select('*').eq('barbershop_id', barbershopId);
-    if (data) setServices(data);
-  }
-
-  async function deleteBarber(id: string) {
-    if (confirm("Remover barbeiro?")) { await supabase.from('barbers').delete().eq('id', id); fetchBarbers(); }
-  }
-
-  async function deleteService(id: string) {
-    if (confirm("Remover serviço?")) { await supabase.from('services').delete().eq('id', id); fetchServices(); }
   }
 
   async function handleAddService() {
@@ -120,13 +125,21 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
     fetchServices();
   }
 
+  async function deleteBarber(id: string) {
+    if (confirm("Remover barbeiro?")) { await supabase.from('barbers').delete().eq('id', id); fetchBarbers(); }
+  }
+
+  async function deleteService(id: string) {
+    if (confirm("Remover serviço?")) { await supabase.from('services').delete().eq('id', id); fetchServices(); }
+  }
+
   if (loading) return <div className="h-screen flex items-center justify-center bg-[#08080a] text-amber-500 font-black uppercase tracking-[0.5em] animate-pulse">Carregando Dados...</div>;
 
   return (
     <div className="min-h-screen bg-[#08080a] text-zinc-400 pb-20 relative overflow-hidden">
       <div className="max-w-5xl mx-auto px-4 py-8">
         
-        {/* TABS REESTILIZADAS */}
+        {/* TABS */}
         <div className="flex gap-2 mb-12 bg-zinc-900/50 p-1.5 rounded-2xl border border-zinc-800 w-full md:w-fit mx-auto md:mx-0 backdrop-blur-md">
           <TabBtn active={activeTab === 'equipe'} label="Equipe" onClick={() => setActiveTab('equipe')} />
           <TabBtn active={activeTab === 'servicos'} label="Serviços" onClick={() => setActiveTab('servicos')} />
@@ -190,35 +203,39 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
 
         {activeTab === 'unidade' && settings && (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
-             <div className="text-center mb-12">
+              <div className="text-center mb-12">
                 <h2 className="text-4xl font-black text-white italic uppercase tracking-tighter">Configuração <span className="text-amber-500">Global</span></h2>
                 <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.3em] mt-2 italic">Controle total do estabelecimento</p>
-             </div>
+              </div>
 
-             <div className="space-y-6">
+              <div className="space-y-6">
+                {/* HORÁRIOS */}
                 <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-8">
                   <div className="flex items-center gap-3 mb-8 text-amber-500">
                     <Clock size={20} />
-                    <h4 className="text-[11px] font-black uppercase tracking-widest italic text-white">Horário de Funcionamento da Loja</h4>
+                    <h4 className="text-[11px] font-black uppercase tracking-widest italic text-white">Horário de Funcionamento</h4>
                   </div>
                   <div className="grid grid-cols-2 gap-6">
-                     <div className="space-y-2">
-                        <label className="text-[8px] font-black text-zinc-600 uppercase tracking-widest ml-2">Abertura</label>
-                        <div className="bg-black border border-zinc-800 rounded-2xl p-4 flex items-center gap-3">
-                           <Clock size={16} className="text-amber-500" />
-                           <input type="time" className="bg-transparent text-white font-black italic outline-none w-full" value={settings.opening_time} onChange={e => setSettings({...settings, opening_time: e.target.value})} />
-                        </div>
-                     </div>
-                     <div className="space-y-2">
-                        <label className="text-[8px] font-black text-zinc-600 uppercase tracking-widest ml-2">Fechamento</label>
-                        <div className="bg-black border border-zinc-800 rounded-2xl p-4 flex items-center gap-3">
-                           <Clock size={16} className="text-amber-500" />
-                           <input type="time" className="bg-transparent text-white font-black italic outline-none w-full" value={settings.closing_time} onChange={e => setSettings({...settings, closing_time: e.target.value})} />
-                        </div>
-                     </div>
+                      <TimeInput label="Abertura" value={settings.opening_time} onChange={val => setSettings({...settings, opening_time: val})} />
+                      <TimeInput label="Fechamento" value={settings.closing_time} onChange={val => setSettings({...settings, closing_time: val})} />
                   </div>
                 </div>
 
+                {/* TAXAS DE MÁQUINA */}
+                <div className="bg-zinc-900 border border-zinc-800 rounded-[2.5rem] p-8">
+                  <div className="flex items-center gap-3 mb-8 text-amber-500">
+                    <DollarSign size={20} />
+                    <h4 className="text-[11px] font-black uppercase tracking-widest italic text-white">Taxas Operacionais (%)</h4>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <FeeInput label="Pix" value={settings.fee_pix} onChange={val => setSettings({...settings, fee_pix: val})} />
+                      <FeeInput label="Débito" value={settings.fee_debito} onChange={val => setSettings({...settings, fee_debito: val})} />
+                      <FeeInput label="Crédito" value={settings.fee_credito} onChange={val => setSettings({...settings, fee_credito: val})} />
+                      <FeeInput label="Dinheiro" value={settings.fee_dinheiro} onChange={val => setSettings({...settings, fee_dinheiro: val})} />
+                  </div>
+                </div>
+
+                {/* FECHAMENTO DE EMERGÊNCIA */}
                 <div className={`p-8 rounded-[2.5rem] border transition-all duration-500 ${settings.is_closed ? 'bg-red-500 border-red-400 shadow-[0_0_50px_rgba(239,68,68,0.2)]' : 'bg-zinc-900 border-zinc-800'}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -245,7 +262,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
                   {settings.is_closed && (
                     <div className="mt-6 p-4 bg-black/20 rounded-2xl flex items-center gap-3 text-white border border-white/10 animate-pulse">
                        <AlertTriangle size={18} />
-                       <span className="text-[9px] font-black uppercase tracking-widest italic">Aviso: Seus clientes não conseguirão agendar nada no app.</span>
+                       <span className="text-[9px] font-black uppercase tracking-widest italic">Aviso: Agendamentos bloqueados.</span>
                     </div>
                   )}
                 </div>
@@ -257,7 +274,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
                 >
                   {isSaving ? <Loader2 className="animate-spin" /> : <><Save size={20}/> Salvar Configurações Globais</>}
                 </button>
-             </div>
+              </div>
           </section>
         )}
 
@@ -271,6 +288,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
   );
 };
 
+// COMPONENTES AUXILIARES
 const TabBtn = ({ active, label, onClick }: any) => (
   <button onClick={onClick} className={`px-10 py-4 rounded-xl font-black uppercase tracking-[0.2em] text-[10px] transition-all duration-300 ${active ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30' : 'text-zinc-600 hover:text-white'}`}>
     {label}
@@ -286,6 +304,26 @@ const HeaderSection = ({ title, subtitle, actionLabel, onAction, icon }: any) =>
     <button onClick={onAction} className="group bg-amber-500 hover:bg-amber-400 text-black px-8 py-4 rounded-2xl font-black flex items-center gap-3 transition-all shadow-xl shadow-amber-500/10 uppercase italic text-[10px] tracking-widest">
       {icon} {actionLabel}
     </button>
+  </div>
+);
+
+const TimeInput = ({ label, value, onChange }: any) => (
+  <div className="space-y-2">
+    <label className="text-[8px] font-black text-zinc-600 uppercase tracking-widest ml-2">{label}</label>
+    <div className="bg-black border border-zinc-800 rounded-2xl p-4 flex items-center gap-3">
+        <Clock size={16} className="text-amber-500" />
+        <input type="time" className="bg-transparent text-white font-black italic outline-none w-full" value={value} onChange={e => onChange(e.target.value)} />
+    </div>
+  </div>
+);
+
+const FeeInput = ({ label, value, onChange }: any) => (
+  <div className="space-y-2">
+    <label className="text-[8px] font-black text-zinc-600 uppercase tracking-widest ml-2">{label}</label>
+    <div className="bg-black border border-zinc-800 rounded-2xl p-3 flex items-center gap-2">
+        <span className="text-amber-500 font-black text-[10px]">%</span>
+        <input type="number" step="0.01" className="bg-transparent text-white font-black italic outline-none w-full text-xs" value={value} onChange={e => onChange(e.target.value)} />
+    </div>
   </div>
 );
 
@@ -310,7 +348,6 @@ const BarberModal = ({ title, data, setData, onSave, onClose }: any) => {
         <h3 className="text-2xl font-black mb-8 flex items-center gap-3 text-white italic uppercase tracking-tighter">
           <Briefcase className="text-amber-500" /> {title}
         </h3>
-        
         <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
@@ -322,9 +359,8 @@ const BarberModal = ({ title, data, setData, onSave, onClose }: any) => {
               <input type="number" className="w-full bg-black border border-zinc-800 rounded-2xl p-4 text-amber-500 font-black outline-none focus:border-amber-500 italic" value={data.commission_rate} onChange={e => setData({...data, commission_rate: e.target.value})} />
             </div>
           </div>
-
           <div className="space-y-4">
-            <h4 className="text-amber-500 text-[11px] font-black uppercase tracking-[0.2em] mb-4 italic">Escala Semanal Individual</h4>
+            <h4 className="text-amber-500 text-[11px] font-black uppercase tracking-[0.2em] mb-4 italic">Escala Semanal</h4>
             <div className="space-y-3">
               {daysOfWeek.map((day) => {
                 const config = data.work_days?.[day.id] || { active: false, start: '09:00', end: '19:00' };
@@ -336,7 +372,7 @@ const BarberModal = ({ title, data, setData, onSave, onClose }: any) => {
                       </button>
                       <span className={`text-[11px] font-black uppercase italic ${config.active ? 'text-white' : 'text-zinc-600'}`}>{day.label}</span>
                     </div>
-                    {config.active ? (
+                    {config.active && (
                       <div className="flex items-center gap-4 flex-1">
                         <div className="flex items-center gap-2 bg-black border border-zinc-800 rounded-xl px-3 py-2 flex-1"><Clock size={14} className="text-amber-500" />
                           <input type="time" className="bg-transparent text-white text-xs font-black outline-none w-full" value={config.start} onChange={(e) => updateDayConfig(day.id, 'start', e.target.value)} />
@@ -346,15 +382,13 @@ const BarberModal = ({ title, data, setData, onSave, onClose }: any) => {
                           <input type="time" className="bg-transparent text-white text-xs font-black outline-none w-full" value={config.end} onChange={(e) => updateDayConfig(day.id, 'end', e.target.value)} />
                         </div>
                       </div>
-                    ) : (
-                      <div className="flex-1 text-[10px] font-black uppercase text-zinc-700 italic tracking-widest text-center md:text-left">Folga Programada</div>
                     )}
                   </div>
                 );
               })}
             </div>
           </div>
-          <button onClick={onSave} className="w-full bg-amber-500 text-black font-black py-5 rounded-3xl mt-4 hover:bg-amber-400 transition-all shadow-xl shadow-amber-500/20 uppercase italic tracking-widest text-xs">Confirmar Configurações</button>
+          <button onClick={onSave} className="w-full bg-amber-500 text-black font-black py-5 rounded-3xl mt-4 hover:bg-amber-400 transition-all uppercase italic tracking-widest text-xs">Confirmar</button>
         </div>
       </div>
     </div>
@@ -381,7 +415,7 @@ const ServiceModal = ({ title, data, setData, onSave, onClose }: any) => (
             <input type="number" className="w-full bg-black border border-zinc-800 rounded-2xl p-4 text-white font-bold italic outline-none focus:border-amber-500" value={data.duration?.toString().replace(/\D/g, '')} onChange={e => setData({...data, duration: e.target.value})} />
           </div>
         </div>
-        <button onClick={onSave} className="w-full bg-amber-500 text-black font-black py-5 rounded-3xl mt-4 hover:bg-amber-400 transition-all shadow-xl shadow-amber-500/20 uppercase italic tracking-widest text-xs">Salvar Alterações</button>
+        <button onClick={onSave} className="w-full bg-amber-500 text-black font-black py-5 rounded-3xl mt-4 hover:bg-amber-400 transition-all uppercase italic tracking-widest text-xs">Salvar</button>
       </div>
     </div>
   </div>
