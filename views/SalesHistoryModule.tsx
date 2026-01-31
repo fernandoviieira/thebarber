@@ -69,6 +69,9 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
   const filteredSales = useMemo(() => {
     const today = startOfDay(new Date());
 
+    // 1. LOG DE ENTRADA: O que vem do banco/props
+    console.log("📥 DADOS BRUTOS DO BANCO:", appointments);
+
     const baseFilter = appointments.filter(app => {
       const appDate = startOfDay(new Date(app.date + 'T00:00:00'));
       let matchesDate = true;
@@ -101,6 +104,12 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
       const rawId = current.venda_id || current.vendaId || current.id_venda || current.order_id;
       const groupKey = rawId ? String(rawId).trim() : `unique-${current.id}`;
 
+      // 2. LOG DE PROCESSAMENTO: Verificando o campo novo
+      console.log(`🔍 Item ${current.service}: price=${current.price}, original_price=${current.original_price}`);
+
+      const valorBrutoDesteItem = Number(current.original_price || current.price);
+      const valorPagoDesteItem = Number(current.price);
+
       const existingIndex = acc.findIndex(item => {
         const itemRawId = item.venda_id || item.vendaId || item.id_venda || item.order_id;
         return itemRawId && String(itemRawId).trim() === groupKey;
@@ -108,24 +117,28 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
 
       if (existingIndex !== -1 && rawId) {
         const group = acc[existingIndex];
-        group.price = Number(group.price) + Number(current.price);
-        group.serviceList.push({ name: current.service, price: Number(current.price) });
+        group.price = Number(group.price) + valorPagoDesteItem;
+        group.brutoTotal = (group.brutoTotal || 0) + valorBrutoDesteItem;
+        group.serviceList.push({ name: current.service, price: valorPagoDesteItem });
         if (!group.allIds.includes(current.id)) group.allIds.push(current.id);
       } else {
         acc.push({
           ...current,
           displayId: rawId || null,
-          price: Number(current.price),
-          serviceList: [{ name: current.service, price: Number(current.price) }],
+          price: valorPagoDesteItem,
+          brutoTotal: valorBrutoDesteItem,
+          serviceList: [{ name: current.service, price: valorPagoDesteItem }],
           allIds: [current.id]
         });
       }
       return acc;
     }, []);
 
+    // 3. LOG DE SAÍDA: Resultado final do agrupamento
+    console.log("📤 DADOS AGRUPADOS FINAIS:", grouped);
+
     return grouped.sort((a, b) => new Date(b.date + 'T' + b.time).getTime() - new Date(a.date + 'T' + a.time).getTime());
   }, [appointments, searchTerm, paymentFilter, dateFilter, barberFilter, startDate, endDate]);
-
   const barbersList = useMemo(() => {
     const names = appointments.map(app => app.barber).filter(Boolean);
     return ['todos', ...Array.from(new Set(names))];
@@ -151,6 +164,8 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
     return { icon: <CardIcon size={14} />, label: methodRaw || 'OUTRO', color: 'text-slate-500', bg: 'bg-white/5' };
   };
 
+
+  console.log('filteredSales', filteredSales)
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-24 md:pb-0 font-bold italic">
 
@@ -303,10 +318,10 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
                     </td>
                     <td className="px-8 py-5 text-right">
                       <div className="text-white font-black text-lg tabular-nums leading-none tracking-tighter">R$ {netVal.toFixed(2)}</div>
-                      <div className="text-[10px] text-slate-600 line-through font-bold mt-1 uppercase tracking-widest">R$ {sale.price.toFixed(2)}</div>
+                      <div className="text-[12px] text-slate-00 line-through font-bold mt-1 uppercase tracking-widest">R$ {Number(sale.brutoTotal).toFixed(2)}</div>
                     </td>
                     <td className="px-8 py-5 text-right">
-                      <button onClick={() => { if (window.confirm('Excluir venda permanentemente?')) sale.allIds.forEach((id: string) => onDelete(id)) }} className="p-3 rounded-2xl text-red-500/20 hover:text-red-500 hover:bg-red-500/10 transition-all active:scale-90"><Trash2 size={18} /></button>
+                      <button onClick={() => { sale.allIds.forEach((id: string) => onDelete(id)) }} className="p-3 rounded-2xl text-red-500/20 hover:text-red-500 hover:bg-red-500/10 transition-all active:scale-90"><Trash2 size={18} /></button>
                     </td>
                   </tr>
                 );

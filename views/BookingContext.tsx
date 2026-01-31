@@ -17,6 +17,7 @@ export interface Appointment {
   duration?: number;
   venda_id?: string;
   created_by_admin?: boolean;
+  original_price?: number;
 }
 
 interface BookingContextType {
@@ -64,6 +65,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         date: app.date,
         time: app.time,
         price: Number(app.price),
+        original_price: app.original_price ? Number(app.original_price) : Number(app.price),
         status: app.status,
         barbershop_id: app.barbershop_id,
         payment_method: app.payment_method,

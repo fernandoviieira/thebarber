@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  Users, ChevronDown, ChevronUp, Wallet, Save,
-  Loader2, Percent, Calendar as CalendarIcon, Scissors, MinusCircle, Printer, Filter, Package
+    Users, ChevronDown, ChevronUp, Wallet, Save,
+    Loader2, Percent, Calendar as CalendarIcon, Scissors, MinusCircle, Printer, Filter, Package
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
@@ -49,8 +49,12 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
             if (barbersData && salesData) {
                 setReportData(barbersData.map(barber => {
-                    const mySales = salesData.filter(sale => sale.barber === barber.name);
-                    
+                    const mySales = salesData.filter(sale =>
+                        // Tenta pelo ID primeiro (vendas novas)
+                        sale.barber_id === barber.id ||
+                        // Se não tiver ID, usa o nome (vendas antigas)
+                        (!sale.barber_id && sale.barber === barber.name)
+                    );
                     // CÁLCULO DA COMISSÃO (SERVIÇOS E PRODUTOS)
                     const comissaoTotalCalculada = mySales.reduce((acc, sale) => {
                         // 1. Comissão fixa de produto
@@ -59,7 +63,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                         }
                         // 2. Ignora registro de gorjeta no cálculo de comissão percentual
                         if (sale.service === "Caixinha / Gorjeta") return acc;
-                        
+
                         // 3. Comissão percentual padrão
                         return acc + (Number(sale.price) * (barber.commission_rate / 100));
                     }, 0);
@@ -72,7 +76,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                         atendimentos: mySales.length,
                         totalBruto: mySales.reduce((acc, curr) => acc + Number(curr.price), 0),
                         currentRate: barber.commission_rate || 0,
-                        expenses: barber.expenses || 0, 
+                        expenses: barber.expenses || 0,
                         totalComissaoCalculada: comissaoTotalCalculada,
                         totalGorjetas: totalGorjetas,
                         detalhes: mySales
@@ -94,7 +98,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
         try {
             const { error } = await supabase
                 .from('barbers')
-                .update({ 
+                .update({
                     commission_rate: barber.currentRate,
                     expenses: barber.expenses
                 })
@@ -189,7 +193,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                             {expandedBarber === barber.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                                         </div>
                                     </div>
-                                    
+
                                     <div className="flex flex-wrap md:flex-nowrap items-center justify-between md:justify-end gap-4 md:gap-12 w-full md:w-auto border-t border-white/5 pt-4 md:border-0 md:pt-0">
                                         <div className="text-left md:text-right">
                                             <p className="text-[8px] md:text-[10px] font-black text-slate-500 uppercase mb-1">Comissão</p>
@@ -237,7 +241,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                 />
                                             </div>
                                             <div className="md:col-span-2 flex justify-end pt-2">
-                                                <button 
+                                                <button
                                                     onClick={() => saveBarberChanges(barber.id)}
                                                     disabled={isSaving === barber.id}
                                                     className="w-full md:w-auto flex items-center justify-center gap-3 bg-amber-500 text-black px-8 py-4 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all"
@@ -262,19 +266,19 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                     {barber.detalhes.map((v: any) => {
                                                         const isProduct = v.product_commission && v.product_commission > 0;
                                                         const isTip = v.service === "Caixinha / Gorjeta" || Number(v.tip_amount) > 0;
-                                                        
+
                                                         // Cálculo exibição da comissão na linha
-                                                        const comissaoItem = isProduct 
-                                                            ? v.product_commission 
+                                                        const comissaoItem = isProduct
+                                                            ? v.product_commission
                                                             : (isTip ? v.tip_amount : (v.price * (barber.currentRate / 100)));
-                                                        
+
                                                         return (
                                                             <tr key={v.id} className="hover:bg-white/[0.03] transition-colors">
                                                                 <td className="px-6 py-3 text-[9px] text-slate-400 font-bold">{new Date(v.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                                                                 <td className="px-6 py-3 text-[10px] font-black uppercase text-white tracking-tighter flex items-center gap-2">
-                                                                    {isProduct ? <Package size={10} className="text-blue-400"/> : 
-                                                                     isTip ? <Wallet size={10} className="text-green-500"/> : 
-                                                                     <Scissors size={10} className="text-amber-500"/>}
+                                                                    {isProduct ? <Package size={10} className="text-blue-400" /> :
+                                                                        isTip ? <Wallet size={10} className="text-green-500" /> :
+                                                                            <Scissors size={10} className="text-amber-500" />}
                                                                     {v.service}
                                                                 </td>
                                                                 <td className="px-6 py-3 text-right text-[10px] font-bold tabular-nums text-slate-400">R$ {Number(v.price).toFixed(2)}</td>
@@ -316,8 +320,8 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                     const totalLiquidoPrint = barber.totalComissaoCalculada + barber.totalGorjetas - (barber.expenses || 0);
 
                     return (
-                        <div 
-                            key={barber.id} 
+                        <div
+                            key={barber.id}
                             className="print-content-box"
                             style={{ pageBreakAfter: isLast ? 'auto' : 'always' }}
                         >
@@ -375,17 +379,17 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                     </thead>
                                     <tbody>
                                         {barber.detalhes.map((v: any) => {
-                                             const isProd = v.product_commission && v.product_commission > 0;
-                                             const isTipPrint = v.service === "Caixinha / Gorjeta" || Number(v.tip_amount) > 0;
-                                             const comVal = isProd ? v.product_commission : (isTipPrint ? v.tip_amount : (v.price * (barber.currentRate / 100)));
-                                             return (
+                                            const isProd = v.product_commission && v.product_commission > 0;
+                                            const isTipPrint = v.service === "Caixinha / Gorjeta" || Number(v.tip_amount) > 0;
+                                            const comVal = isProd ? v.product_commission : (isTipPrint ? v.tip_amount : (v.price * (barber.currentRate / 100)));
+                                            return (
                                                 <tr key={v.id} className="border-b border-gray-100">
                                                     <td className="py-2">{new Date(v.date + 'T00:00:00').toLocaleDateString('pt-BR')}</td>
                                                     <td className="py-2 font-bold uppercase">{v.service} {isTipPrint && "(GORJETA)"}</td>
                                                     <td className="py-2 text-right text-gray-400">R$ {Number(v.price).toFixed(2)}</td>
                                                     <td className={`py-2 text-right font-bold ${isTipPrint ? 'text-green-600' : ''}`}>R$ {Number(comVal).toFixed(2)}</td>
                                                 </tr>
-                                             )
+                                            )
                                         })}
                                     </tbody>
                                 </table>
@@ -397,7 +401,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                         </div>
                     );
                 })}
-           </div>
+            </div>
 
             <style>{`
                 @media print {

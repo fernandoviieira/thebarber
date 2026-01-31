@@ -70,7 +70,7 @@ type Barber = {
 type Appointment = {
   id: string;
   barbershop_id: string;
-  barber_id?: string | null; // ✅ ADICIONADO: usar ID ao invés de nome
+  barber_id?: string | null;
   date: string;
   time: string;
   status: string;
@@ -78,7 +78,9 @@ type Appointment = {
   customerName: string;
   service: string;
   price: number | string;
+  original_price?: number | string | null; // ✅ ADICIONE ESTA LINHA
   payment_method?: string | null;
+  venda_id?: string | null; // Garante que o agrupamento funcione bem
 };
 
 type Expense = {
@@ -225,116 +227,85 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   }, [barbershopId]); // ✅ Apenas barbershopId
 
 
-  // ✅ FIX: fetch com cleanup e error handling
   // ✅ CÓDIGO CORRIGIDO
-  useEffect(() => {
-    let cancelled = false;
-
-    async function fetchData() {
-      if (!barbershopId) {
-        setLoadingData(false);
-        return;
-      }
-
-      console.log('🔄 Iniciando fetch de dados...'); // Debug
-      setLoadingData(true);
-
-      try {
-        // ✅ Fetch appointments primeiro (sem await se causar problemas)
-        if (fetchAppointments) {
-          fetchAppointments(barbershopId).catch(err =>
-            console.error('❌ Erro ao buscar appointments:', err)
-          );
-        }
-
-        // ✅ Fetch em paralelo SEM abortSignal (não é suportado em todas versões)
-        const [
-          barbersRes,
-          servicesRes,
-          inventoryRes,
-          settingsRes,
-          customersRes,
-          shopRes,
-          expensesRes
-        ] = await Promise.all([
-          supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
-          supabase.from('services').select('*').eq('barbershop_id', barbershopId),
-          supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
-          supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
-          supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId),
-          supabase.from('barbershops').select('name').eq('id', barbershopId).single(),
-          supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
-        ]);
-
-        if (cancelled) {
-          console.log('⚠️ Fetch cancelado (componente desmontado)');
-          return;
-        }
-
-        console.log('✅ Dados carregados com sucesso'); // Debug
-
-        // ✅ Error handling individual
-        if (barbersRes.error) {
-          console.error('❌ Erro barbeiros:', barbersRes.error);
-          throw new Error('Erro ao carregar barbeiros');
-        }
-        if (servicesRes.error) {
-          console.error('❌ Erro serviços:', servicesRes.error);
-          throw new Error('Erro ao carregar serviços');
-        }
-        if (shopRes.error) {
-          console.error('❌ Erro barbearia:', shopRes.error);
-          throw new Error('Erro ao carregar barbearia');
-        }
-
-        // Processar dados
-        if (expensesRes.data) setAllExpenses(expensesRes.data as Expense[]);
-        if (shopRes.data?.name) setBarbershopName(shopRes.data.name);
-
-        if (barbersRes.data) {
-          const list = barbersRes.data as Barber[];
-          setBarbers(list);
-
-          const initial: Record<string, number> = {};
-          list.forEach(b => (initial[b.id] = parseNumberSafe(b.commission_rate)));
-          setCustomCommissions(initial);
-        }
-
-        if (servicesRes.data) setAvailableServices(servicesRes.data);
-        if (inventoryRes.data) setInventory(inventoryRes.data);
-        if (customersRes.data) setAllCustomers(customersRes.data);
-
-        if (settingsRes.data) {
-          setMachineFees({
-            dinheiro: parseNumberSafe(settingsRes.data.fee_dinheiro),
-            pix: parseNumberSafe(settingsRes.data.fee_pix),
-            debito: parseNumberSafe(settingsRes.data.fee_debito),
-            credito: parseNumberSafe(settingsRes.data.fee_credito),
-            pacote: 0
-          });
-        }
-      } catch (error: any) {
-        if (!cancelled) {
-          console.error('❌ Erro fatal ao carregar dados:', error);
-          // ✅ Chama showError diretamente (não precisa estar nas dependências)
-          setErrorMessage(error.message || 'Erro ao carregar dados. Tente recarregar a página.');
-          setTimeout(() => setErrorMessage(null), 5000);
-        }
-      } finally {
-        if (!cancelled) {
-          console.log('✅ setLoadingData(false)'); // Debug
-          setLoadingData(false);
-        }
-      }
+  // ✅ FUNÇÃO REUTILIZÁVEL: Agora você pode chamar fetchData() a qualquer momento!
+  const fetchData = useCallback(async () => {
+    if (!barbershopId) {
+      setLoadingData(false);
+      return;
     }
 
-    fetchData();
+    setLoadingData(true);
 
-    return () => {
-      console.log('🧹 Cleanup: cancelando fetch'); // Debug
-      cancelled = true;
-    };
-  }, [barbershopId]); // ✅ APENAS barbershopId nas dependências
+    try {
+      // Busca agendamentos em paralelo
+      if (fetchAppointments) {
+        fetchAppointments(barbershopId).catch(err =>
+          console.error('❌ Erro ao buscar appointments:', err)
+        );
+      }
+
+      const [
+        barbersRes,
+        servicesRes,
+        inventoryRes,
+        settingsRes,
+        customersRes,
+        shopRes,
+        expensesRes
+      ] = await Promise.all([
+        supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
+        supabase.from('services').select('*').eq('barbershop_id', barbershopId),
+        supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
+        supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
+        supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name'),
+        supabase.from('barbershops').select('name').eq('id', barbershopId).single(),
+        supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
+
+        // Adiciona um filtro de "não nulo" apenas para forçar a query a ser nova
+      ]);
+
+      // Processar dados e atualizar estados
+      if (expensesRes.data) setAllExpenses(expensesRes.data as Expense[]);
+      if (shopRes.data?.name) setBarbershopName(shopRes.data.name);
+
+      if (barbersRes.data) {
+        const list = barbersRes.data as Barber[];
+        setBarbers(list);
+        const initial: Record<string, number> = {};
+        list.forEach(b => (initial[b.id] = parseNumberSafe(b.commission_rate)));
+        setCustomCommissions(initial);
+      }
+
+      if (servicesRes.data) setAvailableServices(servicesRes.data);
+      if (inventoryRes.data) setInventory(inventoryRes.data);
+
+      // 🎯 AQUI ESTÁ O SEGREDO: Atualiza os créditos do Fernando na memória
+      if (customersRes.data) setAllCustomers(customersRes.data);
+
+      if (settingsRes.data) {
+        setMachineFees({
+          dinheiro: parseNumberSafe(settingsRes.data.fee_dinheiro),
+          pix: parseNumberSafe(settingsRes.data.fee_pix),
+          debito: parseNumberSafe(settingsRes.data.fee_debito),
+          credito: parseNumberSafe(settingsRes.data.fee_credito),
+          pacote: 0
+        });
+      }
+    } catch (error: any) {
+      console.error('❌ Erro fatal:', error);
+      setErrorMessage(error.message || 'Erro ao carregar dados.');
+      setTimeout(() => setErrorMessage(null), 5000);
+    } finally {
+      setLoadingData(false);
+    }
+  }, [barbershopId, fetchAppointments]);
+
+  // ✅ USEEFFECT AJUSTADO: Garante carga inicial sem loops
+  useEffect(() => {
+    fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [barbershopId]); // 👈 Foque no ID da barbearia, não na função
 
 
   // ✅ FIX: memoizar barbeiros por ID
@@ -375,7 +346,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
         console.error('Erro ao rejeitar:', error);
       }
     },
-    [refetchAppointments, ]
+    [refetchAppointments,]
   );
 
   // ✅ FIX: filtrar appointments com parse seguro de datas
@@ -400,8 +371,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
   const totalBruto = useMemo(() => {
     return filteredApps
-      .filter(app => app.status === 'confirmado')
-      .reduce((acc, curr) => acc + parseNumberSafe(curr.price), 0);
+      .filter(app => app.status === 'confirmado' || app.status === 'finalizado')
+      .reduce((acc, curr) => {
+        // ✅ Prioriza o valor de tabela (50) em vez do valor pago (40)
+        const valorReal = parseNumberSafe(curr.original_price || curr.price);
+        return acc + valorReal;
+      }, 0);
   }, [filteredApps]);
 
   // ✅ FIX: cálculo líquido com normalização de método
@@ -548,6 +523,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
       </div>
     );
   }
+
 
   return (
     <div className="flex min-h-screen bg-[#0f1115] text-slate-300 font-sans overflow-hidden">
@@ -821,6 +797,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
               initialAppointment={pendingCheckoutApp}
               onSuccess={async () => {
                 await refetchAppointments();
+                await fetchData();
                 setPendingCheckoutApp(null);
               }}
             />

@@ -32,10 +32,11 @@ const App: React.FC = () => {
     const path = window.location.pathname.split('/')[1];
     const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
 
+    // Lógica de Slug e Redirecionamento
     if (path && !reservedRoutes.includes(path)) {
       localStorage.setItem('last_visited_slug', path);
       setUrlSlug(path);
-      setView('client');
+      // Não forçamos setView('client') aqui para não sobrescrever o redirecionamento do admin depois
     }
     else if (path === '' && localStorage.getItem('last_visited_slug')) {
       const savedSlug = localStorage.getItem('last_visited_slug');
@@ -46,28 +47,26 @@ const App: React.FC = () => {
       setView('create_barbershop');
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    // Gerenciamento de Sessão Único
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
+      
       if (session) {
-        fetchProfile(session, true, path);
-      } else {
-        setLoading(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-        const isNewLogin = _event === 'SIGNED_IN' || _event === 'INITIAL_SESSION';
-        fetchProfile(session, isNewLogin, window.location.pathname.split('/')[1]);
+        // Só buscamos o perfil se a sessão for nova ou se ainda não temos os dados
+        const isNewSession = event === 'SIGNED_IN' || event === 'INITIAL_SESSION';
+        if (isNewSession) {
+          fetchProfile(session, true, window.location.pathname.split('/')[1]);
+        }
       } else {
         setLoading(false);
         hasRedirected.current = false;
+        // Se não tem sessão e não tem slug, manda pro login/perfil
+        if (!urlSlug && path === '') setView('profile');
       }
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [urlSlug]); // Adicionado urlSlug como dependência para garantir consistência
 
   const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
@@ -139,22 +138,35 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleLogout = async () => {
-    if (window.confirm("Deseja realmente sair?")) {
-      hasRedirected.current = false;
-      await supabase.auth.signOut();
+ const handleLogout = async () => {
+  if (window.confirm("Deseja realmente sair?")) {
+    // 1. Resetamos o controle de redirecionamento
+    hasRedirected.current = false;
+    
+    // 2. Deslogamos do Supabase
+    await supabase.auth.signOut();
 
-      setBarbershopId(null);
-      setIsAdmin(false);
-      setUserName('');
+    // 3. Limpamos APENAS os dados do usuário, mas MANTEMOS o urlSlug
+    setBarbershopId(null);
+    setIsAdmin(false);
+    setUserName('');
+    setSession(null); 
 
-      if (urlSlug) {
-        setView('client');
-      } else {
-        setView('profile');
-      }
+    // 4. Lógica de permanência:
+    // Se ele tem um slug (está em uma barbearia), ele volta para a 'client' (vitrine).
+    // Se não tem slug, vai para a tela de login/perfil.
+    if (urlSlug) {
+      setView('client');
+    } else {
+      setView('profile');
     }
-  };
+    
+    // Opcional: Se quiser que a URL no navegador mude fisicamente para o slug:
+    if (urlSlug && window.location.pathname !== `/${urlSlug}`) {
+      window.history.pushState({}, '', `/${urlSlug}`);
+    }
+  }
+};
 
   if (loading) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
@@ -165,13 +177,11 @@ const App: React.FC = () => {
 
   if (!session) return (
     <Login
-      onLoginSuccess={async () => {
+      onLoginSuccess={() => {
+        // Resetamos o controle de redirecionamento para o novo usuário que entrou
         hasRedirected.current = false;
-        const { data: { session: newSession } } = await supabase.auth.getSession();
-        if (newSession) {
-          setSession(newSession);
-          fetchProfile(newSession, true, window.location.pathname.split('/')[1]);
-        }
+        setLoading(true); 
+        // O onAuthStateChange ali em cima vai detectar o login e chamar o fetchProfile sozinho
       }}
     />
   );

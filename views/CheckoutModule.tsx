@@ -60,16 +60,15 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       const existing = prev.find(i => i.originalId === item.id);
       if (existing) {
         return prev.map(i =>
-          i.originalId === item.id
-            ? { ...i, quantity: i.quantity + 1 }
-            : i
+          i.originalId === item.id ? { ...i, quantity: i.quantity + 1 } : i
         );
       }
       return [...prev, {
         id: Math.random().toString(),
         originalId: item.id,
         name: item.name,
-        price: Number(item.price || item.price_sell) || 0,
+        // REMOVA A LINHA DO PRICE DAQUI! 
+        // O preço deve ser dinâmico.
         type,
         quantity: 1
       }];
@@ -166,15 +165,34 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       activePkg
     );
   }, [pdvItems, activePkg]);
+  // --- CALCULAR PREÇO DO ITEM (CONSIDERANDO COMBO) ---
   const getItemPrice = useCallback((item: any) => {
+    // 1. Tenta achar o preço base (do serviço ou do inventário)
+    const baseService = services.find(s => s.id === item.originalId);
+    const baseProduct = inventory.find(p => p.id === item.originalId);
+    const basePrice = Number(baseService?.price || baseProduct?.price_sell || 0);
+
+    // 2. Se for serviço e tiver pacote ativo
     if (item.type === 'servico' && activePkg) {
-      const creditosRestantes = Number(activePkg.total_credits) - Number(activePkg.used_credits);
-      if (creditosRestantes > 0) {
+      const isServiceInPackage = activePkg.package_name.toLowerCase().includes(item.name.toLowerCase()) ||
+        activePkg.package_name.toLowerCase() === 'combo';
+
+      if (isServiceInPackage) {
+        const jaUsou = Number(activePkg.used_credits) || 0;
+
+        // Se é o primeiro uso (Fernando com usados = 0), retorna os 100 do banco
+        if (jaUsou === 0) {
+          return Number(activePkg.price_paid) || 0;
+        }
+
+        // Usos seguintes retorna 0
         return 0;
       }
     }
-    return Number(item.price || item.price_sell || 0);
-  }, [activePkg]);
+
+    // 3. Se não caiu no combo, retorna o preço normal que achamos no passo 1
+    return basePrice;
+  }, [activePkg, services, inventory]);
 
   // --- TOTAIS ---
   const totalFinal = useMemo(() =>
@@ -197,6 +215,13 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     const feePercent = fees[feeKey] || 0;
     return bruto * (1 - feePercent / 100);
   }, [fees]);
+
+  // --- CÁLCULO DE DESCONTO NOMINAL ---
+  const descontoNominal = useMemo(() => {
+    const recebido = totalPagoInput;
+    const devido = valorTotalAbsoluto;
+    return devido > recebido ? devido - recebido : 0;
+  }, [totalPagoInput, valorTotalAbsoluto]);
 
   // --- CÁLCULO DE VALOR LÍQUIDO POR ITEM (CONSIDERANDO PAGAMENTO MISTO) ---
   const calculateItemNetValue = useCallback((itemGrossPrice: number) => {
@@ -239,17 +264,24 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     }
   }, [valorTotalAbsoluto, paymentMethod, isMisto]);
 
-  // --- VALOR LÍQUIDO TOTAL (PARA EXIBIÇÃO) ---
-  const netValue = useMemo(() => {
-    let totalTaxa = 0;
+  // --- VALOR LÍQUIDO TOTAL (PARA EXIBIÇÃO CORRIGIDA) ---
+  const { netValue, taxasCartao } = useMemo(() => {
+    let liquidoTotal = 0;
+    let totalTaxas = 0;
+
     (Object.entries(splitValues) as [string, number][]).forEach(([method, value]) => {
+      if (value <= 0) return;
+
       const feeKey = `fee_${method}`;
       const feePercent = fees[feeKey] || 0;
-      totalTaxa += (value * (feePercent / 100));
+
+      const valorTaxa = value * (feePercent / 100);
+      totalTaxas += valorTaxa;
+      liquidoTotal += (value - valorTaxa);
     });
 
-    return valorTotalAbsoluto - totalTaxa;
-  }, [splitValues, valorTotalAbsoluto, fees]);
+    return { netValue: liquidoTotal, taxasCartao: totalTaxas };
+  }, [splitValues, fees]);
 
   // --- ALTERNAR MÉTODO DE PAGAMENTO ---
   const handleMethodToggle = useCallback((method: string) => {
@@ -269,22 +301,18 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     }
   }, [hasComboInCart, isMisto, valorTotalAbsoluto]);
 
-  // --- FORÇAR MÉTODO PACOTE QUANDO TEM COMBO ---
-  // AJUSTE este useEffect:
   useEffect(() => {
     if (hasComboInCart) {
       setPaymentMethod('pacote');
       setSplitValues({
         dinheiro: 0, pix: 0, debito: 0, credito: 0,
-        pacote: valorTotalAbsoluto // valorTotalAbsoluto será 0 se for só o serviço do combo
+        pacote: valorTotalAbsoluto
       });
     } else if (paymentMethod === 'pacote' && !hasComboInCart) {
-      // Só muda para PIX se NÃO tiver combo no carrinho e o método atual for pacote
       setPaymentMethod('pix');
     }
   }, [hasComboInCart, valorTotalAbsoluto]);
 
-  // --- ATUALIZAR QUANTIDADE ---
   const handleUpdateQuantity = useCallback((originalId: string, delta: number) => {
     setPdvItems(prev => prev.map(item => {
       if (item.originalId === originalId) {
@@ -295,14 +323,11 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     }));
   }, []);
 
-  // --- REMOVER ITEM ---
   const handleRemoveItem = useCallback((originalId: string) => {
     setPdvItems(prev => prev.filter(i => i.originalId !== originalId));
   }, []);
 
-  // --- FINALIZAR VENDA (VERSÃO COMPLETA E CORRIGIDA) ---
   const handleFinalize = async () => {
-    // ====== VALIDAÇÕES INICIAIS ======
     if (!activeCashSession) {
       return alert("❌ CAIXA FECHADO! Abra o movimento para continuar.");
     }
@@ -311,21 +336,13 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       return alert("⚠️ Selecione o profissional antes de finalizar!");
     }
 
-    // if (pdvItems.length === 0) {
-    //   return alert("⚠️ Adicione itens ao carrinho!");
-    // }
-
-    // 1. Definição do valor total e faltante
     const totalPago = totalPagoInput;
     const valorFaltante = valorTotalAbsoluto - totalPago;
 
-    // 2. Validação de Valor Negativo
     if (valorTotalAbsoluto < 0) {
       return alert("⚠️ Valor total inválido!");
     }
 
-    // 3. Lógica de Desconto (Substitui o alerta de insuficiente)
-    // Se não for combo e houver valor faltando acima de 1 centavo
     if (!hasComboInCart && valorTotalAbsoluto > 0 && valorFaltante > 0.01) {
       const confirmarDesconto = window.confirm(
         `⚠️ VALOR ABAIXO DO TOTAL!\n\n` +
@@ -337,7 +354,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       if (!confirmarDesconto) return; // Para a execução aqui se o usuário desistir
     }
 
-    // 4. VALIDAR ESTOQUE (Mantemos sua lógica original que está perfeita)
     const produtosNoCarrinho = pdvItems.filter(i => i.type === 'produto');
     for (const item of produtosNoCarrinho) {
       const produtoEstoque = localInventory.find(p => p.id === item.originalId);
@@ -346,7 +362,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       }
     }
 
-    // ====== AGORA O CÓDIGO SEGUE PARA O SETLOADING ======
     setLoading(true);
     setLoadingMessage('Iniciando venda...');
     const itemsInserted: string[] = [];
@@ -354,7 +369,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     const packageUpdates: any[] = [];
 
     try {
-      const today = new Date().toISOString().split('T')[0];
+      const now = new Date();
+      const today = now.toLocaleDateString('en-CA');
       const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const vendaIdUnica = `VENDA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
@@ -374,8 +390,19 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
       for (const item of pdvItems) {
         const isPackageRedemption = !!(activePkg && item.type === 'servico');
-        const precoOriginal = Number(getItemPrice(item));
-        const precoFinal = calculateItemNetValue(precoOriginal);
+
+        const barberObj = barbers.find(b => b.name === selectedBarber);
+        const barberId = barberObj?.id || null; // Pega o ID real
+
+
+        // 🔍 BUSCA O PREÇO DE TABELA (VALOR BRUTO SEM DESCONTOS)
+        const baseService = services.find(s => s.id === item.originalId);
+        const baseProduct = inventory.find(p => p.id === item.originalId);
+        const precoDeTabela = Number(baseService?.price || baseProduct?.price_sell || 0);
+
+        const precoFinalComDesconto = Number(getItemPrice(item));
+        const precoFinalLiquido = calculateItemNetValue(precoFinalComDesconto);
+
 
         // Criar inserts para cada quantidade
         for (let q = 0; q < item.quantity; q++) {
@@ -388,8 +415,12 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             service: isPackageRedemption ? `${item.name} (Combo)` : String(item.name),
             barber: selectedBarber,
             date: today,
+            barber_id: barberId,
             time: time,
-            price: precoFinal,
+            // ✅ VALOR BRUTO ORIGINAL (Para o riscado do histórico)
+            original_price: precoDeTabela,
+            // ✅ VALOR LÍQUIDO FINAL (O que entra no caixa)
+            price: precoFinalLiquido,
             payment_method: methodsUsed,
             status: 'confirmado',
             customer_phone: finalPhone,
@@ -397,7 +428,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             tip_amount: 0
           });
         }
-
         // Preparar atualização de estoque (se for produto)
         if (item.type === 'produto') {
           const produtoAtual = localInventory.find(p => p.id === item.originalId);
@@ -413,7 +443,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         if (isPackageRedemption && activePkg) {
           packageUpdates.push({
             id: activePkg.id,
-            newCredits: Number(activePkg.used_credits) + item.quantity
+            newCredits: Number(activePkg.used_credits) + item.quantity // Aqui ele vira 1, 2, 3...
           });
         }
       }
@@ -467,6 +497,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           }
         }
       }
+
 
       // ====== ATUALIZAR CRÉDITOS DO COMBO ======
       if (packageUpdates.length > 0) {
@@ -555,7 +586,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             .delete()
             .in('id', itemsInserted);
 
-          console.log('✅ Rollback concluído');
         } catch (rollbackErr) {
           console.error('❌ Erro no rollback:', rollbackErr);
         }
@@ -942,23 +972,30 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
               })}
             </div>
 
-            {/* Resumo de Valores */}
-            <div className="bg-black/60 p-6 rounded-[2rem] border border-white/5">
-              <div className="flex justify-between text-[9px] text-slate-500 uppercase font-black mb-1">
-                <span>Bruto: R$ {valorTotalAbsoluto.toFixed(2)}</span>
+            {/* Resumo de Valores Corrigido */}
+            <div className="bg-black/60 p-6 rounded-[2rem] border border-white/5 space-y-2">
+              <div className="flex justify-between text-[9px] text-slate-500 uppercase font-black">
+                <span>Preço de Tabela: R$ {valorTotalAbsoluto.toFixed(2)}</span>
+                {descontoNominal > 0.01 && (
+                  <span className="text-amber-500">
+                    Desconto: - R$ {descontoNominal.toFixed(2)}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex justify-between text-[9px] text-slate-500 uppercase font-black border-t border-white/5 pt-2">
+                <span>Recebido (Bruto): R$ {totalPagoInput.toFixed(2)}</span>
                 <span className="text-red-400">
-                  Taxas: R$ {(valorTotalAbsoluto - netValue).toFixed(2)}
+                  Taxas Cartão: - R$ {taxasCartao.toFixed(2)}
                 </span>
               </div>
-              <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Valor Líquido</p>
-              <h3 className="text-4xl font-black text-white italic tabular-nums leading-none">
-                R$ {netValue.toFixed(2)}
-              </h3>
-              {totalPagoInput >= (valorTotalAbsoluto - 0.01) && valorTotalAbsoluto > 0 && (
-                <p className="text-[8px] font-black uppercase mt-2 italic text-green-500">
-                  ✓ PAGAMENTO OK
-                </p>
-              )}
+
+              <div className="pt-2">
+                <p className="text-[9px] font-black text-slate-500 uppercase mb-1">Valor Líquido (Caixa)</p>
+                <h3 className="text-4xl font-black text-white italic tabular-nums leading-none">
+                  R$ {netValue.toFixed(2)}
+                </h3>
+              </div>
             </div>
 
             {/* Botão Finalizar */}
