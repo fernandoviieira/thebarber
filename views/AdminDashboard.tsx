@@ -11,7 +11,9 @@ import CheckoutModule from './CheckoutModule';
 import DatePicker from 'react-datepicker';
 import SalesHistoryModule from './SalesHistoryModule';
 import ExpensesModule from './ExpensesModule';
+import SubscriptionPage from './SubscriptionPage';
 import 'react-datepicker/dist/react-datepicker.css';
+import confetti from 'canvas-confetti';
 import { ptBR } from 'date-fns/locale';
 import {
   Users,
@@ -21,6 +23,7 @@ import {
   Calendar as CalendarIcon,
   Clock,
   X,
+  ShieldCheck,
   CheckCircle2,
   BrainCircuit,
   Package,
@@ -34,11 +37,15 @@ import {
   Activity,
   Menu,
   MinusCircle,
-  AlertCircle
+  AlertCircle,
+  Lock,
+  XCircle
 } from 'lucide-react';
 
 interface AdminDashboardProps {
   barbershopId: string | null;
+  subscriptionStatus?: string;
+  userEmail?: string;
 }
 
 type ActiveTab =
@@ -51,7 +58,8 @@ type ActiveTab =
   | 'comissoes'
   | 'historico'
   | 'caixa'
-  | 'despesas';
+  | 'despesas'
+  | 'billing';
 
 type MachineFees = {
   dinheiro: number;
@@ -78,9 +86,9 @@ type Appointment = {
   customerName: string;
   service: string;
   price: number | string;
-  original_price?: number | string | null; // ✅ ADICIONE ESTA LINHA
+  original_price?: number | string | null;
   payment_method?: string | null;
-  venda_id?: string | null; // Garante que o agrupamento funcione bem
+  venda_id?: string | null;
 };
 
 type Expense = {
@@ -102,7 +110,6 @@ type PaymentMethod = typeof PAYMENT_METHODS[number];
 const parseDateSafe = (dateStr: string | null | undefined): Date | null => {
   if (!dateStr) return null;
   try {
-    // Força UTC para evitar problemas de timezone
     const date = new Date(dateStr + 'T00:00:00.000Z');
     return isNaN(date.getTime()) ? null : date;
   } catch {
@@ -124,32 +131,41 @@ const normalizePaymentMethod = (method: string | null | undefined): PaymentMetho
     : 'dinheiro';
 };
 
+// ✅ COMPONENTE: SidebarItem com suporte a disabled
 const SidebarItem = ({
   icon,
   label,
   active,
-  onClick
+  onClick,
+  disabled = false
 }: {
   icon: React.ReactNode;
   label: string;
   active: boolean;
   onClick: () => void;
+  disabled?: boolean;
 }) => (
   <button
     onClick={onClick}
-    className={`w-full flex items-center gap-3 lg:gap-4 px-4 lg:px-6 py-3.5 lg:py-4 transition-all relative group min-h-[44px] ${active ? 'text-amber-500 bg-amber-500/5' : 'text-slate-500 hover:text-slate-300'
-      }`}
+    disabled={disabled}
+    className={`w-full flex items-center gap-3 lg:gap-4 px-4 lg:px-6 py-3.5 lg:py-4 transition-all relative group min-h-[44px]
+      ${disabled ? 'opacity-40 cursor-not-allowed' : ''}
+      ${active ? 'text-amber-500 bg-amber-500/5' : 'text-slate-500 hover:text-slate-300'}
+    `}
     aria-current={active ? 'page' : undefined}
   >
-    {active && (
+    {active && !disabled && (
       <div className="absolute left-0 w-1 h-6 lg:h-8 bg-amber-500 rounded-r-full shadow-[0_0_15px_rgba(245,158,11,0.5)]" />
     )}
-    <div className={`${active ? 'scale-110' : 'group-hover:scale-110'} transition-transform flex-shrink-0`}>
+    <div className={`${active && !disabled ? 'scale-110' : disabled ? '' : 'group-hover:scale-110'} transition-transform flex-shrink-0`}>
       {icon}
     </div>
     <span className="text-[10px] lg:text-[11px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em] text-left">
       {label}
     </span>
+    {disabled && (
+      <Lock size={14} className="ml-auto text-red-400 flex-shrink-0" />
+    )}
   </button>
 );
 
@@ -164,7 +180,98 @@ const ErrorToast = ({ message, onClose }: { message: string; onClose: () => void
   </div>
 );
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
+// ✅ NOVO COMPONENTE: Dashboard Bloqueado
+const BlockedDashboard = ({ onActivate, barbershopName, expiresAt }: { 
+  onActivate: () => void;
+  barbershopName: string;
+  expiresAt: string | null;
+}) => {
+  const expirationDate = expiresAt ? new Date(expiresAt).toLocaleDateString('pt-BR') : 'não definida';
+  
+  return (
+    <div className="min-h-[70vh] flex items-center justify-center px-4 animate-in fade-in duration-700">
+      <div className="max-w-2xl w-full">
+        {/* Card Principal */}
+        <div className="bg-gradient-to-br from-red-950/50 to-red-900/30 border-2 border-red-500/30 rounded-[3rem] p-8 lg:p-12 shadow-2xl relative overflow-hidden">
+          {/* Efeito de fundo animado */}
+          <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent animate-pulse" />
+          
+          {/* Ícone principal */}
+          <div className="relative z-10 flex flex-col items-center text-center space-y-6">
+            <div className="bg-red-500/20 p-6 rounded-full border-4 border-red-500/40 animate-bounce">
+              <XCircle size={64} className="text-red-400" strokeWidth={2.5} />
+            </div>
+
+            {/* Título */}
+            <div className="space-y-2">
+              <h2 className="text-3xl lg:text-5xl font-black text-white uppercase italic tracking-tighter leading-none">
+                Sistema <span className="text-red-500">Bloqueado</span>
+              </h2>
+              <p className="text-sm lg:text-base font-bold text-red-300 uppercase tracking-wider">
+                Licença Expirada
+              </p>
+            </div>
+
+            {/* Mensagem */}
+            <div className="bg-black/30 backdrop-blur-sm rounded-2xl p-6 border border-red-500/20 space-y-4">
+              <p className="text-slate-300 text-sm lg:text-base font-bold leading-relaxed">
+                A licença da unidade <span className="text-white font-black">{barbershopName}</span> expirou em{' '}
+                <span className="text-red-400 font-black">{expirationDate}</span>.
+              </p>
+              
+              <div className="flex items-start gap-3 bg-red-500/10 p-4 rounded-xl border border-red-500/20">
+                <AlertCircle size={20} className="text-red-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs lg:text-sm text-slate-400 font-bold text-left">
+                  Para reativar o acesso completo ao sistema, clique no botão abaixo e renove seu plano.
+                </p>
+              </div>
+            </div>
+
+            {/* Botão de ação */}
+            <button
+              onClick={onActivate}
+              className="w-full mt-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-12 py-5 rounded-2xl font-black uppercase text-sm lg:text-base tracking-widest transition-all hover:scale-105 shadow-2xl shadow-red-500/30 flex items-center justify-center gap-3 group"
+            >
+              <ShieldCheck size={24} className="group-hover:rotate-12 transition-transform" />
+              Renovar Licença Agora
+              <ShieldCheck size={24} className="group-hover:-rotate-12 transition-transform" />
+            </button>
+
+            {/* Informações adicionais */}
+            <div className="pt-6 border-t border-white/10">
+              <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
+                Dúvidas? Entre em contato com o suporte
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Cards de recursos bloqueados */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mt-6">
+          {[
+            { icon: <CalendarDays size={18} />, label: 'Agendamentos' },
+            { icon: <DollarSign size={18} />, label: 'Comissões' },
+            { icon: <Users size={18} />, label: 'Clientes' },
+            { icon: <Package size={18} />, label: 'Estoque' }
+          ].map((item, index) => (
+            <div
+              key={index}
+              className="bg-slate-900/40 border border-red-500/20 rounded-xl p-4 flex flex-col items-center gap-2 opacity-50"
+            >
+              <div className="text-red-400">{item.icon}</div>
+              <span className="text-[9px] lg:text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">
+                {item.label}
+              </span>
+              <Lock size={12} className="text-red-500" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscriptionStatus, userEmail }) => {
   const { appointments, addAppointment, deleteAppointment, fetchAppointments, loading: bookingLoading } = useBooking();
 
   const [barbers, setBarbers] = useState<Barber[]>([]);
@@ -172,6 +279,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const [inventory, setInventory] = useState<any[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [allCustomers, setAllCustomers] = useState<any[]>([]);
+  const [dbSubscriptionStatus, setDbSubscriptionStatus] = useState<string | undefined>(subscriptionStatus);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+
+  const [isBlocked, setIsBlocked] = useState(false);
 
   const [loadingData, setLoadingData] = useState(true);
   const [customCommissions, setCustomCommissions] = useState<Record<string, number>>({});
@@ -183,7 +296,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  // ✅ ESTADO: error handling
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [machineFees, setMachineFees] = useState<MachineFees>({
@@ -199,8 +311,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
   const [barbershopName, setBarbershopName] = useState('');
 
-
-
   const refetchAppointments = useCallback(async () => {
     if (!barbershopId || !fetchAppointments) return;
     try {
@@ -210,8 +320,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
       setErrorMessage('Erro ao carregar agendamentos. Tente novamente.');
       setTimeout(() => setErrorMessage(null), 5000);
     }
-  }, [barbershopId, fetchAppointments]); // OK manter aqui
-
+  }, [barbershopId, fetchAppointments]);
 
   const fetchExpenses = useCallback(async () => {
     if (!barbershopId) return;
@@ -224,11 +333,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
       setErrorMessage('Erro ao carregar despesas.');
       setTimeout(() => setErrorMessage(null), 5000);
     }
-  }, [barbershopId]); // ✅ Apenas barbershopId
+  }, [barbershopId]);
 
-
-  // ✅ CÓDIGO CORRIGIDO
-  // ✅ FUNÇÃO REUTILIZÁVEL: Agora você pode chamar fetchData() a qualquer momento!
   const fetchData = useCallback(async () => {
     if (!barbershopId) {
       setLoadingData(false);
@@ -238,7 +344,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     setLoadingData(true);
 
     try {
-      // Busca agendamentos em paralelo
       if (fetchAppointments) {
         fetchAppointments(barbershopId).catch(err =>
           console.error('❌ Erro ao buscar appointments:', err)
@@ -259,15 +364,42 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
         supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
         supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
         supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name'),
-        supabase.from('barbershops').select('name').eq('id', barbershopId).single(),
+        supabase.from('barbershops').select('name, subscription_status, expires_at, trial_ends_at, current_plan').eq('id', barbershopId).single(),
         supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
-
-        // Adiciona um filtro de "não nulo" apenas para forçar a query a ser nova
       ]);
 
-      // Processar dados e atualizar estados
       if (expensesRes.data) setAllExpenses(expensesRes.data as Expense[]);
-      if (shopRes.data?.name) setBarbershopName(shopRes.data.name);
+      
+      if (shopRes.data) {
+        setBarbershopName(shopRes.data.name);
+        setDbSubscriptionStatus(shopRes.data.subscription_status);
+        setExpiresAt(shopRes.data.expires_at);
+        setTrialEndsAt(shopRes.data.trial_ends_at);
+        setCurrentPlan(shopRes.data.current_plan);
+
+        // ✅ LÓGICA DE BLOQUEIO APRIMORADA
+        const status = shopRes.data.subscription_status;
+        const expiresAtDate = shopRes.data.expires_at;
+        const trialEndsAtDate = shopRes.data.trial_ends_at;
+
+        const now = new Date();
+        const isTrialActive = trialEndsAtDate && new Date(trialEndsAtDate) > now;
+        const isSubscriptionActive = 
+          status === 'active' && 
+          expiresAtDate && 
+          new Date(expiresAtDate) > now;
+
+        // Bloqueia se não tem trial ativo E não tem assinatura válida
+        const shouldBlock = !isTrialActive && !isSubscriptionActive;
+        
+        setIsBlocked(shouldBlock);
+        
+        // ✅ IMPORTANTE: Se bloqueado, força dashboard (não billing)
+        // O dashboard bloqueado será mostrado
+        if (shouldBlock && activeTab !== 'billing') {
+          setActiveTab('dashboard');
+        }
+      }
 
       if (barbersRes.data) {
         const list = barbersRes.data as Barber[];
@@ -279,8 +411,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
       if (servicesRes.data) setAvailableServices(servicesRes.data);
       if (inventoryRes.data) setInventory(inventoryRes.data);
-
-      // 🎯 AQUI ESTÁ O SEGREDO: Atualiza os créditos do Fernando na memória
       if (customersRes.data) setAllCustomers(customersRes.data);
 
       if (settingsRes.data) {
@@ -299,16 +429,38 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     } finally {
       setLoadingData(false);
     }
-  }, [barbershopId, fetchAppointments]);
+  }, [barbershopId, fetchAppointments, activeTab]);
 
-  // ✅ USEEFFECT AJUSTADO: Garante carga inicial sem loops
   useEffect(() => {
     fetchData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [barbershopId]); // 👈 Foque no ID da barbearia, não na função
+  }, [barbershopId]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
 
-  // ✅ FIX: memoizar barbeiros por ID
+    if (params.get('success') === 'true') {
+      alert("🚀 Pagamento confirmado! Sua unidade agora é PRO. Aproveite todos os recursos!");
+
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#f59e0b', '#ffffff', '#000000']
+      });
+
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+      fetchData();
+    }
+
+    if (params.get('canceled') === 'true') {
+      alert("O checkout foi cancelado. Se precisar de ajuda com o pagamento, fale com o suporte.");
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [fetchData]);
+
   const barbersById = useMemo(() => {
     const map = new Map<string, Barber>();
     barbers.forEach(b => map.set(b.id, b));
@@ -322,7 +474,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     );
   }, [appointments, barbershopId]);
 
-  // ✅ FIX: aprovar/rejeitar com error handling
   const handleApprove = useCallback(
     async (id: string) => {
       try {
@@ -346,10 +497,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
         console.error('Erro ao rejeitar:', error);
       }
     },
-    [refetchAppointments,]
+    [refetchAppointments]
   );
 
-  // ✅ FIX: filtrar appointments com parse seguro de datas
   const filteredApps = useMemo(() => {
     if (!barbershopId || !startDate || !endDate) return [];
 
@@ -371,18 +521,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
   const totalBruto = useMemo(() => {
     return filteredApps
-      .filter(app => app.status === 'confirmado' || app.status === 'finalizado')
+      .filter(app => app.status === 'finalizado')
       .reduce((acc, curr) => {
-        // ✅ Prioriza o valor de tabela (50) em vez do valor pago (40)
         const valorReal = parseNumberSafe(curr.original_price || curr.price);
         return acc + valorReal;
       }, 0);
   }, [filteredApps]);
 
-  // ✅ FIX: cálculo líquido com normalização de método
   const totalLiquidoReal = useMemo(() => {
     return filteredApps
-      .filter(app => app.status === 'confirmado')
+      .filter(app => app.status === 'finalizado')
       .reduce((acc, curr) => {
         const metodo = normalizePaymentMethod(curr.payment_method);
         const taxa = (machineFees[metodo] || 0) / 100;
@@ -390,20 +538,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
       }, 0);
   }, [filteredApps, machineFees]);
 
-  // ✅ FIX: performance de barbeiros usando barber_id
   const barberPerformance = useMemo(() => {
     return barbers
       .map(barber => {
-        // ✅ Usa barber_id se disponível, fallback para nome
         const servicesDone = filteredApps.filter(app => {
-          if (app.status !== 'confirmado') return false;
+          if (app.status !== 'finalizado') return false;
 
-          // Prioriza ID sobre nome
           if (app.barber_id) {
             return app.barber_id === barber.id;
           }
 
-          // Fallback: normaliza nome (legado)
           const appBarberName = (app.barber || '').trim().toLowerCase();
           const barberName = (barber.name || '').trim().toLowerCase();
           return appBarberName === barberName;
@@ -427,7 +571,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
       .sort((a, b) => b.bruto - a.bruto);
   }, [barbers, filteredApps, customCommissions]);
 
-  // ✅ FIX: filtrar despesas com parse seguro
   const filteredExpenses = useMemo(() => {
     if (!barbershopId || !startDate || !endDate) return [];
 
@@ -463,7 +606,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     return totalBruto - totalLiquidoReal + totalComissoes;
   }, [totalBruto, totalLiquidoReal, totalComissoes]);
 
-  // ✅ FIX: Sarah com error handling
   const analyzeWithSarah = useCallback(async () => {
     setIsSarahAnalyzing(true);
     setSarahMessage(null);
@@ -498,6 +640,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   }, [totalBruto, lucroLiquidoRealFinal, barberPerformance]);
 
   const handleTabChange = (tab: ActiveTab) => {
+    if (isBlocked && tab !== 'billing' && tab !== 'dashboard') {
+      setErrorMessage('🔒 Sistema bloqueado. Renove sua licença para continuar.');
+      setTimeout(() => setErrorMessage(null), 5000);
+      return;
+    }
+
     setActiveTab(tab);
     setIsSidebarOpen(false);
   };
@@ -505,6 +653,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const handleFinalizeFromCalendar = (appointment: any) => {
     setPendingCheckoutApp(appointment);
     setActiveTab('lancamento');
+  };
+
+  const SubscriptionBanner = () => {
+    if (isBlocked) return null; 
+    
+    if (dbSubscriptionStatus === 'trialing') {
+      return (
+        <div className="mb-8 bg-amber-500/10 border border-amber-500/20 p-4 lg:p-6 rounded-[2rem] flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top duration-500">
+          <div className="flex items-center gap-4">
+            <div className="bg-amber-500 p-2 rounded-xl text-black">
+              <Clock size={20} />
+            </div>
+            <div>
+              <p className="text-xs lg:text-sm font-black uppercase italic text-white leading-none">
+                Modo de Teste <span className="text-amber-500">Ativado</span>
+              </p>
+              <p className="text-[10px] text-slate-500 uppercase font-bold mt-1">Aproveite todos os recursos Pro por 20 dias.</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setActiveTab('billing')}
+            className="px-6 py-3 bg-amber-500 text-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-105 transition-all shadow-lg shadow-amber-500/20"
+          >
+            Ativar Licença
+          </button>
+        </div>
+      );
+    }
+    return null;
   };
 
   if (!barbershopId) {
@@ -524,7 +701,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     );
   }
 
-
   return (
     <div className="flex min-h-screen bg-[#0f1115] text-slate-300 font-sans overflow-hidden">
       {/* ✅ ERROR TOAST */}
@@ -535,7 +711,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      {/* SIDEBAR */}
+      {/* ✅ SIDEBAR COM ITENS BLOQUEADOS */}
       <aside
         className={`
           fixed lg:relative
@@ -569,21 +745,94 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
           </div>
         </div>
 
+        {/* ✅ MENU COM ITENS BLOQUEADOS */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto custom-scrollbar" role="navigation" aria-label="Menu principal">
-          <SidebarItem icon={<Banknote size={18} />} label="Fluxo de Caixa" active={activeTab === 'caixa'} onClick={() => handleTabChange('caixa')} />
-          <SidebarItem icon={<LayoutDashboard size={18} />} label="Dashboard" active={activeTab === 'dashboard'} onClick={() => handleTabChange('dashboard')} />
-          <SidebarItem icon={<CalendarDays size={18} />} label="Agendamentos" active={activeTab === 'agendamentos'} onClick={() => handleTabChange('agendamentos')} />
-          <SidebarItem icon={<ReceiptText size={18} />} label="Lançar Venda" active={activeTab === 'lancamento'} onClick={() => handleTabChange('lancamento')} />
-          <SidebarItem icon={<DollarSign size={18} />} label="Comissões" active={activeTab === 'comissoes'} onClick={() => handleTabChange('comissoes')} />
-          <SidebarItem icon={<Users size={18} />} label="Clientes" active={activeTab === 'clientes'} onClick={() => handleTabChange('clientes')} />
-          <SidebarItem icon={<Package size={18} />} label="Estoque" active={activeTab === 'estoque'} onClick={() => handleTabChange('estoque')} />
-          <SidebarItem icon={<MinusCircle size={18} />} label="Despesas" active={activeTab === 'despesas'} onClick={() => handleTabChange('despesas')} />
-          <SidebarItem icon={<History size={18} />} label="Histórico" active={activeTab === 'historico'} onClick={() => handleTabChange('historico')} />
-          <SidebarItem icon={<Settings size={18} />} label="Configurações" active={activeTab === 'config'} onClick={() => handleTabChange('config')} />
+          <SidebarItem 
+            icon={<LayoutDashboard size={18} />} 
+            label="Dashboard" 
+            active={activeTab === 'dashboard'} 
+            onClick={() => handleTabChange('dashboard')}
+            disabled={false} // Dashboard sempre acessível (mostra tela de bloqueio)
+          />
+          <SidebarItem 
+            icon={<Banknote size={18} />} 
+            label="Fluxo de Caixa" 
+            active={activeTab === 'caixa'} 
+            onClick={() => handleTabChange('caixa')}
+            disabled={isBlocked}
+          />
+          <SidebarItem 
+            icon={<CalendarDays size={18} />} 
+            label="Agendamentos" 
+            active={activeTab === 'agendamentos'} 
+            onClick={() => handleTabChange('agendamentos')}
+            disabled={isBlocked}
+          />
+          <SidebarItem 
+            icon={<ReceiptText size={18} />} 
+            label="Lançar Venda" 
+            active={activeTab === 'lancamento'} 
+            onClick={() => handleTabChange('lancamento')}
+            disabled={isBlocked}
+          />
+          <SidebarItem 
+            icon={<DollarSign size={18} />} 
+            label="Comissões" 
+            active={activeTab === 'comissoes'} 
+            onClick={() => handleTabChange('comissoes')}
+            disabled={isBlocked}
+          />
+          <SidebarItem 
+            icon={<Users size={18} />} 
+            label="Clientes" 
+            active={activeTab === 'clientes'} 
+            onClick={() => handleTabChange('clientes')}
+            disabled={isBlocked}
+          />
+          <SidebarItem 
+            icon={<Package size={18} />} 
+            label="Estoque" 
+            active={activeTab === 'estoque'} 
+            onClick={() => handleTabChange('estoque')}
+            disabled={isBlocked}
+          />
+          <SidebarItem 
+            icon={<MinusCircle size={18} />} 
+            label="Despesas" 
+            active={activeTab === 'despesas'} 
+            onClick={() => handleTabChange('despesas')}
+            disabled={isBlocked}
+          />
+          <SidebarItem 
+            icon={<History size={18} />} 
+            label="Histórico" 
+            active={activeTab === 'historico'} 
+            onClick={() => handleTabChange('historico')}
+            disabled={isBlocked}
+          />
+          
+          {/* ✅ ABA DE ASSINATURA: SEMPRE HABILITADA COM DESTAQUE */}
+          <div className={`${isBlocked ? 'animate-pulse' : ''}`}>
+            <SidebarItem 
+              icon={<ShieldCheck size={18} className={isBlocked ? "text-red-500" : "text-amber-500"} />} 
+              label={isBlocked ? "🔓 Renovar" : "Assinatura"}
+              active={activeTab === 'billing'} 
+              onClick={() => handleTabChange('billing')}
+              disabled={false}
+            />
+          </div>
+          
+          <SidebarItem 
+            icon={<Settings size={18} />} 
+            label="Configurações" 
+            active={activeTab === 'config'} 
+            onClick={() => handleTabChange('config')}
+            disabled={isBlocked}
+          />
         </nav>
       </aside>
 
-      {/* MAIN */}
+      {/* ✅ MAIN CONTENT */}
       <main className="flex-1 overflow-y-auto relative bg-[#0f1115] custom-scrollbar w-full">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
           {/* HAMBURGUER */}
@@ -595,298 +844,325 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
             <Menu size={22} strokeWidth={3} />
           </button>
 
-          {/* HEADER HISTÓRICO */}
-          {activeTab === 'historico' && (
-            <header className="border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
-              <h2 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
-                Livro de <span className="text-amber-500">Caixa</span>
-              </h2>
-              <p className="text-[9px] lg:text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] lg:tracking-[0.3em] mt-2">
-                Relatório detalhado de todas as transações
-              </p>
-            </header>
-          )}
+          {/* ✅ BANNER DE TRIAL (só se não estiver bloqueado) */}
+          <SubscriptionBanner />
 
-          {/* HEADER DASHBOARD/AGENDA */}
-          {(activeTab === 'dashboard' || activeTab === 'agendamentos') && (
-            <header className="flex flex-col gap-4 lg:gap-6 border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
-              <div className="space-y-2 lg:space-y-3">
-                <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 w-fit px-2.5 lg:px-4 py-1.5 rounded-full border border-amber-500/20">
-                  <Activity size={12} className="animate-pulse flex-shrink-0" />
-                  <span className="text-[8px] lg:text-[10px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em]">
-                    Visão Geral
-                  </span>
-                </div>
-
-                <h2 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
-                  {activeTab === 'dashboard' ? 'Performance' : 'Agenda'}{' '}
-                  <span className="text-amber-500">{activeTab === 'dashboard' ? 'Center' : 'Geral'}</span>
-                </h2>
-              </div>
-
-              {activeTab === 'dashboard' && (
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 lg:gap-4">
-                  <button
-                    onClick={analyzeWithSarah}
-                    disabled={isSarahAnalyzing}
-                    className="bg-slate-900 border border-white/5 p-3 lg:p-4 rounded-xl lg:rounded-2xl hover:border-amber-500/50 shadow-xl transition-all flex items-center justify-center min-h-[48px] disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label="Analisar com IA"
-                  >
-                    {isSarahAnalyzing ? (
-                      <Loader2 className="animate-spin text-amber-500" size={18} />
-                    ) : (
-                      <BrainCircuit className="text-amber-500" size={18} />
-                    )}
-                  </button>
-
-                  <div className="bg-slate-900 border border-white/10 p-3 lg:p-4 rounded-xl lg:rounded-2xl flex items-center gap-2 lg:gap-4 shadow-xl hover:border-amber-500/30 transition-all relative min-h-[48px]">
-                    <CalendarIcon size={14} className="text-amber-500 flex-shrink-0" />
-                    <DatePicker
-                      selectsRange
-                      startDate={startDate}
-                      endDate={endDate}
-                      onChange={(update) => setDateRange(update)}
-                      locale={ptBR}
-                      dateFormat="dd/MM/yyyy"
-                      className="bg-transparent text-white text-xs sm:text-sm font-bold outline-none cursor-pointer w-full min-w-0"
-                      placeholderText="Selecione o período"
-                      popperPlacement="bottom-start"
-                      popperModifiers={[
-                        { name: 'preventOverflow', options: { boundary: 'viewport', padding: 8 } }
-                      ]}
-                      ariaLabelledBy="date-range-label"
-                    />
-                  </div>
-                </div>
-              )}
-            </header>
-          )}
-
-          {/* DASHBOARD */}
-          {activeTab === 'dashboard' && (
-            <div className="space-y-6 lg:space-y-12 animate-in fade-in duration-700">
-              {pendingApps.length > 0 && (
-                <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl lg:rounded-2xl xl:rounded-[3rem] p-4 lg:p-8">
-                  <div className="flex items-center gap-2 lg:gap-3 mb-4 lg:mb-6 flex-wrap">
-                    <Clock className="text-amber-500 flex-shrink-0" size={16} />
-                    <h4 className="text-base lg:text-xl font-black text-white uppercase italic tracking-tighter">
-                      Solicitações <span className="text-amber-500">Pendentes</span>
-                    </h4>
-                    <span className="bg-amber-500 text-black text-[9px] lg:text-[10px] font-black px-2 py-0.5 rounded-full animate-bounce">
-                      {pendingApps.length}
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-3 lg:gap-4">
-                    {pendingApps.map(app => {
-                      const appDate = parseDateSafe(app.date);
-                      const dateStr = appDate ? appDate.toLocaleDateString('pt-BR') : 'Data inválida';
-
-                      return (
-                        <div
-                          key={app.id}
-                          className="bg-slate-900/60 border border-white/5 p-4 lg:p-5 rounded-xl lg:rounded-[2rem] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 lg:gap-4 group hover:border-amber-500/30 transition-all"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-amber-500 font-black text-[9px] lg:text-[10px] uppercase mb-1 truncate">
-                              {app.time} - {dateStr}
-                            </p>
-                            <h5 className="text-white font-black uppercase italic text-sm lg:text-base truncate">
-                              {app.customerName}
-                            </h5>
-                            <p className="text-[8px] lg:text-[9px] text-slate-500 font-bold uppercase tracking-widest truncate">
-                              {app.service} com {app.barber}
-                            </p>
-                          </div>
-
-                          <div className="flex gap-2 w-full sm:w-auto">
-                            <button
-                              onClick={() => handleReject(app.id)}
-                              className="flex-1 sm:flex-none p-2.5 lg:p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all min-h-[44px] flex items-center justify-center"
-                              aria-label="Rejeitar agendamento"
-                            >
-                              <X size={18} />
-                            </button>
-                            <button
-                              onClick={() => handleApprove(app.id)}
-                              className="flex-1 sm:flex-none p-2.5 lg:p-3 rounded-xl bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white transition-all shadow-lg shadow-green-500/10 min-h-[44px] flex items-center justify-center"
-                              aria-label="Aprovar agendamento"
-                            >
-                              <CheckCircle2 size={18} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+          {/* ✅ RENDERIZAÇÃO CONDICIONAL BASEADA EM BLOQUEIO */}
+          {isBlocked && activeTab === 'dashboard' ? (
+            // Mostra dashboard de bloqueio
+            <BlockedDashboard 
+              onActivate={() => setActiveTab('billing')}
+              barbershopName={barbershopName}
+              expiresAt={expiresAt}
+            />
+          ) : activeTab === 'billing' ? (
+            // Mostra página de assinatura
+            barbershopId && userEmail && (
+              <SubscriptionPage
+                barbershopId={barbershopId}
+                userEmail={userEmail}
+                subscriptionStatus={dbSubscriptionStatus}
+                expiresAt={expiresAt}
+                currentPlan={currentPlan}
+              />
+            )
+          ) : !isBlocked ? (
+            // ✅ CONTEÚDO NORMAL (só renderiza se NÃO estiver bloqueado)
+            <>
+              {/* HEADER HISTÓRICO */}
+              {activeTab === 'historico' && (
+                <header className="border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
+                  <h2 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
+                    Livro de <span className="text-amber-500">Caixa</span>
+                  </h2>
+                  <p className="text-[9px] lg:text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] lg:tracking-[0.3em] mt-2">
+                    Relatório detalhado de todas as transações
+                  </p>
+                </header>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-8">
-                <StatCard label="Faturamento" value={totalBruto} icon={<DollarSign size={18} />} variant="amber" />
-                <StatCard label="Comissões e taxas" value={custosOperacionais} icon={<CreditCard size={18} />} variant="slate" />
-                <StatCard label="Líquido Real" value={lucroLiquidoRealFinal} icon={<TrendingUp size={18} />} variant="green" />
-                <StatCard label="Despesas" value={totalExpenses} icon={<MinusCircle size={18} />} variant="red" />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-10">
-                <div className="lg:col-span-2 bg-[#0a0b0e] border border-white/5 rounded-xl lg:rounded-2xl xl:rounded-[3rem] p-4 lg:p-10 shadow-2xl">
-                  <div className="flex justify-between items-center mb-4 lg:mb-10">
-                    <h4 className="text-base lg:text-xl font-black text-white uppercase italic tracking-tighter">Ranking de Performance</h4>
-                    <TrendingUp className="text-amber-500 flex-shrink-0" size={18} />
-                  </div>
-
-                  <div className="space-y-4 lg:space-y-8">
-                    {barberPerformance.map(b => (
-                      <div key={b.id}>
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-1 lg:gap-2 mb-2 lg:mb-3">
-                          <span className="text-[10px] lg:text-[12px] font-black text-white uppercase tracking-widest truncate max-w-full">
-                            {b.name} <span className="text-slate-600 ml-1 lg:ml-2 font-bold">({b.count} Atendimentos)</span>
-                          </span>
-                          <span className="text-sm lg:text-lg font-black text-amber-500 italic tabular-nums flex-shrink-0">
-                            R$ {b.bruto.toFixed(2)}
-                          </span>
-                        </div>
-
-                        <div className="h-1.5 lg:h-2 w-full bg-white/5 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-amber-500 rounded-full transition-all duration-1000 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
-                            style={{ width: `${totalBruto > 0 ? (b.bruto / totalBruto) * 100 : 0}%` }}
-                          />
-                        </div>
-                      </div>
-                    ))}
-
-                    {barberPerformance.length === 0 && (
-                      <p className="text-slate-500 text-sm text-center py-8">Nenhum dado disponível no período selecionado.</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl lg:rounded-2xl xl:rounded-[3rem] p-4 lg:p-10 flex flex-col justify-between shadow-2xl">
-                  <div>
-                    <div className="flex items-center gap-2 lg:gap-3 mb-4 lg:mb-8 text-amber-500">
-                      <BrainCircuit size={20} className="flex-shrink-0" />
-                      <h4 className="text-base lg:text-xl font-black uppercase italic tracking-tighter leading-none">Sarah Insights</h4>
+              {/* HEADER DASHBOARD/AGENDA */}
+              {(activeTab === 'dashboard' || activeTab === 'agendamentos') && (
+                <header className="flex flex-col gap-4 lg:gap-6 border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
+                  <div className="space-y-2 lg:space-y-3">
+                    <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 w-fit px-2.5 lg:px-4 py-1.5 rounded-full border border-amber-500/20">
+                      <Activity size={12} className="animate-pulse flex-shrink-0" />
+                      <span className="text-[8px] lg:text-[10px] font-black uppercase tracking-[0.15em] lg:tracking-[0.2em]">
+                        Visão Geral
+                      </span>
                     </div>
-                    <p className="text-xs lg:text-[14px] font-bold text-white leading-relaxed break-words">
-                      {sarahMessage || 'Clique no botão abaixo para analisar a performance.'}
-                    </p>
+
+                    <h2 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
+                      {activeTab === 'dashboard' ? 'Performance' : 'Agenda'}{' '}
+                      <span className="text-amber-500">{activeTab === 'dashboard' ? 'Center' : 'Geral'}</span>
+                    </h2>
                   </div>
 
-                  <button
-                    onClick={analyzeWithSarah}
-                    disabled={isSarahAnalyzing}
-                    className="w-full mt-4 lg:mt-10 bg-amber-500 text-black py-3.5 lg:py-5 rounded-xl lg:rounded-2xl font-black uppercase text-[10px] lg:text-[11px] tracking-widest hover:scale-105 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px] flex items-center justify-center"
-                  >
-                    {isSarahAnalyzing ? 'Analisando...' : 'Atualizar Insights'}
-                  </button>
+                  {activeTab === 'dashboard' && (
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 lg:gap-4">
+                      <button
+                        onClick={analyzeWithSarah}
+                        disabled={isSarahAnalyzing}
+                        className="bg-slate-900 border border-white/5 p-3 lg:p-4 rounded-xl lg:rounded-2xl hover:border-amber-500/50 shadow-xl transition-all flex items-center justify-center min-h-[48px] disabled:opacity-50 disabled:cursor-not-allowed"
+                        aria-label="Analisar com IA"
+                      >
+                        {isSarahAnalyzing ? (
+                          <Loader2 className="animate-spin text-amber-500" size={18} />
+                        ) : (
+                          <BrainCircuit className="text-amber-500" size={18} />
+                        )}
+                      </button>
+
+                      <div className="bg-slate-900 border border-white/10 p-3 lg:p-4 rounded-xl lg:rounded-2xl flex items-center gap-2 lg:gap-4 shadow-xl hover:border-amber-500/30 transition-all relative min-h-[48px]">
+                        <CalendarIcon size={14} className="text-amber-500 flex-shrink-0" />
+                        <DatePicker
+                          selectsRange
+                          startDate={startDate}
+                          endDate={endDate}
+                          onChange={(update) => setDateRange(update)}
+                          locale={ptBR}
+                          dateFormat="dd/MM/yyyy"
+                          className="bg-transparent text-white text-xs sm:text-sm font-bold outline-none cursor-pointer w-full min-w-0"
+                          placeholderText="Selecione o período"
+                          popperPlacement="bottom-start"
+                          popperModifiers={[
+                            { name: 'preventOverflow', options: { boundary: 'viewport', padding: 8 } }
+                          ]}
+                          ariaLabelledBy="date-range-label"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </header>
+              )}
+
+              {/* DASHBOARD */}
+              {activeTab === 'dashboard' && (
+                <div className="space-y-6 lg:space-y-12 animate-in fade-in duration-700">
+                  {pendingApps.length > 0 && (
+                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl lg:rounded-2xl xl:rounded-[3rem] p-4 lg:p-8">
+                      <div className="flex items-center gap-2 lg:gap-3 mb-4 lg:mb-6 flex-wrap">
+                        <Clock className="text-amber-500 flex-shrink-0" size={16} />
+                        <h4 className="text-base lg:text-xl font-black text-white uppercase italic tracking-tighter">
+                          Solicitações <span className="text-amber-500">Pendentes</span>
+                        </h4>
+                        <span className="bg-amber-500 text-black text-[9px] lg:text-[10px] font-black px-2 py-0.5 rounded-full animate-bounce">
+                          {pendingApps.length}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 lg:gap-4">
+                        {pendingApps.map(app => {
+                          const appDate = parseDateSafe(app.date);
+                          const dateStr = appDate ? appDate.toLocaleDateString('pt-BR') : 'Data inválida';
+
+                          return (
+                            <div
+                              key={app.id}
+                              className="bg-slate-900/60 border border-white/5 p-4 lg:p-5 rounded-xl lg:rounded-[2rem] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 lg:gap-4 group hover:border-amber-500/30 transition-all"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-amber-500 font-black text-[9px] lg:text-[10px] uppercase mb-1 truncate">
+                                  {app.time} - {dateStr}
+                                </p>
+                                <h5 className="text-white font-black uppercase italic text-sm lg:text-base truncate">
+                                  {app.customerName}
+                                </h5>
+                                <p className="text-[8px] lg:text-[9px] text-slate-500 font-bold uppercase tracking-widest truncate">
+                                  {app.service} com {app.barber}
+                                </p>
+                              </div>
+
+                              <div className="flex gap-2 w-full sm:w-auto">
+                                <button
+                                  onClick={() => handleReject(app.id)}
+                                  className="flex-1 sm:flex-none p-2.5 lg:p-3 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all min-h-[44px] flex items-center justify-center"
+                                  aria-label="Rejeitar agendamento"
+                                >
+                                  <X size={18} />
+                                </button>
+                                <button
+                                  onClick={() => handleApprove(app.id)}
+                                  className="flex-1 sm:flex-none p-2.5 lg:p-3 rounded-xl bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white transition-all shadow-lg shadow-green-500/10 min-h-[44px] flex items-center justify-center"
+                                  aria-label="Aprovar agendamento"
+                                >
+                                  <CheckCircle2 size={18} />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-8">
+                    <StatCard label="Faturamento" value={totalBruto} icon={<DollarSign size={18} />} variant="amber" />
+                    <StatCard label="Comissões e taxas" value={custosOperacionais} icon={<CreditCard size={18} />} variant="slate" />
+                    <StatCard label="Líquido Real" value={lucroLiquidoRealFinal} icon={<TrendingUp size={18} />} variant="green" />
+                    <StatCard label="Despesas" value={totalExpenses} icon={<MinusCircle size={18} />} variant="red" />
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-10">
+                    <div className="lg:col-span-2 bg-[#0a0b0e] border border-white/5 rounded-xl lg:rounded-2xl xl:rounded-[3rem] p-4 lg:p-10 shadow-2xl">
+                      <div className="flex justify-between items-center mb-4 lg:mb-10">
+                        <h4 className="text-base lg:text-xl font-black text-white uppercase italic tracking-tighter">Ranking de Performance</h4>
+                        <TrendingUp className="text-amber-500 flex-shrink-0" size={18} />
+                      </div>
+
+                      <div className="space-y-4 lg:space-y-8">
+                        {barberPerformance.map(b => (
+                          <div key={b.id}>
+                            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-1 lg:gap-2 mb-2 lg:mb-3">
+                              <span className="text-[10px] lg:text-[12px] font-black text-white uppercase tracking-widest truncate max-w-full">
+                                {b.name} <span className="text-slate-600 ml-1 lg:ml-2 font-bold">({b.count} Atendimentos)</span>
+                              </span>
+                              <span className="text-sm lg:text-lg font-black text-amber-500 italic tabular-nums flex-shrink-0">
+                                R$ {b.bruto.toFixed(2)}
+                              </span>
+                            </div>
+
+                            <div className="h-1.5 lg:h-2 w-full bg-white/5 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-amber-500 rounded-full transition-all duration-1000 shadow-[0_0_15px_rgba(245,158,11,0.4)]"
+                                style={{ width: `${totalBruto > 0 ? (b.bruto / totalBruto) * 100 : 0}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+
+                        {barberPerformance.length === 0 && (
+                          <p className="text-slate-500 text-sm text-center py-8">Nenhum dado disponível no período selecionado.</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl lg:rounded-2xl xl:rounded-[3rem] p-4 lg:p-10 flex flex-col justify-between shadow-2xl">
+                      <div>
+                        <div className="flex items-center gap-2 lg:gap-3 mb-4 lg:mb-8 text-amber-500">
+                          <BrainCircuit size={20} className="flex-shrink-0" />
+                          <h4 className="text-base lg:text-xl font-black uppercase italic tracking-tighter leading-none">Sarah Insights</h4>
+                        </div>
+                        <p className="text-xs lg:text-[14px] font-bold text-white leading-relaxed break-words">
+                          {sarahMessage || 'Clique no botão abaixo para analisar a performance.'}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={analyzeWithSarah}
+                        disabled={isSarahAnalyzing}
+                        className="w-full mt-4 lg:mt-10 bg-amber-500 text-black py-3.5 lg:py-5 rounded-xl lg:rounded-2xl font-black uppercase text-[10px] lg:text-[11px] tracking-widest hover:scale-105 transition-all shadow-xl disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px] flex items-center justify-center"
+                      >
+                        {isSarahAnalyzing ? 'Analisando...' : 'Atualizar Insights'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
+              )}
 
-          {activeTab === 'lancamento' && (
-            <CheckoutModule
-              barbershopId={barbershopId}
-              barbers={barbers}
-              services={availableServices}
-              inventory={inventory}
-              customers={allCustomers}
-              machineFees={machineFees}
-              initialAppointment={pendingCheckoutApp}
-              onSuccess={async () => {
-                await refetchAppointments();
-                await fetchData();
-                setPendingCheckoutApp(null);
-              }}
-            />
-          )}
-
-          {activeTab === 'historico' && (
-            <SalesHistoryModule
-              appointments={(appointments as Appointment[]).filter(app => app.barbershop_id === barbershopId)}
-              onDelete={async (id: string) => {
-                try {
-                  if (confirm('Deseja estornar esta venda? Isso removerá o valor do faturamento.')) {
-                    await deleteAppointment(id);
+              {activeTab === 'lancamento' && (
+                <CheckoutModule
+                  barbershopId={barbershopId}
+                  barbers={barbers}
+                  services={availableServices}
+                  inventory={inventory}
+                  customers={allCustomers}
+                  machineFees={machineFees}
+                  initialAppointment={pendingCheckoutApp}
+                  onSuccess={async () => {
                     await refetchAppointments();
-                  }
-                } catch (error) {
-                  console.error('Erro ao deletar:', error);
-                }
-              }}
-            />
-          )}
+                    await fetchData();
+                    setPendingCheckoutApp(null);
+                  }}
+                />
+              )}
 
-          {activeTab === 'agendamentos' && (
-            <div className="space-y-4 lg:space-y-8 animate-in fade-in duration-700">
-              <AdminCalendarView
-                barbers={barbers}
-                appointments={(appointments as Appointment[]).filter(app => app.barbershop_id === barbershopId)}
-                services={availableServices}
-                barbershopId={barbershopId}
-                onFinalize={handleFinalizeFromCalendar}
-                onSave={async (newBooking: any) => {
-                  try {
-                    await addAppointment(newBooking);
-                    await refetchAppointments();
-                  } catch (error) {
-                    console.error('Erro ao criar agendamento:', error);
-                  }
-                }}
-                onDelete={async (id: string) => {
-                  try {
-                    await deleteAppointment(id);
-                    await refetchAppointments();
-                  } catch (error) {
-                    console.error('Erro ao deletar agendamento:', error);
-                  }
-                }}
-                onUpdate={async (id: string, updates: any) => {
-                  try {
-                    const { error } = await supabase.from('appointments').update(updates).eq('id', id);
-                    if (error) throw error;
-                    await refetchAppointments();
-                  } catch (error) {
-                    console.error('Erro ao atualizar agendamento:', error);
-                  }
-                }}
-              />
-            </div>
-          )}
+              {activeTab === 'historico' && (
+                <SalesHistoryModule
+                  appointments={(appointments as Appointment[]).filter(app => app.barbershop_id === barbershopId)}
+                  onDelete={async (id: string) => {
+                    try {
+                      if (confirm('Deseja estornar esta venda? Isso removerá o valor do faturamento.')) {
+                        await deleteAppointment(id);
+                        await refetchAppointments();
+                      }
+                    } catch (error) {
+                      console.error('Erro ao deletar:', error);
+                    }
+                  }}
+                />
+              )}
 
-          {activeTab === 'caixa' && (
-            <CashFlowModule
-              barbershopId={barbershopId}
-              appointments={(appointments as Appointment[]).filter(app => app.barbershop_id === barbershopId)}
-            />
-          )}
+              {activeTab === 'agendamentos' && (
+                <div className="space-y-4 lg:space-y-8 animate-in fade-in duration-700">
+                  <AdminCalendarView
+                    barbers={barbers}
+                    appointments={(appointments as Appointment[]).filter(app => app.barbershop_id === barbershopId)}
+                    services={availableServices}
+                    barbershopId={barbershopId}
+                    onFinalize={handleFinalizeFromCalendar}
+                    onSave={async (newBooking: any) => {
+                      try {
+                        await addAppointment(newBooking);
+                        await refetchAppointments();
+                      } catch (error) {
+                        console.error('Erro ao criar agendamento:', error);
+                      }
+                    }}
+                    onDelete={async (id: string) => {
+                      try {
+                        await deleteAppointment(id);
+                        await refetchAppointments();
+                      } catch (error) {
+                        console.error('Erro ao deletar agendamento:', error);
+                      }
+                    }}
+                    onUpdate={async (id: string, updates: any) => {
+                      try {
+                        const { error } = await supabase.from('appointments').update(updates).eq('id', id);
+                        if (error) throw error;
+                        await refetchAppointments();
+                      } catch (error) {
+                        console.error('Erro ao atualizar agendamento:', error);
+                      }
+                    }}
+                  />
+                </div>
+              )}
 
-          {activeTab === 'despesas' && (
-            <div className="space-y-4 lg:space-y-8 animate-in fade-in duration-700">
-              <header className="border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
-                <h2 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
-                  Gestão de <span className="text-red-500">Custos</span>
-                </h2>
-                <p className="text-[9px] lg:text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] lg:tracking-[0.3em] mt-2">
-                  Controle de saídas e despesas fixas/variáveis
-                </p>
-              </header>
+              {activeTab === 'caixa' && (
+                <CashFlowModule
+                  barbershopId={barbershopId}
+                  appointments={(appointments as Appointment[]).filter(app => app.barbershop_id === barbershopId)}
+                />
+              )}
 
-              <ExpensesModule
-                barbershopId={barbershopId}
-                onUpdate={async () => {
-                  await fetchExpenses();
-                }}
-              />
-            </div>
-          )}
+              {activeTab === 'despesas' && (
+                <div className="space-y-4 lg:space-y-8 animate-in fade-in duration-700">
+                  <header className="border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
+                    <h2 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
+                      Gestão de <span className="text-red-500">Custos</span>
+                    </h2>
+                    <p className="text-[9px] lg:text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] lg:tracking-[0.3em] mt-2">
+                      Controle de saídas e despesas fixas/variáveis
+                    </p>
+                  </header>
 
-          {activeTab === 'clientes' && <CustomersModule barbershopId={barbershopId} />}
-          {activeTab === 'comissoes' && <CommissionsModule barbershopId={barbershopId} />}
-          {activeTab === 'estoque' && <InventoryModule barbershopId={barbershopId} />}
-          {activeTab === 'config' && <AdminSettings barbershopId={barbershopId} />}
+                  <ExpensesModule
+                    barbershopId={barbershopId}
+                    onUpdate={async () => {
+                      await fetchExpenses();
+                    }}
+                  />
+                </div>
+              )}
+
+              {activeTab === 'clientes' && <CustomersModule barbershopId={barbershopId} />}
+              {activeTab === 'comissoes' && <CommissionsModule barbershopId={barbershopId} />}
+              {activeTab === 'estoque' && <InventoryModule barbershopId={barbershopId} />}
+              {activeTab === 'config' && <AdminSettings barbershopId={barbershopId} />}
+            </>
+          ) : null}
         </div>
       </main>
     </div>

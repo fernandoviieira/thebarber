@@ -15,20 +15,31 @@ const MyAppointments: React.FC<MyAppointmentsProps> = ({ onBack, customerName, c
 
   const myAppointments = appointments.filter(app => {
     if (isAdmin) return true;
-      const matchUserId = userId && app.user_id === userId;
-      const cleanAppPhone = app.customerPhone?.replace(/\D/g, "");
-      const cleanUserPhone = customerPhone?.replace(/\D/g, "");
-      const matchPhone = cleanUserPhone && cleanAppPhone && cleanAppPhone === cleanUserPhone;
-      const isMatch = matchUserId || matchPhone;
+    const matchUserId = userId && app.user_id === userId;
+    const cleanAppPhone = app.customerPhone?.replace(/\D/g, "");
+    const cleanUserPhone = customerPhone?.replace(/\D/g, "");
+    const matchPhone = cleanUserPhone && cleanAppPhone && cleanAppPhone === cleanUserPhone;
+    const isMatch = matchUserId || matchPhone;
     return isMatch;
   });
 
   const handleCancel = async (id: string) => {
+    const appointment = myAppointments.find(a => a.id === id);
+
+    // Trava de segurança extra no código
+    if (!isAdmin && appointment?.status === 'confirmado') {
+      alert("Agendamentos confirmados não podem ser cancelados pelo app. Entre em contato com a barbearia.");
+      return;
+    }
+
     if (window.confirm("Deseja realmente cancelar este agendamento?")) {
-      await deleteAppointment(id);
+      try {
+        await deleteAppointment(id);
+      } catch (err) {
+        alert("Erro ao cancelar. O agendamento pode já ter sido confirmado.");
+      }
     }
   };
-
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4 text-amber-500 bg-[#08080a] min-h-screen">
@@ -71,8 +82,8 @@ const MyAppointments: React.FC<MyAppointmentsProps> = ({ onBack, customerName, c
               <div className="flex justify-between items-start">
                 <div className="space-y-3">
                   <span className={`text-[9px] px-3 py-1 rounded-full font-black uppercase tracking-widest italic border ${app.status === 'confirmado'
-                      ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
-                      : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
+                    ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20'
+                    : 'bg-amber-500/10 text-amber-500 border-amber-500/20'
                     }`}>
                     {app.status}
                   </span>
@@ -81,16 +92,25 @@ const MyAppointments: React.FC<MyAppointmentsProps> = ({ onBack, customerName, c
                   </h4>
                 </div>
 
-                {(isAdmin || app.status !== 'confirmado') ? (
+                {/* Regra: 
+                  - Admin pode apagar sempre.
+                  - Cliente só apaga se NÃO estiver 'confirmado'. 
+                */}
+                {isAdmin || app.status !== 'confirmado' ? (
                   <button
                     onClick={() => handleCancel(app.id)}
-                    className="p-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-2xl transition-all shadow-lg"
+                    className="p-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-2xl transition-all shadow-lg group"
+                    title="Cancelar Agendamento"
                   >
                     <Trash2 size={24} />
                   </button>
                 ) : (
-                  <div className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl border border-emerald-500/20">
+                  <div
+                    className="p-4 bg-emerald-500/10 text-emerald-500 rounded-2xl border border-emerald-500/20 flex flex-col items-center gap-1"
+                    title="Agendamento Confirmado"
+                  >
                     <CheckCircle2 size={24} />
+                    <span className="text-[8px] font-black uppercase">Confirmado</span>
                   </div>
                 )}
               </div>

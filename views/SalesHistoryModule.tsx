@@ -68,10 +68,7 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
 
   const filteredSales = useMemo(() => {
     const today = startOfDay(new Date());
-
     // 1. LOG DE ENTRADA: O que vem do banco/props
-    console.log("📥 DADOS BRUTOS DO BANCO:", appointments);
-
     const baseFilter = appointments.filter(app => {
       const appDate = startOfDay(new Date(app.date + 'T00:00:00'));
       let matchesDate = true;
@@ -91,7 +88,7 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
         matchesDate = true;
       }
 
-      const matchesStatus = app.status === 'confirmado' || app.status === 'finalizado';
+      const matchesStatus = app.status === 'finalizado';
       const matchesSearch = app.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         app.service?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesBarber = barberFilter === 'todos' || app.barber === barberFilter;
@@ -105,8 +102,6 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
       const groupKey = rawId ? String(rawId).trim() : `unique-${current.id}`;
 
       // 2. LOG DE PROCESSAMENTO: Verificando o campo novo
-      console.log(`🔍 Item ${current.service}: price=${current.price}, original_price=${current.original_price}`);
-
       const valorBrutoDesteItem = Number(current.original_price || current.price);
       const valorPagoDesteItem = Number(current.price);
 
@@ -135,8 +130,6 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
     }, []);
 
     // 3. LOG DE SAÍDA: Resultado final do agrupamento
-    console.log("📤 DADOS AGRUPADOS FINAIS:", grouped);
-
     return grouped.sort((a, b) => new Date(b.date + 'T' + b.time).getTime() - new Date(a.date + 'T' + a.time).getTime());
   }, [appointments, searchTerm, paymentFilter, dateFilter, barberFilter, startDate, endDate]);
   const barbersList = useMemo(() => {
@@ -164,8 +157,6 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
     return { icon: <CardIcon size={14} />, label: methodRaw || 'OUTRO', color: 'text-slate-500', bg: 'bg-white/5' };
   };
 
-
-  console.log('filteredSales', filteredSales)
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-24 md:pb-0 font-bold italic">
 

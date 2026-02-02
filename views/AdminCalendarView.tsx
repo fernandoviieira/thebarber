@@ -141,7 +141,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     // Observação: isso ignora minutos no horário de abertura/fechamento (08:30 etc).
     // Se você precisar disso, eu adapto depois.
     for (let hour = startHour; hour <= endHour; hour++) {
-      for (const min of ['00', '15', '30', '45']) {
+      for (const min of ['00', '30']) { // Alterado para 30 em 30
         if (hour === endHour && min !== '00') break;
         slots.push(`${hour.toString().padStart(2, '0')}:${min}`);
       }
@@ -180,8 +180,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     return (Number.isFinite(parsed) ? parsed : 30) + 5;
   };
 
-  const getOccupiedSlotsCount = (durationWithRespiro: number) => Math.ceil(durationWithRespiro / 15);
-
+  const getOccupiedSlotsCount = (durationWithRespiro: number) => Math.ceil(durationWithRespiro / 30);
   // Índice rápido para achar agendamento que COMEÇA exatamente no slot
   const appointmentsByKey = useMemo(() => {
     const map = new Map<string, Appointment>();
@@ -206,7 +205,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
       const slots = getOccupiedSlotsCount(getServiceDurationWithRespiro(a));
 
       for (let i = 0; i < slots; i++) {
-        const m = startMin + i * 15;
+        const m = startMin + i * 30; // Pula de 30 em 30
         const hh = String(Math.floor(m / 60)).padStart(2, '0');
         const mm = String(m % 60).padStart(2, '0');
         const time = `${hh}:${mm}`;
@@ -444,8 +443,8 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                         onDragStart={(e) => handleDragStart(e, appStartingHere.id, appStartingHere.status)}
                         onClick={() => setSelectedApp(appStartingHere)}
                         style={{
-                          height: `${getOccupiedSlotsCount(getServiceDurationWithRespiro(appStartingHere)) * 62 - 4}px`,
-                          zIndex: 50
+                          // 62 é a altura da linha, mantemos a proporção com os novos slots
+                          height: `${getOccupiedSlotsCount(getServiceDurationWithRespiro(appStartingHere)) * 62 - 4}px`, zIndex: 50
                         }}
                         className={`absolute top-0 left-0 right-0 m-0.5 text-black rounded-lg p-2 shadow-xl flex flex-col transition-all
                           ${isFinalized
@@ -593,8 +592,8 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                   <Clock size={20} className="text-amber-500" />
                   <input
                     type="number"
-                    step={5}
-                    min={5}
+                    step={30} // Sugere pulos de 30
+                    min={30}
                     className="bg-transparent w-full text-white font-bold italic outline-none"
                     value={newBooking.duration}
                     onChange={e => setNewBooking({ ...newBooking, duration: parseInt(e.target.value, 10) || 0 })}

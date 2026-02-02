@@ -8,13 +8,14 @@ import AdminSettings from './views/AdminSettings';
 import CreateBarbershop from './views/CreateBarbershop';
 import MyAppointments from './views/MyAppointments';
 import InstallBanner from './views/InstallBanner';
+import SubscriptionPage from './views/SubscriptionPage';
 
 import Login from './views/Login';
 import { MOCK_USER } from './constants';
 import { supabase } from '@/lib/supabase';
 import { User, LayoutDashboard, Calendar, Settings, Plus, ShieldCheck, LogOut } from 'lucide-react';
 
-type ViewState = 'client' | 'admin' | 'booking' | 'profile' | 'my_appointments' | 'settings' | 'create_barbershop';
+type ViewState = 'client' | 'admin' | 'booking' | 'profile' | 'my_appointments' | 'settings' | 'create_barbershop' | 'subscription_plans';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>('client');
@@ -50,7 +51,7 @@ const App: React.FC = () => {
     // Gerenciamento de Sessão Único
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
-      
+
       if (session) {
         // Só buscamos o perfil se a sessão for nova ou se ainda não temos os dados
         const isNewSession = event === 'SIGNED_IN' || event === 'INITIAL_SESSION';
@@ -72,62 +73,88 @@ const App: React.FC = () => {
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
-        .select('role, full_name, barbershop_id, barbershops:barbershop_id(slug)')
+        .select(`
+        role, 
+        full_name, 
+        barbershop_id, 
+        barbershops:barbershop_id(slug, subscription_status, trial_ends_at, expires_at)
+      `)
         .eq('id', currentSession.user.id)
-        .single();
+        .maybeSingle();
 
-      if (error) throw error;
+      if (error) {
+        console.error("❌ Erro na query do perfil:", error);
+        throw error;
+      }
 
-      if (profile) {
-        const rawSlug = (profile as any).barbershops?.slug || '';
-        const myBarbershopSlug = rawSlug.trim().toLowerCase();
-        const normalizedCurrentPath = (currentPath || '').trim().toLowerCase();
-        const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
+      const normalizedCurrentPath = (currentPath || '').trim().toLowerCase();
+      const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
 
+      // 1. TRATAMENTO PARA NOVO USUÁRIO (Perfil inexistente)
+      if (!profile) {
+        console.warn("⏳ Perfil não encontrado no banco. Pode ser delay da Trigger.");
+        if (allowRedirect && !hasRedirected.current) {
+          // Se estiver no /registrar, mantém a intenção de criar barbearia
+          if (normalizedCurrentPath === 'registrar') {
+            setView('create_barbershop');
+          } else if (urlSlug) {
+            // Se o novo usuário está em um slug, vai para a vitrine
+            setView('client');
+          } else {
+            setView('profile');
+          }
+          hasRedirected.current = true;
+        }
+        return;
+      }
 
-        setUserName(profile.full_name || currentSession.user.email.split('@')[0]);
-        setBarbershopId(profile.barbershop_id);
+      // 2. DADOS DO PERFIL ENCONTRADOS
+      const barbershopData = (profile as any).barbershops;
+      const myBarbershopSlug = (barbershopData?.slug || '').trim().toLowerCase();
 
-        const isUserAdmin = profile.role === 'admin';
+      setUserName(profile.full_name || currentSession.user.email.split('@')[0]);
+      setBarbershopId(profile.barbershop_id);
 
-        if (isUserAdmin) {
-          setIsAdmin(true);
+      const isUserAdmin = profile.role === 'admin';
 
-          const isOwnerOrGeneral = !normalizedCurrentPath ||
-            normalizedCurrentPath === '' ||
-            normalizedCurrentPath === 'admin' ||
-            normalizedCurrentPath === 'registrar' ||
-            normalizedCurrentPath === myBarbershopSlug;
+      if (isUserAdmin) {
+        setIsAdmin(true);
 
-          if (isOwnerOrGeneral) {
-            if (allowRedirect && !hasRedirected.current) {
-              const targetView = profile.barbershop_id ? 'admin' : 'create_barbershop';
-              setView(targetView);
-              hasRedirected.current = true;
+        if (allowRedirect && !hasRedirected.current) {
+          if (profile.barbershop_id) {
+            setView('admin');
+            // Sincroniza URL se o admin estiver no slug errado
+            if (myBarbershopSlug && normalizedCurrentPath !== myBarbershopSlug) {
+              window.history.pushState({}, '', `/${myBarbershopSlug}`);
+              setUrlSlug(myBarbershopSlug);
             }
           } else {
-            console.warn("⚠️ Admin tentando acessar unidade de terceiros como cliente.");
-            setIsAdmin(false);
-            if (allowRedirect && !hasRedirected.current) {
-              setView('client');
-              hasRedirected.current = true;
-            }
+            setView('create_barbershop');
           }
-        } else {
-          setIsAdmin(false);
-          if (allowRedirect && !hasRedirected.current) {
-            const isSlug = normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath);
-            setView(isSlug ? 'client' : 'profile');
-            hasRedirected.current = true;
+          hasRedirected.current = true;
+        }
+      } else {
+        // --- LOGICA CORRIGIDA PARA CLIENTE (NÃO-ADMIN) ---
+        setIsAdmin(false);
+
+        if (allowRedirect && !hasRedirected.current) {
+          // ✅ CORREÇÃO: Se existe um slug (na URL ou salvo), a prioridade é a Home do Cliente
+          if (urlSlug || (normalizedCurrentPath !== '' && !reservedRoutes.includes(normalizedCurrentPath))) {
+            setView('client');
+          } else {
+            // Só vai para o perfil se realmente não estivermos em nenhuma barbearia específica
+            setView('profile');
           }
+          hasRedirected.current = true;
         }
       }
     } catch (err) {
-      console.error("❌ Erro ao carregar perfil:", err);
+      console.error("❌ Erro fatal no fetchProfile:", err);
     } finally {
       setLoading(false);
     }
   };
+
 
   const navigateTo = (newView: ViewState) => {
     if (isAdmin && !barbershopId && newView !== 'create_barbershop') {
@@ -138,35 +165,35 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
- const handleLogout = async () => {
-  if (window.confirm("Deseja realmente sair?")) {
-    // 1. Resetamos o controle de redirecionamento
-    hasRedirected.current = false;
-    
-    // 2. Deslogamos do Supabase
-    await supabase.auth.signOut();
+  const handleLogout = async () => {
+    if (window.confirm("Deseja realmente sair?")) {
+      // 1. Resetamos o controle de redirecionamento
+      hasRedirected.current = false;
 
-    // 3. Limpamos APENAS os dados do usuário, mas MANTEMOS o urlSlug
-    setBarbershopId(null);
-    setIsAdmin(false);
-    setUserName('');
-    setSession(null); 
+      // 2. Deslogamos do Supabase
+      await supabase.auth.signOut();
 
-    // 4. Lógica de permanência:
-    // Se ele tem um slug (está em uma barbearia), ele volta para a 'client' (vitrine).
-    // Se não tem slug, vai para a tela de login/perfil.
-    if (urlSlug) {
-      setView('client');
-    } else {
-      setView('profile');
+      // 3. Limpamos APENAS os dados do usuário, mas MANTEMOS o urlSlug
+      setBarbershopId(null);
+      setIsAdmin(false);
+      setUserName('');
+      setSession(null);
+
+      // 4. Lógica de permanência:
+      // Se ele tem um slug (está em uma barbearia), ele volta para a 'client' (vitrine).
+      // Se não tem slug, vai para a tela de login/perfil.
+      if (urlSlug) {
+        setView('client');
+      } else {
+        setView('profile');
+      }
+
+      // Opcional: Se quiser que a URL no navegador mude fisicamente para o slug:
+      if (urlSlug && window.location.pathname !== `/${urlSlug}`) {
+        window.history.pushState({}, '', `/${urlSlug}`);
+      }
     }
-    
-    // Opcional: Se quiser que a URL no navegador mude fisicamente para o slug:
-    if (urlSlug && window.location.pathname !== `/${urlSlug}`) {
-      window.history.pushState({}, '', `/${urlSlug}`);
-    }
-  }
-};
+  };
 
   if (loading) return (
     <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
@@ -180,7 +207,7 @@ const App: React.FC = () => {
       onLoginSuccess={() => {
         // Resetamos o controle de redirecionamento para o novo usuário que entrou
         hasRedirected.current = false;
-        setLoading(true); 
+        setLoading(true);
         // O onAuthStateChange ali em cima vai detectar o login e chamar o fetchProfile sozinho
       }}
     />
@@ -203,9 +230,11 @@ const App: React.FC = () => {
         )}
 
         <main className="flex-1">
+          {view === 'subscription_plans' && <SubscriptionPage barbershopId={barbershopId!} userEmail={session?.user?.email} />}
+
           {view === 'client' && urlSlug && <ClientHome onStartBooking={() => navigateTo('booking')} />}
 
-          {view === 'admin' && isAdmin && barbershopId && <AdminDashboard barbershopId={barbershopId} />}
+          {view === 'admin' && isAdmin && barbershopId && (<AdminDashboard barbershopId={barbershopId} userEmail={session?.user?.email} />)}
 
           {view === 'create_barbershop' && isAdmin && <CreateBarbershop />}
 
@@ -286,28 +315,6 @@ const App: React.FC = () => {
             </div>
           )}
         </main>
-
-        {/* <nav className="fixed bottom-0 left-0 right-0 md:hidden bg-zinc-950/95 backdrop-blur-3xl border-t border-zinc-800/50 px-10 py-5 flex justify-between items-center z-50">
-          {isAdmin ? (
-            <button onClick={() => navigateTo('admin')} className={`p-4 rounded-2xl transition-all ${view === 'admin' ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/40' : 'bg-zinc-900 text-zinc-500'}`}>
-              <LayoutDashboard size={26} strokeWidth={3} />
-            </button>
-          ) : (
-            <button onClick={() => navigateTo('client')} className={`p-4 rounded-2xl ${view === 'client' ? 'text-amber-500' : 'text-zinc-500'}`}>
-              <Calendar size={26} strokeWidth={2.5} />
-            </button>
-          )}
-
-          {!isAdmin && (
-            <button onClick={() => navigateTo('booking')} className="bg-amber-500 -mt-16 p-6 rounded-full shadow-2xl shadow-amber-500/60 text-black active:scale-90 transition-all border-[8px] border-black">
-              <Plus size={32} strokeWidth={4} />
-            </button>
-          )}
-
-          <button onClick={() => navigateTo('profile')} className={`p-4 rounded-2xl transition-all ${(view === 'profile' || view === 'my_appointments' || view === 'settings') ? 'text-amber-500' : 'text-zinc-500'}`}>
-            <User size={26} strokeWidth={2.5} />
-          </button>
-        </nav> */}
       </div>
     </BookingProvider>
   );
