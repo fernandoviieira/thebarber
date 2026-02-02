@@ -81,7 +81,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   const PLANS: Plan[] = useMemo(
     () => [
       {
-        id: 'price_1Sw699CGAUiO3UxF2EYuFKWg',
+        id: 'prod_TuIP8QGyyj2gMp',
         name: 'Mensal PRO',
         price: '89,90',
         period: 'mês',
@@ -91,7 +91,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
         color: 'from-zinc-500 to-zinc-800',
       },
       {
-        id: 'price_1Sw6AJCGAUiO3UxFVNsNQI7n',
+        id: 'prod_TuIQH7g9FvBtRI',
         name: 'Semestral ELITE',
         price: '479,40',
         period: '6 meses',
@@ -101,7 +101,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
         color: 'from-amber-400 to-amber-600',
       },
       {
-        id: 'price_1Sw6AzCGAUiO3UxF9SiVikDM',
+        id: 'prod_TuIQH7g9FvBtRI',
         name: 'Anual BLACK',
         price: '838,80',
         period: 'ano',

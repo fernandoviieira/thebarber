@@ -42,9 +42,9 @@ serve(async (req) => {
       const priceId = subscription.items.data[0].price.id;
 
       let planName = 'Plano Pro'; 
-      if (priceId === 'price_1Sw699CGAUiO3UxF2EYuFKWg') planName = 'Mensal';
-      if (priceId === 'price_1Sw6AJCGAUiO3UxFVNsNQI7n') planName = 'Semestral';
-      if (priceId === 'price_1Sw6AzCGAUiO3UxF9SiVikDM') planName = 'Anual';
+      if (priceId === 'prod_TuIP8QGyyj2gMp') planName = 'Mensal';
+      if (priceId === 'prod_TuIQH7g9FvBtRI') planName = 'Semestral';
+      if (priceId === 'prod_TuIQH7g9FvBtRI') planName = 'Anual';
 
       if (barbershopId) {
         const { error } = await supabaseAdmin
