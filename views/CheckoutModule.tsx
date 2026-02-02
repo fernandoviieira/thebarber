@@ -422,7 +422,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             // ✅ VALOR LÍQUIDO FINAL (O que entra no caixa)
             price: precoFinalLiquido,
             payment_method: methodsUsed,
-            status: 'confirmado',
+            status: 'finalizado',
             customer_phone: finalPhone,
             is_package_redemption: isPackageRedemption,
             tip_amount: 0
@@ -464,7 +464,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           time: time,
           price: tipNetValue,
           payment_method: methodsUsed,
-          status: 'confirmado',
+          status: 'finalizado',
           customer_phone: finalPhone,
           tip_amount: tip
         });

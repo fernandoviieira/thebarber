@@ -42,7 +42,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 .from('appointments')
                 .select('*')
                 .eq('barbershop_id', barbershopId)
-                .eq('status', 'confirmado')
+                .eq('status', 'finalizado')
                 .gte('date', startIso)
                 .lte('date', endIso)
                 .order('date', { ascending: false });
