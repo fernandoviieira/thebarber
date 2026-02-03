@@ -219,6 +219,8 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
     return { icon: <CardIcon size={14} />, label: methodRaw || 'OUTRO', color: 'text-slate-500', bg: 'bg-white/5' };
   };
 
+  console.log('sales', appointments)
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-24 md:pb-0 font-bold italic">
 
@@ -361,7 +363,7 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
                         <span className="bg-white/5 px-3 py-1.5 rounded-lg text-[11px] font-black text-slate-400 border border-white/10 italic whitespace-nowrap inline-block">#{visualId}</span>
                       </td>
                       <td className="px-6 py-5">
-                        <div className="text-sm font-black text-white uppercase leading-none">{sale.customer_name || 'VENDA DIRETA'}</div>
+                        <div className="text-sm font-black text-white uppercase leading-none">{sale.customerName || 'VENDA DIRETA'}</div>
                         <div className="text-[9px] text-slate-500 mt-1 uppercase font-bold whitespace-nowrap">Prof: {sale.barber}</div>
                       </td>
                       <td className="px-6 py-5">

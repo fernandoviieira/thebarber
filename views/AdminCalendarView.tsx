@@ -181,12 +181,19 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
   };
 
   const getOccupiedSlotsCount = (durationWithRespiro: number) => Math.ceil(durationWithRespiro / 30);
+  
   // Índice rápido para achar agendamento que COMEÇA exatamente no slot
   const appointmentsByKey = useMemo(() => {
     const map = new Map<string, Appointment>();
     for (const a of appointments) {
       if (!a || a.status === 'cancelado') continue;
-      const key = `${a.date}|${normalize(a.barber)}|${a.time}`;
+
+      // Arredonda o horário quebrado (ex: 19:23) para o slot (ex: 19:00)
+      const [h, m] = a.time.split(':').map(Number);
+      const roundedMin = m < 30 ? '00' : '30';
+      const roundedTime = `${h.toString().padStart(2, '0')}:${roundedMin}`;
+
+      const key = `${a.date}|${normalize(a.barber)}|${roundedTime}`;
       map.set(key, a);
     }
     return map;
@@ -201,7 +208,9 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
 
       const date = a.date;
       const barber = normalize(a.barber);
-      const startMin = timeToMinutes(a.time);
+      // Arredonda para baixo para o slot de 30 minutos
+      const [h, m] = a.time.split(':').map(Number);
+      const startMin = h * 60 + (m < 30 ? 0 : 30);
       const slots = getOccupiedSlotsCount(getServiceDurationWithRespiro(a));
 
       for (let i = 0; i < slots; i++) {
@@ -305,6 +314,27 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // ✅ FUNÇÃO CORRIGIDA - Mantém horário original ao finalizar
+  const handleFinalizeAppointment = () => {
+    if (!selectedApp) return;
+    
+    // ✅ Garante que TODOS os dados originais sejam preservados
+    const appointmentToFinalize = {
+      ...selectedApp,
+      // Explicitamente mantém o horário e data originais
+      time: selectedApp.time,
+      date: selectedApp.date,
+      barber: selectedApp.barber,
+      service: selectedApp.service,
+      price: selectedApp.price,
+      duration: selectedApp.duration,
+      customerName: selectedApp.customerName
+    };
+
+    onFinalize(appointmentToFinalize);
+    setSelectedApp(null);
   };
 
   if (!barbers || barbers.length === 0) return null;
@@ -444,7 +474,8 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                         onClick={() => setSelectedApp(appStartingHere)}
                         style={{
                           // 62 é a altura da linha, mantemos a proporção com os novos slots
-                          height: `${getOccupiedSlotsCount(getServiceDurationWithRespiro(appStartingHere)) * 62 - 4}px`, zIndex: 50
+                          height: `${getOccupiedSlotsCount(getServiceDurationWithRespiro(appStartingHere)) * 62 - 4}px`,
+                          zIndex: 50
                         }}
                         className={`absolute top-0 left-0 right-0 m-0.5 text-black rounded-lg p-2 shadow-xl flex flex-col transition-all
                           ${isFinalized
@@ -515,10 +546,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
               </div>
             ) : (
               <button
-                onClick={() => {
-                  onFinalize(selectedApp);
-                  setSelectedApp(null);
-                }}
+                onClick={handleFinalizeAppointment}
                 className="w-full bg-green-500 hover:bg-green-600 text-black py-4 rounded-2xl font-black uppercase text-[10px] flex items-center justify-center gap-2 transition-all mb-4"
               >
                 <CheckCircle2 size={16} /> Finalizar Atendimento

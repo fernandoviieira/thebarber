@@ -98,7 +98,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         .eq('date', data.date)
         .eq('time', data.time)
         .eq('barbershop_id', data.barbershop_id)
-        .neq('status', 'cancelado'); 
+        .in('status', ['confirmado', 'pendente']); // Permite marcar novo horário se o antigo já foi 'finalizado'
 
       if (checkError) throw checkError;
 
@@ -136,7 +136,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const { data: userData } = await supabase.auth.getUser();
-      
+
       const { error: insertError } = await supabase
         .from('appointments')
         .insert([{
@@ -155,9 +155,9 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         }]);
 
       if (insertError) throw insertError;
-      
+
       await fetchAppointments(data.barbershop_id);
-      
+
     } catch (err: any) {
       console.error("Erro ao adicionar:", err);
       alert(`Erro ao salvar: ${err.message}`);

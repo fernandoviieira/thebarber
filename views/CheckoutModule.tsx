@@ -345,8 +345,9 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
     try {
       const now = new Date();
-      const today = now.toLocaleDateString('en-CA');
-      const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const today = initialAppointment?.date || now.toLocaleDateString('en-CA');
+      // ✅ Se houver um agendamento inicial, usamos o horário dele. Se não (venda direta), usamos o atual.
+      const time = initialAppointment?.time || now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const vendaIdUnica = `VENDA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
       const fallbackPhone = initialAppointment?.customerPhone || 'Balcão';

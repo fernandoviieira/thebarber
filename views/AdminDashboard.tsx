@@ -1116,8 +1116,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
                 <div className="space-y-4 lg:space-y-8 animate-in fade-in duration-700">
                   <AdminCalendarView
                     barbers={barbers}
-                    appointments={(appointments as Appointment[]).filter(app => app.barbershop_id === barbershopId)}
-                    services={availableServices}
+                    appointments={(appointments as Appointment[]).filter(app =>
+                      app.barbershop_id === barbershopId && app.status !== 'cancelado'
+                    )} services={availableServices}
                     barbershopId={barbershopId}
                     onFinalize={handleFinalizeFromCalendar}
                     onSave={async (newBooking: any) => {
