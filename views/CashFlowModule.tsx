@@ -52,7 +52,7 @@ const CashFlowModule: React.FC<CashFlowProps> = ({ barbershopId, appointments })
             const openingDate = new Date(active.opened_at).toLocaleDateString('pt-BR');
             const salesToday = appointments.filter(app => {
                 const appDate = new Date(app.date + 'T12:00:00').toLocaleDateString('pt-BR');
-                return app.status === 'confirmado' && appDate === openingDate;
+                return app.status === 'finalizado' && appDate === openingDate;
             });
             const money = salesToday
                 .filter(s => s.payment_method?.toLowerCase().includes('dinheiro'))
