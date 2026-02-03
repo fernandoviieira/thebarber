@@ -41,11 +41,11 @@ type AppointmentStatus = 'confirmado' | 'finalizado' | 'cancelado' | string;
 type Appointment = {
   id: string;
   customerName: string;
-  barber: string; // atual: por nome
-  time: string; // HH:mm
+  barber: string; 
+  time: string; 
   service: string;
   price?: number;
-  date: string; // yyyy-MM-dd
+  date: string;
   duration?: number | string;
   status?: AppointmentStatus;
   created_by_admin?: boolean;
@@ -141,7 +141,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     // Observação: isso ignora minutos no horário de abertura/fechamento (08:30 etc).
     // Se você precisar disso, eu adapto depois.
     for (let hour = startHour; hour <= endHour; hour++) {
-      for (const min of ['00', '30']) { // Alterado para 30 em 30
+      for (const min of ['00', '30']) { 
         if (hour === endHour && min !== '00') break;
         slots.push(`${hour.toString().padStart(2, '0')}:${min}`);
       }
@@ -158,7 +158,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     setCurrentDate(viewMode === 'day' ? subDays(currentDate, 1) : subWeeks(currentDate, 1));
 
   const getServiceDurationWithRespiro = (appointment: Appointment | null) => {
-    if (!appointment) return 35; // 30 + 5
+    if (!appointment) return 35;
     if (appointment.duration != null && appointment.duration !== '') {
       const d = typeof appointment.duration === 'string'
         ? parseInt(appointment.duration.replace(/\D/g, ''), 10)
@@ -214,7 +214,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
       const slots = getOccupiedSlotsCount(getServiceDurationWithRespiro(a));
 
       for (let i = 0; i < slots; i++) {
-        const m = startMin + i * 30; // Pula de 30 em 30
+        const m = startMin + i * 30; 
         const hh = String(Math.floor(m / 60)).padStart(2, '0');
         const mm = String(m % 60).padStart(2, '0');
         const time = `${hh}:${mm}`;
@@ -224,7 +224,6 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     }
 
     return set;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointments, services, openingTime, closingTime]);
 
   const isSlotOccupied = (date: string, barberName: string, slotTime: string) => {
@@ -473,7 +472,6 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                         onDragStart={(e) => handleDragStart(e, appStartingHere.id, appStartingHere.status)}
                         onClick={() => setSelectedApp(appStartingHere)}
                         style={{
-                          // 62 é a altura da linha, mantemos a proporção com os novos slots
                           height: `${getOccupiedSlotsCount(getServiceDurationWithRespiro(appStartingHere)) * 62 - 4}px`,
                           zIndex: 50
                         }}
@@ -620,7 +618,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                   <Clock size={20} className="text-amber-500" />
                   <input
                     type="number"
-                    step={30} // Sugere pulos de 30
+                    step={30} 
                     min={30}
                     className="bg-transparent w-full text-white font-bold italic outline-none"
                     value={newBooking.duration}

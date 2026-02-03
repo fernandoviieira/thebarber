@@ -26,30 +26,26 @@ async function handleCreate() {
     trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
 
     // 3. INSERÇÃO DA BARBEARIA
-    // Certifique-se de ter rodado as políticas de RLS no painel do Supabase!
     const { data: shop, error: shopError } = await supabase
       .from('barbershops')
       .insert([{
         name,
         slug,
         address,
-        owner_id: user.id, // ID do dono para as políticas de RLS
+        owner_id: user.id, 
         subscription_status: 'trialing',
         trial_ends_at: trialEndsAt.toISOString(),
-        expires_at: trialEndsAt.toISOString() // Permite uso imediato até o fim do trial
+        expires_at: trialEndsAt.toISOString() 
       }])
       .select()
       .single();
 
     if (shopError) {
-      // Erro 23505 é o código do Postgres para Unique Constraint (Slug duplicado)
       if (shopError.code === '23505') throw new Error("Esta URL (slug) já está em uso. Tente outro nome.");
       throw shopError;
     }
 
     if (shop) {
-      // 4. ATUALIZAÇÃO DO PERFIL DO USUÁRIO
-      // Vinculamos o admin à barbearia recém-criada
       const { error: profileError } = await supabase
         .from('profiles')
         .upsert({

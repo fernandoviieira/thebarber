@@ -110,7 +110,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
                         return {
                             ...sale,
-                            detailedItems, // ✅ Agora cada venda tem sua lista detalhada
+                            detailedItems,
                             comissaoTotalVenda: totalVendaComissao
                         };
                     });
@@ -121,7 +121,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                         totalBruto: salesWithDetailedItems.reduce((acc, curr) => acc + Number(curr.price), 0),
                         currentRate: barber.commission_rate || 0,
                         expenses: barber.expenses || 0,
-                        // ✅ Soma das comissões detalhadas
                         totalComissaoCalculada: salesWithDetailedItems.reduce((acc, sale) => acc + sale.comissaoTotalVenda, 0),
                         totalGorjetas: salesWithDetailedItems.reduce((acc, sale) => acc + (Number(sale.tip_amount) || 0), 0),
                         detalhes: salesWithDetailedItems

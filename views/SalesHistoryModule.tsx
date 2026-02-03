@@ -13,8 +13,8 @@ interface SalesHistoryProps {
   appointments: any[];
   onDelete: (id: string) => Promise<void>;
   barbershopId: string | null;
-  servicesList: any[]; // ✅ Adicionado
-  productsList: any[]; // ✅ Adicionado
+  servicesList: any[]; 
+  productsList: any[]; 
 }
 
 type PaymentFilter = 'todos' | 'dinheiro' | 'pix' | 'debito' | 'credito' | 'pacote';
@@ -140,7 +140,7 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
             price: itemPrice,
             isGorjeta: true,
             isProduct: false,
-            commission: itemPrice // Gorjeta é 100%
+            commission: itemPrice
           };
         }
         else if (isProduct) {
@@ -166,11 +166,10 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
             price: itemPrice,
             isGorjeta: false,
             isProduct: false,
-            commission: itemPrice * 0.5 // Comissão padrão de 50%
+            commission: itemPrice * 0.5
           };
         }
-      }); // Fim do detailedItems.map
-
+      });
       // ✅ AGORA GERENCIA O AGRUPAMENTO
       if (existingIndex !== -1 && rawId) {
         const group = acc[existingIndex];
@@ -218,8 +217,6 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
     if (method.includes('credito')) return { icon: <CardIcon size={14} />, label: 'CRÉDITO', color: 'text-orange-400', bg: 'bg-orange-500/20' };
     return { icon: <CardIcon size={14} />, label: methodRaw || 'OUTRO', color: 'text-slate-500', bg: 'bg-white/5' };
   };
-
-  console.log('sales', appointments)
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-24 md:pb-0 font-bold italic">

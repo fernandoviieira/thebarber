@@ -434,7 +434,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
 
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [barbershopId]);
 
   useEffect(() => {
@@ -768,7 +767,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
             label="Dashboard"
             active={activeTab === 'dashboard'}
             onClick={() => handleTabChange('dashboard')}
-            disabled={false} // Dashboard sempre acessível (mostra tela de bloqueio)
+            disabled={false}
           />
           <SidebarItem
             icon={<Banknote size={18} />}
@@ -1096,8 +1095,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
               {activeTab === 'historico' && (
                 <SalesHistoryModule
                   appointments={(appointments as Appointment[]).filter(app => app.barbershop_id === barbershopId)}
-                  servicesList={availableServices} // ✅ Passando a lista de serviços
-                  productsList={inventory}         // ✅ Passando a lista de estoque
+                  servicesList={availableServices} 
+                  productsList={inventory}         
                   barbershopId={barbershopId}
                   onDelete={async (id: string) => {
                     try {

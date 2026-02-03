@@ -98,7 +98,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         .eq('date', data.date)
         .eq('time', data.time)
         .eq('barbershop_id', data.barbershop_id)
-        .in('status', ['confirmado', 'pendente']); // Permite marcar novo horário se o antigo já foi 'finalizado'
+        .in('status', ['confirmado', 'pendente']);
 
       if (checkError) throw checkError;
 

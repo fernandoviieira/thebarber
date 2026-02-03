@@ -44,9 +44,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setError('');
     try {
       const isRegistrarPath = window.location.pathname.includes('/registrar');
-                console.log('isRegistrarPath', isRegistrarPath)
-
-
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -97,7 +94,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         if (signUpError) throw signUpError;
 
         // Se o usuário foi criado, a Trigger no Postgres já criou o perfil em profiles.
-        // O erro 403 acontecia porque você tentava fazer o trabalho da Trigger via API.
 
         const newUser = signUpData.user;
         if (newUser) {
