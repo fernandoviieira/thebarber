@@ -18,6 +18,7 @@ export interface Appointment {
   venda_id?: string;
   created_by_admin?: boolean;
   original_price?: number;
+  tip_amount?; number;
 }
 
 interface BookingContextType {
@@ -73,6 +74,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         duration: app.duration,
         venda_id: app.venda_id,
         created_by_admin: app.created_by_admin,
+        tip_amount: app.tip_amount
       }));
 
       setAppointments(formattedData);

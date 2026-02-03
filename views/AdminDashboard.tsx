@@ -89,6 +89,7 @@ type Appointment = {
   original_price?: number | string | null;
   payment_method?: string | null;
   venda_id?: string | null;
+  tip_amount: number | string;
 };
 
 type Expense = {
@@ -181,13 +182,13 @@ const ErrorToast = ({ message, onClose }: { message: string; onClose: () => void
 );
 
 // ✅ NOVO COMPONENTE: Dashboard Bloqueado
-const BlockedDashboard = ({ onActivate, barbershopName, expiresAt }: { 
+const BlockedDashboard = ({ onActivate, barbershopName, expiresAt }: {
   onActivate: () => void;
   barbershopName: string;
   expiresAt: string | null;
 }) => {
   const expirationDate = expiresAt ? new Date(expiresAt).toLocaleDateString('pt-BR') : 'não definida';
-  
+
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-4 animate-in fade-in duration-700">
       <div className="max-w-2xl w-full">
@@ -195,7 +196,7 @@ const BlockedDashboard = ({ onActivate, barbershopName, expiresAt }: {
         <div className="bg-gradient-to-br from-red-950/50 to-red-900/30 border-2 border-red-500/30 rounded-[3rem] p-8 lg:p-12 shadow-2xl relative overflow-hidden">
           {/* Efeito de fundo animado */}
           <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent animate-pulse" />
-          
+
           {/* Ícone principal */}
           <div className="relative z-10 flex flex-col items-center text-center space-y-6">
             <div className="bg-red-500/20 p-6 rounded-full border-4 border-red-500/40 animate-bounce">
@@ -218,7 +219,7 @@ const BlockedDashboard = ({ onActivate, barbershopName, expiresAt }: {
                 A licença da unidade <span className="text-white font-black">{barbershopName}</span> expirou em{' '}
                 <span className="text-red-400 font-black">{expirationDate}</span>.
               </p>
-              
+
               <div className="flex items-start gap-3 bg-red-500/10 p-4 rounded-xl border border-red-500/20">
                 <AlertCircle size={20} className="text-red-400 flex-shrink-0 mt-0.5" />
                 <p className="text-xs lg:text-sm text-slate-400 font-bold text-left">
@@ -369,7 +370,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
       ]);
 
       if (expensesRes.data) setAllExpenses(expensesRes.data as Expense[]);
-      
+
       if (shopRes.data) {
         setBarbershopName(shopRes.data.name);
         setDbSubscriptionStatus(shopRes.data.subscription_status);
@@ -384,16 +385,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
 
         const now = new Date();
         const isTrialActive = trialEndsAtDate && new Date(trialEndsAtDate) > now;
-        const isSubscriptionActive = 
-          status === 'active' && 
-          expiresAtDate && 
+        const isSubscriptionActive =
+          status === 'active' &&
+          expiresAtDate &&
           new Date(expiresAtDate) > now;
 
         // Bloqueia se não tem trial ativo E não tem assinatura válida
         const shouldBlock = !isTrialActive && !isSubscriptionActive;
-        
+
         setIsBlocked(shouldBlock);
-        
+
         // ✅ IMPORTANTE: Se bloqueado, força dashboard (não billing)
         // O dashboard bloqueado será mostrado
         if (shouldBlock && activeTab !== 'billing') {
@@ -528,6 +529,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
       }, 0);
   }, [filteredApps]);
 
+  const barberGorjeta = useMemo(() => {
+    return filteredApps
+      .filter(app => app.status === 'finalizado')
+      .reduce((acc, curr) => {
+        const valorReal = parseNumberSafe(curr.tip_amount);
+        return acc + valorReal;
+      }, 0);
+  }, [filteredApps]);
+
   const totalLiquidoReal = useMemo(() => {
     return filteredApps
       .filter(app => app.status === 'finalizado')
@@ -553,7 +563,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
           return appBarberName === barberName;
         });
 
-        const bruto = servicesDone.reduce((acc, curr) => acc + parseNumberSafe(curr.price), 0);
+        const bruto = servicesDone.reduce((acc, curr) => acc + parseNumberSafe(curr.price), 0)
+        const gorjetas = servicesDone.reduce((acc, curr) => acc + parseNumberSafe(curr.tip_amount), 0);
 
         const rate =
           customCommissions[barber.id] !== undefined
@@ -564,6 +575,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
           ...barber,
           count: servicesDone.length,
           bruto,
+          gorjetas,
           comissaoValor: bruto * (rate / 100),
           currentRate: rate
         };
@@ -598,12 +610,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
     return barberPerformance.reduce((acc, curr) => acc + curr.comissaoValor, 0);
   }, [barberPerformance]);
 
+  const totalGorjeta = useMemo(() => {
+    return barberPerformance.reduce((acc, curr) => acc + curr.gorjetas, 0);
+  }, [barberPerformance]);
+
   const lucroLiquidoRealFinal = useMemo(() => {
     return totalLiquidoReal - totalComissoes - totalExpenses;
   }, [totalLiquidoReal, totalComissoes, totalExpenses]);
 
   const custosOperacionais = useMemo(() => {
-    return totalBruto - totalLiquidoReal + totalComissoes;
+    return totalBruto - totalLiquidoReal + totalComissoes + totalGorjeta;
   }, [totalBruto, totalLiquidoReal, totalComissoes]);
 
   const analyzeWithSarah = useCallback(async () => {
@@ -656,8 +672,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
   };
 
   const SubscriptionBanner = () => {
-    if (isBlocked) return null; 
-    
+    if (isBlocked) return null;
+
     if (dbSubscriptionStatus === 'trialing') {
       return (
         <div className="mb-8 bg-amber-500/10 border border-amber-500/20 p-4 lg:p-6 rounded-[2rem] flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top duration-500">
@@ -747,85 +763,85 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
 
         {/* ✅ MENU COM ITENS BLOQUEADOS */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto custom-scrollbar" role="navigation" aria-label="Menu principal">
-          <SidebarItem 
-            icon={<LayoutDashboard size={18} />} 
-            label="Dashboard" 
-            active={activeTab === 'dashboard'} 
+          <SidebarItem
+            icon={<LayoutDashboard size={18} />}
+            label="Dashboard"
+            active={activeTab === 'dashboard'}
             onClick={() => handleTabChange('dashboard')}
             disabled={false} // Dashboard sempre acessível (mostra tela de bloqueio)
           />
-          <SidebarItem 
-            icon={<Banknote size={18} />} 
-            label="Fluxo de Caixa" 
-            active={activeTab === 'caixa'} 
+          <SidebarItem
+            icon={<Banknote size={18} />}
+            label="Fluxo de Caixa"
+            active={activeTab === 'caixa'}
             onClick={() => handleTabChange('caixa')}
             disabled={isBlocked}
           />
-          <SidebarItem 
-            icon={<CalendarDays size={18} />} 
-            label="Agendamentos" 
-            active={activeTab === 'agendamentos'} 
+          <SidebarItem
+            icon={<CalendarDays size={18} />}
+            label="Agendamentos"
+            active={activeTab === 'agendamentos'}
             onClick={() => handleTabChange('agendamentos')}
             disabled={isBlocked}
           />
-          <SidebarItem 
-            icon={<ReceiptText size={18} />} 
-            label="Lançar Venda" 
-            active={activeTab === 'lancamento'} 
+          <SidebarItem
+            icon={<ReceiptText size={18} />}
+            label="Lançar Venda"
+            active={activeTab === 'lancamento'}
             onClick={() => handleTabChange('lancamento')}
             disabled={isBlocked}
           />
-          <SidebarItem 
-            icon={<DollarSign size={18} />} 
-            label="Comissões" 
-            active={activeTab === 'comissoes'} 
+          <SidebarItem
+            icon={<DollarSign size={18} />}
+            label="Comissões"
+            active={activeTab === 'comissoes'}
             onClick={() => handleTabChange('comissoes')}
             disabled={isBlocked}
           />
-          <SidebarItem 
-            icon={<Users size={18} />} 
-            label="Clientes" 
-            active={activeTab === 'clientes'} 
+          <SidebarItem
+            icon={<Users size={18} />}
+            label="Clientes"
+            active={activeTab === 'clientes'}
             onClick={() => handleTabChange('clientes')}
             disabled={isBlocked}
           />
-          <SidebarItem 
-            icon={<Package size={18} />} 
-            label="Estoque" 
-            active={activeTab === 'estoque'} 
+          <SidebarItem
+            icon={<Package size={18} />}
+            label="Estoque"
+            active={activeTab === 'estoque'}
             onClick={() => handleTabChange('estoque')}
             disabled={isBlocked}
           />
-          <SidebarItem 
-            icon={<MinusCircle size={18} />} 
-            label="Despesas" 
-            active={activeTab === 'despesas'} 
+          <SidebarItem
+            icon={<MinusCircle size={18} />}
+            label="Despesas"
+            active={activeTab === 'despesas'}
             onClick={() => handleTabChange('despesas')}
             disabled={isBlocked}
           />
-          <SidebarItem 
-            icon={<History size={18} />} 
-            label="Histórico" 
-            active={activeTab === 'historico'} 
+          <SidebarItem
+            icon={<History size={18} />}
+            label="Histórico"
+            active={activeTab === 'historico'}
             onClick={() => handleTabChange('historico')}
             disabled={isBlocked}
           />
-          
+
           {/* ✅ ABA DE ASSINATURA: SEMPRE HABILITADA COM DESTAQUE */}
           <div className={`${isBlocked ? 'animate-pulse' : ''}`}>
-            <SidebarItem 
-              icon={<ShieldCheck size={18} className={isBlocked ? "text-red-500" : "text-amber-500"} />} 
+            <SidebarItem
+              icon={<ShieldCheck size={18} className={isBlocked ? "text-red-500" : "text-amber-500"} />}
               label={isBlocked ? "🔓 Renovar" : "Assinatura"}
-              active={activeTab === 'billing'} 
+              active={activeTab === 'billing'}
               onClick={() => handleTabChange('billing')}
               disabled={false}
             />
           </div>
-          
-          <SidebarItem 
-            icon={<Settings size={18} />} 
-            label="Configurações" 
-            active={activeTab === 'config'} 
+
+          <SidebarItem
+            icon={<Settings size={18} />}
+            label="Configurações"
+            active={activeTab === 'config'}
             onClick={() => handleTabChange('config')}
             disabled={isBlocked}
           />
@@ -850,7 +866,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
           {/* ✅ RENDERIZAÇÃO CONDICIONAL BASEADA EM BLOQUEIO */}
           {isBlocked && activeTab === 'dashboard' ? (
             // Mostra dashboard de bloqueio
-            <BlockedDashboard 
+            <BlockedDashboard
               onActivate={() => setActiveTab('billing')}
               barbershopName={barbershopName}
               expiresAt={expiresAt}
@@ -998,7 +1014,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-8">
                     <StatCard label="Faturamento" value={totalBruto} icon={<DollarSign size={18} />} variant="amber" />
-                    <StatCard label="Comissões e taxas" value={custosOperacionais} icon={<CreditCard size={18} />} variant="slate" />
+                    <StatCard label="Comissões, taxa e gorjetas" value={custosOperacionais} icon={<CreditCard size={18} />} variant="slate" />
                     <StatCard label="Líquido Real" value={lucroLiquidoRealFinal} icon={<TrendingUp size={18} />} variant="green" />
                     <StatCard label="Despesas" value={totalExpenses} icon={<MinusCircle size={18} />} variant="red" />
                   </div>
@@ -1080,6 +1096,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
               {activeTab === 'historico' && (
                 <SalesHistoryModule
                   appointments={(appointments as Appointment[]).filter(app => app.barbershop_id === barbershopId)}
+                  servicesList={availableServices} // ✅ Passando a lista de serviços
+                  productsList={inventory}         // ✅ Passando a lista de estoque
+                  barbershopId={barbershopId}
                   onDelete={async (id: string) => {
                     try {
                       if (confirm('Deseja estornar esta venda? Isso removerá o valor do faturamento.')) {

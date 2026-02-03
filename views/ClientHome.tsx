@@ -125,7 +125,7 @@ const ClientHome: React.FC<ClientHomeProps> = ({ onStartBooking }) => {
               <Award size={12} className="md:w-3.5 md:h-3.5" /> Tradição & Excelência Premium
             </div>
             
-            <h2 className="text-[13vw] md:text-[8rem] lg:text-[10rem] font-serif font-black tracking-tighter leading-[0.85] md:leading-none">
+            <h2 className="text-[13vw] md:text-[8rem] lg:text-[8rem] font-serif font-black tracking-tighter leading-[0.85] md:leading-none">
               ESTILO <br /> 
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-amber-600 italic">
                 SEM LIMITES.
@@ -142,7 +142,7 @@ const ClientHome: React.FC<ClientHomeProps> = ({ onStartBooking }) => {
                 disabled={shopSettings?.is_closed}
                 className={`group relative font-black py-4 md:py-5 px-8 md:px-12 rounded-2xl text-base md:text-xl transition-all active:scale-95 flex items-center justify-center gap-3 mx-auto w-full max-w-[280px] md:max-w-none md:w-auto
                   ${shopSettings?.is_closed 
-                    ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-50' 
+                    ? 'bg-zinc-800 text-red-500 cursor-not-allowed opacity-90'
                     : 'bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow-[0_15px_40px_rgba(245,158,11,0.3)] hover:scale-105'
                   }`}
               >

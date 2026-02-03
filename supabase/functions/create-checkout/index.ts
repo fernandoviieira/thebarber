@@ -1,9 +1,11 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import Stripe from "https://esm.sh/stripe@14.14.0?target=deno"
+// ✅ Importações atualizadas para compatibilidade com Deno 2 / Supabase
+import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
+import Stripe from "https://esm.sh/stripe@14.25.0" 
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') || '', {
-  apiVersion: '2023-10-16', // Use uma API estável
-  httpClient: Stripe.createFetchHttpClient(), // Crucial para Edge Functions
+  apiVersion: '2023-10-16',
+  // O httpClient continua sendo necessário para o Edge Runtime
+  httpClient: Stripe.createFetchHttpClient(), 
 })
 
 const corsHeaders = {

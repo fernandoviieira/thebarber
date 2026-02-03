@@ -81,7 +81,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   const PLANS: Plan[] = useMemo(
     () => [
       {
-        id: 'prod_TuIP8QGyyj2gMp',
+        id: 'price_1SwUNyCTbvM1pa7EeHFfabwj',
         name: 'Mensal PRO',
         price: '89,90',
         period: 'mês',
@@ -91,7 +91,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
         color: 'from-zinc-500 to-zinc-800',
       },
       {
-        id: 'prod_TuIQH7g9FvBtRI',
+        id: 'price_1SwTpoCTbvM1pa7Er9JCBnPA',
         name: 'Semestral ELITE',
         price: '479,40',
         period: '6 meses',
@@ -101,7 +101,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
         color: 'from-amber-400 to-amber-600',
       },
       {
-        id: 'prod_TuIQH7g9FvBtRI',
+        id: 'price_1SwTqVCTbvM1pa7EKBjA66GO',
         name: 'Anual BLACK',
         price: '838,80',
         period: 'ano',
@@ -168,18 +168,33 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   }, [isExpired, isUrgent, isSubActiveByStatus, isOperationallyActive]);
 
   const handleSubscribe = async (priceId: string) => {
-    // Bloqueia apenas se já for um assinante pagante ativo e sem urgência
     if (subscriptionStatus === 'active' && !isUrgent && !isExpired) return;
 
     setLoadingPlanId(priceId);
     try {
+      // ✅ MODIFICADO: Chamada com tratamento explícito de headers
       const { data, error } = await supabase.functions.invoke('create-checkout', {
-        body: { barbershopId, userEmail, priceId },
+        body: {
+          barbershopId: barbershopId, // Verifique se não está undefined
+          userEmail: userEmail,       // Verifique se não está undefined
+          priceId: priceId            // O ID que vem do clique
+        },
       });
-      if (error) throw error;
-      if (data?.url) window.location.href = data.url;
-    } catch (err) {
-      alert('Erro ao iniciar checkout. Tente novamente.');
+
+      if (error) {
+        // Se o erro vier do invoke, ele detalha aqui
+        console.error('Erro Invoke:', error);
+        throw error;
+      }
+
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error('URL de checkout não retornada');
+      }
+    } catch (err: any) {
+      console.error('Erro completo no checkout:', err);
+      alert(`Erro ao iniciar checkout: ${err.message || 'Tente novamente.'}`);
     } finally {
       setLoadingPlanId(null);
     }
