@@ -39,7 +39,9 @@ import {
   MinusCircle,
   AlertCircle,
   Lock,
-  XCircle
+  XCircle,
+  Volume2,
+  VolumeX
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -192,18 +194,14 @@ const BlockedDashboard = ({ onActivate, barbershopName, expiresAt }: {
   return (
     <div className="min-h-[70vh] flex items-center justify-center px-4 animate-in fade-in duration-700">
       <div className="max-w-2xl w-full">
-        {/* Card Principal */}
         <div className="bg-gradient-to-br from-red-950/50 to-red-900/30 border-2 border-red-500/30 rounded-[3rem] p-8 lg:p-12 shadow-2xl relative overflow-hidden">
-          {/* Efeito de fundo animado */}
           <div className="absolute inset-0 bg-gradient-to-br from-red-500/5 to-transparent animate-pulse" />
 
-          {/* Ícone principal */}
           <div className="relative z-10 flex flex-col items-center text-center space-y-6">
             <div className="bg-red-500/20 p-6 rounded-full border-4 border-red-500/40 animate-bounce">
               <XCircle size={64} className="text-red-400" strokeWidth={2.5} />
             </div>
 
-            {/* Título */}
             <div className="space-y-2">
               <h2 className="text-3xl lg:text-5xl font-black text-white uppercase italic tracking-tighter leading-none">
                 Sistema <span className="text-red-500">Bloqueado</span>
@@ -213,7 +211,6 @@ const BlockedDashboard = ({ onActivate, barbershopName, expiresAt }: {
               </p>
             </div>
 
-            {/* Mensagem */}
             <div className="bg-black/30 backdrop-blur-sm rounded-2xl p-6 border border-red-500/20 space-y-4">
               <p className="text-slate-300 text-sm lg:text-base font-bold leading-relaxed">
                 A licença da unidade <span className="text-white font-black">{barbershopName}</span> expirou em{' '}
@@ -228,7 +225,6 @@ const BlockedDashboard = ({ onActivate, barbershopName, expiresAt }: {
               </div>
             </div>
 
-            {/* Botão de ação */}
             <button
               onClick={onActivate}
               className="w-full mt-6 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-12 py-5 rounded-2xl font-black uppercase text-sm lg:text-base tracking-widest transition-all hover:scale-105 shadow-2xl shadow-red-500/30 flex items-center justify-center gap-3 group"
@@ -238,7 +234,6 @@ const BlockedDashboard = ({ onActivate, barbershopName, expiresAt }: {
               <ShieldCheck size={24} className="group-hover:-rotate-12 transition-transform" />
             </button>
 
-            {/* Informações adicionais */}
             <div className="pt-6 border-t border-white/10">
               <p className="text-xs text-slate-500 font-bold uppercase tracking-wider">
                 Dúvidas? Entre em contato com o suporte
@@ -247,7 +242,6 @@ const BlockedDashboard = ({ onActivate, barbershopName, expiresAt }: {
           </div>
         </div>
 
-        {/* Cards de recursos bloqueados */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mt-6">
           {[
             { icon: <CalendarDays size={18} />, label: 'Agendamentos' },
@@ -284,7 +278,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
-  const [audioEnabled, setAudioEnabled] = useState(false);
+  
+  // ✅ CORREÇÃO: Persistir audioEnabled no localStorage
+  const [audioEnabled, setAudioEnabled] = useState(() => {
+    const saved = localStorage.getItem('barber_audio_enabled');
+    return saved === 'true';
+  });
 
   const [isBlocked, setIsBlocked] = useState(false);
 
@@ -312,6 +311,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
   const [startDate, endDate] = dateRange;
 
   const [barbershopName, setBarbershopName] = useState('');
+
+  // ✅ CORREÇÃO: Salvar no localStorage sempre que audioEnabled mudar
+  useEffect(() => {
+    localStorage.setItem('barber_audio_enabled', audioEnabled.toString());
+  }, [audioEnabled]);
 
   const refetchAppointments = useCallback(async () => {
     if (!barbershopId || !fetchAppointments) return;
@@ -387,17 +391,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
         setBarbershopName(shopRes.data.name);
 
         const now = new Date();
-
-        // 1. Verifica Trial: Existe data e ela é maior que AGORA?
         const isTrialActive = trialEndsAtDate ? new Date(trialEndsAtDate) > now : false;
-
-        // 2. Verifica Assinatura: Status é ativo E a data de expiração é maior que AGORA?
         const isSubscriptionActive =
           status === 'active' &&
           expiresAtDate &&
           new Date(expiresAtDate) > now;
 
-        // BLOQUEIA se: NÃO está em trial E NÃO tem assinatura ativa
         const shouldBlock = !isTrialActive && !isSubscriptionActive;
         setIsBlocked(shouldBlock);
 
@@ -491,27 +490,23 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
     [refetchAppointments]
   );
 
-  // 1. Memoizamos os IDs pendentes para evitar que o som toque por qualquer re-render
   const pendingIdsString = useMemo(() =>
     pendingApps.map(app => app.id).sort().join(','),
     [pendingApps]);
 
-  // Dentro do seu useEffect de notificação
+  // ✅ CORREÇÃO: Efeito de notificação sonora otimizado
   useEffect(() => {
-    // Lógica de áudio e título
     if (pendingApps.length > 0 && audioEnabled) {
       const audio = new Audio('/sounds/notification.wav');
       audio.volume = 0.6;
-      audio.play().catch(e => console.warn("Erro áudio:", e));
+      audio.play().catch(e => console.warn("Erro ao reproduzir áudio:", e));
 
-      const originalTitle = "Barber Pro"; // ✅ Use uma string fixa ou barbershopName
+      const originalTitle = barbershopName || "Barber Pro";
       const alertTitle = "⚠️ NOVO AGENDAMENTO";
 
-      // Forçamos o início imediato
       document.title = alertTitle;
 
       const interval = setInterval(() => {
-        // Usamos uma lógica simples de alternância
         document.title = (document.title === originalTitle) ? alertTitle : originalTitle;
       }, 1000);
 
@@ -522,13 +517,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
     }
   }, [pendingIdsString, audioEnabled, barbershopName]);
 
-  // Vigia do título: Garante que o título volte ao normal se não houver mais pendentes
   useEffect(() => {
     if (pendingApps.length === 0) {
       document.title = barbershopName || "Barber Pro";
     }
   }, [pendingApps.length, barbershopName]);
-
 
   const handleReject = useCallback(
     async (id: string) => {
@@ -662,7 +655,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
 
   const custosOperacionais = useMemo(() => {
     return totalBruto - totalLiquidoReal + totalComissoes + totalGorjeta;
-  }, [totalBruto, totalLiquidoReal, totalComissoes]);
+  }, [totalBruto, totalLiquidoReal, totalComissoes, totalGorjeta]);
 
   const analyzeWithSarah = useCallback(async () => {
     setIsSarahAnalyzing(true);
@@ -714,12 +707,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
   };
 
   const SubscriptionBanner = () => {
-    // Se ainda estiver carregando os dados iniciais, não mostra nada
     if (loadingData || isBlocked) return null;
 
     const now = new Date();
-
-    // Usa o valor direto que veio do banco ou o estado (garantindo que não seja undefined)
     const currentStatus = dbSubscriptionStatus;
     const trialDateStr = trialEndsAt;
 
@@ -775,15 +765,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
 
   return (
     <div className="flex min-h-screen bg-[#0f1115] text-slate-300 font-sans overflow-hidden">
-      {/* ✅ ERROR TOAST */}
       {errorMessage && <ErrorToast message={errorMessage} onClose={() => setErrorMessage(null)} />}
 
-      {/* OVERLAY PARA FECHAR SIDEBAR NO MOBILE */}
       {isSidebarOpen && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden" onClick={() => setIsSidebarOpen(false)} />
       )}
 
-      {/* ✅ SIDEBAR COM ITENS BLOQUEADOS */}
       <aside
         className={`
           fixed lg:relative
@@ -817,7 +804,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
           </div>
         </div>
 
-        {/* ✅ MENU COM ITENS BLOQUEADOS */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto custom-scrollbar" role="navigation" aria-label="Menu principal">
           <SidebarItem
             icon={<LayoutDashboard size={18} />}
@@ -883,7 +869,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
             disabled={isBlocked}
           />
 
-          {/* ✅ ABA DE ASSINATURA: SEMPRE HABILITADA COM DESTAQUE */}
           <div className={`${isBlocked ? 'animate-pulse' : ''}`}>
             <SidebarItem
               icon={<ShieldCheck size={18} className={isBlocked ? "text-red-500" : "text-amber-500"} />}
@@ -904,10 +889,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
         </nav>
       </aside>
 
-      {/* ✅ MAIN CONTENT */}
       <main className="flex-1 overflow-y-auto relative bg-[#0f1115] custom-scrollbar w-full">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10 py-6 lg:py-10">
-          {/* HAMBURGUER */}
           <button
             onClick={() => setIsSidebarOpen(true)}
             className="lg:hidden fixed top-4 left-4 z-[60] p-3 bg-amber-500 text-black rounded-xl shadow-2xl shadow-amber-500/40 hover:scale-110 active:scale-95 transition-all flex items-center justify-center border border-amber-600 min-w-[44px] min-h-[44px]"
@@ -916,39 +899,54 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
             <Menu size={22} strokeWidth={3} />
           </button>
 
-          {/* Banner de Ativação de Som */}
-          {!audioEnabled && (
+          {/* ✅ CORREÇÃO: Banner de Som Melhorado */}
+          {!audioEnabled ? (
             <button
               onClick={() => {
-                // Toca um som silencioso ou curto apenas para ganhar a permissão
                 const audio = new Audio('/sounds/notification.wav');
-                audio.play().then(() => {
-                  setAudioEnabled(true);
-                  console.log("Áudio liberado!");
-                }).catch(() => alert("Clique novamente para liberar o som"));
+                audio.volume = 0.3;
+                audio.play()
+                  .then(() => {
+                    setAudioEnabled(true);
+                  })
+                  .catch(() => {
+                    alert("❌ Não foi possível ativar o áudio. Clique novamente ou verifique as permissões do navegador.");
+                  });
               }}
-              className="mb-4 w-full bg-amber-500/20 border border-amber-500/40 p-3 rounded-xl flex items-center justify-center gap-3 animate-pulse group hover:bg-amber-500/30 transition-all"
+              className="mb-4 w-full bg-amber-500/20 border border-amber-500/40 p-4 rounded-xl flex items-center justify-center gap-3 hover:bg-amber-500/30 transition-all group"
             >
-              <BrainCircuit className="text-amber-500" size={20} />
+              <Volume2 className="text-amber-500 animate-pulse" size={20} />
               <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest">
-                Clique aqui para ativar os alertas sonoros da Sarah
+                🔊 Clique aqui para ativar os alertas sonoros
               </span>
             </button>
+          ) : (
+            <div className="mb-4 w-full bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+                <span className="text-[9px] font-black uppercase text-emerald-500 tracking-widest">
+                  🔔 Alertas Sonoros Ativos
+                </span>
+              </div>
+              <button
+                onClick={() => setAudioEnabled(false)}
+                className="text-[8px] text-slate-500 hover:text-emerald-500 font-bold uppercase tracking-wider transition-colors flex items-center gap-2"
+              >
+                <VolumeX size={14} />
+                Desativar
+              </button>
+            </div>
           )}
 
-          {/* ✅ BANNER DE TRIAL (só se não estiver bloqueado) */}
           <SubscriptionBanner />
 
-          {/* ✅ RENDERIZAÇÃO CONDICIONAL BASEADA EM BLOQUEIO */}
           {isBlocked && activeTab === 'dashboard' ? (
-            // Mostra dashboard de bloqueio
             <BlockedDashboard
               onActivate={() => setActiveTab('billing')}
               barbershopName={barbershopName}
               expiresAt={expiresAt}
             />
           ) : activeTab === 'billing' ? (
-            // Mostra página de assinatura
             barbershopId && userEmail && (
               <SubscriptionPage
                 barbershopId={barbershopId}
@@ -959,9 +957,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
               />
             )
           ) : !isBlocked ? (
-            // ✅ CONTEÚDO NORMAL (só renderiza se NÃO estiver bloqueado)
             <>
-              {/* HEADER HISTÓRICO */}
               {activeTab === 'historico' && (
                 <header className="border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
                   <h2 className="text-2xl sm:text-3xl lg:text-5xl font-black text-white tracking-tighter uppercase italic leading-none">
@@ -973,7 +969,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
                 </header>
               )}
 
-              {/* HEADER DASHBOARD/AGENDA */}
               {(activeTab === 'dashboard' || activeTab === 'agendamentos') && (
                 <header className="flex flex-col gap-4 lg:gap-6 border-b border-white/5 pb-4 lg:pb-8 mb-4 lg:mb-8">
                   <div className="space-y-2 lg:space-y-3">

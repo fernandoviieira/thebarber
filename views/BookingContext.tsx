@@ -1,5 +1,8 @@
+// BookingContext.tsx - CORREÇÃO COMPLETA COM REALTIME
+
 import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export interface Appointment {
   id: string;
@@ -18,7 +21,7 @@ export interface Appointment {
   venda_id?: string;
   created_by_admin?: boolean;
   original_price?: number;
-  tip_amount?; number;
+  tip_amount?: number;
 }
 
 interface BookingContextType {
@@ -85,8 +88,80 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  // ✅ CORREÇÃO: Implementar Realtime Subscription
   useEffect(() => {
     fetchAppointments();
+
+    // ✅ Criar canal de realtime
+    const channel: RealtimeChannel = supabase
+      .channel('appointments-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'appointments'
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            // ✅ Novo agendamento
+            const newApp = {
+              id: payload.new.id,
+              customerName: payload.new.customer_name,
+              customerPhone: payload.new.customer_phone,
+              service: payload.new.service,
+              barber: payload.new.barber,
+              date: payload.new.date,
+              time: payload.new.time,
+              price: Number(payload.new.price),
+              original_price: payload.new.original_price ? Number(payload.new.original_price) : Number(payload.new.price),
+              status: payload.new.status,
+              barbershop_id: payload.new.barbershop_id,
+              payment_method: payload.new.payment_method,
+              user_id: payload.new.user_id,
+              duration: payload.new.duration,
+              venda_id: payload.new.venda_id,
+              created_by_admin: payload.new.created_by_admin,
+              tip_amount: payload.new.tip_amount
+            };
+
+            setAppointments(prev => [...prev, newApp]);
+          }
+
+          if (payload.eventType === 'UPDATE') {
+            // ✅ Agendamento atualizado (ex: status mudou para 'confirmado')
+            setAppointments(prev =>
+              prev.map(app =>
+                app.id === payload.new.id
+                  ? {
+                      ...app,
+                      status: payload.new.status,
+                      customerName: payload.new.customer_name,
+                      customerPhone: payload.new.customer_phone,
+                      service: payload.new.service,
+                      barber: payload.new.barber,
+                      date: payload.new.date,
+                      time: payload.new.time,
+                      price: Number(payload.new.price),
+                      payment_method: payload.new.payment_method
+                    }
+                  : app
+              )
+            );
+          }
+
+          if (payload.eventType === 'DELETE') {
+            // ✅ Agendamento cancelado/deletado
+            setAppointments(prev => prev.filter(app => app.id !== payload.old.id));
+          }
+        }
+      )
+      .subscribe();
+
+    // ✅ Cleanup: desinscrever ao desmontar
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const addAppointment = async (data: Omit<Appointment, 'id'>) => {
@@ -151,11 +226,13 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
           barbershop_id: data.barbershop_id,
           user_id: userData.user?.id,
           duration: data.duration,
-          created_by_admin: data.created_by_admin ?? false
+          created_by_admin: data.created_by_admin ?? false,
+          tip_amount: data.tip_amount || 0
         }]);
 
       if (insertError) throw insertError;
 
+      // ✅ O realtime vai atualizar automaticamente, mas forçamos refetch por garantia
       await fetchAppointments(data.barbershop_id);
 
     } catch (err: any) {
@@ -172,6 +249,8 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         .eq('id', id);
 
       if (error) throw error;
+
+      // ✅ Atualização local imediata (otimistic update)
       setAppointments(prev => prev.map(app => app.id === id ? { ...app, status: status as any } : app));
     } catch (err) {
       console.error("Erro ao atualizar status:", err);
@@ -182,6 +261,8 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { error } = await supabase.from('appointments').delete().eq('id', id);
       if (error) throw error;
+
+      // ✅ Remoção local imediata (otimistic update)
       setAppointments(prev => prev.filter(app => app.id !== id));
     } catch (err) {
       console.error("Erro ao deletar:", err);
