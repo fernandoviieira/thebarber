@@ -284,6 +284,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
   const [trialEndsAt, setTrialEndsAt] = useState<string | null>(null);
   const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+  const [audioEnabled, setAudioEnabled] = useState(false);
 
   const [isBlocked, setIsBlocked] = useState(false);
 
@@ -489,6 +490,45 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
     },
     [refetchAppointments]
   );
+
+  // 1. Memoizamos os IDs pendentes para evitar que o som toque por qualquer re-render
+  const pendingIdsString = useMemo(() =>
+    pendingApps.map(app => app.id).sort().join(','),
+    [pendingApps]);
+
+  // Dentro do seu useEffect de notificação
+  useEffect(() => {
+    // Lógica de áudio e título
+    if (pendingApps.length > 0 && audioEnabled) {
+      const audio = new Audio('/sounds/notification.wav');
+      audio.volume = 0.6;
+      audio.play().catch(e => console.warn("Erro áudio:", e));
+
+      const originalTitle = "Barber Pro"; // ✅ Use uma string fixa ou barbershopName
+      const alertTitle = "⚠️ NOVO AGENDAMENTO";
+
+      // Forçamos o início imediato
+      document.title = alertTitle;
+
+      const interval = setInterval(() => {
+        // Usamos uma lógica simples de alternância
+        document.title = (document.title === originalTitle) ? alertTitle : originalTitle;
+      }, 1000);
+
+      return () => {
+        clearInterval(interval);
+        document.title = originalTitle;
+      };
+    }
+  }, [pendingIdsString, audioEnabled, barbershopName]);
+
+  // Vigia do título: Garante que o título volte ao normal se não houver mais pendentes
+  useEffect(() => {
+    if (pendingApps.length === 0) {
+      document.title = barbershopName || "Barber Pro";
+    }
+  }, [pendingApps.length, barbershopName]);
+
 
   const handleReject = useCallback(
     async (id: string) => {
@@ -875,6 +915,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
           >
             <Menu size={22} strokeWidth={3} />
           </button>
+
+          {/* Banner de Ativação de Som */}
+          {!audioEnabled && (
+            <button
+              onClick={() => {
+                // Toca um som silencioso ou curto apenas para ganhar a permissão
+                const audio = new Audio('/sounds/notification.wav');
+                audio.play().then(() => {
+                  setAudioEnabled(true);
+                  console.log("Áudio liberado!");
+                }).catch(() => alert("Clique novamente para liberar o som"));
+              }}
+              className="mb-4 w-full bg-amber-500/20 border border-amber-500/40 p-3 rounded-xl flex items-center justify-center gap-3 animate-pulse group hover:bg-amber-500/30 transition-all"
+            >
+              <BrainCircuit className="text-amber-500" size={20} />
+              <span className="text-[10px] font-black uppercase text-amber-500 tracking-widest">
+                Clique aqui para ativar os alertas sonoros da Sarah
+              </span>
+            </button>
+          )}
 
           {/* ✅ BANNER DE TRIAL (só se não estiver bloqueado) */}
           <SubscriptionBanner />

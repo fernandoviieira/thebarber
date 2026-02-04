@@ -12,7 +12,6 @@ interface MyAppointmentsProps {
 
 const MyAppointments: React.FC<MyAppointmentsProps> = ({ onBack, customerName, customerPhone, userId, isAdmin }) => {
   const { appointments, loading, deleteAppointment } = useBooking();
-
   const myAppointments = appointments.filter(app => {
     if (isAdmin) return true;
     const matchUserId = userId && app.user_id === userId;

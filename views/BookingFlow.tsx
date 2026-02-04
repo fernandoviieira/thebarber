@@ -40,6 +40,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       setLoading(true);
       try {
         const slug = window.location.pathname.split('/')[1];
+        console.log("🔍 Buscando barbearia com slug:", slug);
         const { data: barbershop } = await supabase
           .from('barbershops')
           .select('id')
@@ -47,12 +48,16 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
           .single();
 
         if (barbershop) {
+          console.log("✅ ID da barbearia encontrado:", barbershop.id);
           setCurrentBarbershopId(barbershop.id);
           const [barbersRes, servicesRes, settingsRes] = await Promise.all([
             supabase.from('barbers').select('*').eq('barbershop_id', barbershop.id).order('name'),
             supabase.from('services').select('*').eq('barbershop_id', barbershop.id).order('name'),
             supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershop.id).maybeSingle()
           ]);
+
+          console.log("💈 Barbeiros retornados:", barbersRes.data?.length || 0);
+        console.log("✂️ Serviços retornados:", servicesRes.data); // LOG CRÍTICO: Veja se os IDs e preços estão vindo certo
 
           if (barbersRes.data) setAvailableBarbers(barbersRes.data);
           if (servicesRes.data) setAvailableServices(servicesRes.data);
@@ -149,6 +154,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
           <button
             key={service.id}
             onClick={() => {
+              console.log("🖱️ Clique no serviço:", service.name, "ID:", service.id);
               if (selectedServices.find(s => s.id === service.id)) {
                 setSelectedServices(selectedServices.filter(s => s.id !== service.id));
               } else {
