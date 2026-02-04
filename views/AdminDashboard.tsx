@@ -398,13 +398,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
 
         // BLOQUEIA se: NÃO está em trial E NÃO tem assinatura ativa
         const shouldBlock = !isTrialActive && !isSubscriptionActive;
-
-        console.log("🔒 STATUS DE ACESSO:", {
-          planoExpirou: expiresAtDate ? new Date(expiresAtDate) < now : 'sem data',
-          trialExpirou: trialEndsAtDate ? new Date(trialEndsAtDate) < now : 'sem data',
-          bloquearSistema: shouldBlock
-        });
-
         setIsBlocked(shouldBlock);
 
         if (shouldBlock && activeTab !== 'billing') {
@@ -693,9 +686,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
     const trialDate = trialDateStr ? new Date(trialDateStr) : null;
     const isTrialValid = trialDate && trialDate > now;
 
-    // LOG de depuração para você ver no console
-    console.log("Banner Check:", { currentStatus, trialDate, isTrialValid });
-
     if (currentStatus === 'trialing' || isTrialValid) {
       return (
         <div className="mb-8 bg-amber-500/10 border border-amber-500/20 p-4 lg:p-6 rounded-[2rem] flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top duration-500">
@@ -725,7 +715,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
     }
     return null;
   };
-  
+
   if (!barbershopId) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#0f1115] text-slate-300 font-black uppercase text-[10px] tracking-[0.5em] px-4">
