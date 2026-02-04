@@ -92,20 +92,26 @@ const App: React.FC = () => {
 
       // 1. TRATAMENTO PARA NOVO USUÁRIO (Perfil inexistente)
       if (!profile) {
-        console.warn("⏳ Perfil não encontrado no banco. Pode ser delay da Trigger.");
-        if (allowRedirect && !hasRedirected.current) {
-          // Se estiver no /registrar, mantém a intenção de criar barbearia
-          if (normalizedCurrentPath === 'registrar') {
-            setView('create_barbershop');
-          } else if (urlSlug) {
-            // Se o novo usuário está em um slug, vai para a vitrine
-            setView('client');
-          } else {
-            setView('profile');
+        console.warn("⏳ Perfil não encontrado, tentando novamente em 2s...");
+
+        // Aguarda 2 segundos para a Trigger terminar
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        const { data: retryProfile } = await supabase
+          .from('profiles')
+          .select('role, full_name, barbershop_id')
+          .eq('id', currentSession.user.id)
+          .maybeSingle();
+
+        if (!retryProfile) {
+          // Se mesmo assim não achar, aí sim segue a lógica de novo usuário
+          if (allowRedirect && !hasRedirected.current) {
+            setView(normalizedCurrentPath === 'registrar' ? 'create_barbershop' : 'profile');
+            hasRedirected.current = true;
           }
-          hasRedirected.current = true;
+          return;
         }
-        return;
+        // Se achou no retry, continua o código usando o retryProfile...
       }
 
       // 2. DADOS DO PERFIL ENCONTRADOS

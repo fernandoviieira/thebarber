@@ -41,29 +41,35 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   }, []);
 
   const handleGoogleLogin = async () => {
-    setError('');
-    try {
-      const isRegistrarPath = window.location.pathname.includes('/registrar');
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin + window.location.pathname,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account',
-          },
-          // ✅ ADICIONE ISSO PARA O GOOGLE TAMBÉM:
-          data: {
-            role: isRegistrarPath ? 'admin' : 'customer',
-            barbershop_id: currentBarbershop?.id || null
-          }
+  setError('');
+  try {
+    // 1. Pegamos a URL atual sem parâmetros de erro da tentativa anterior
+    const cleanTargetUrl = window.location.origin + window.location.pathname;
+    
+    const isRegistrarPath = window.location.pathname.includes('/registrar');
+    
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        // Redireciona para onde o usuário está agora (seja o slug ou /registrar)
+        redirectTo: cleanTargetUrl, 
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'select_account',
         },
-      });
-      if (error) throw error;
-    } catch (err: any) {
-      setError(err.message || 'Erro ao conectar com Google.');
-    }
-  };
+        data: {
+          // Garante que o metadata seja enviado para a Trigger criar o perfil
+          full_name: name || 'Usuário Google', 
+          role: isRegistrarPath ? 'admin' : 'customer',
+          barbershop_id: currentBarbershop?.id || null
+        }
+      },
+    });
+    if (error) throw error;
+  } catch (err: any) {
+    setError(err.message || 'Erro ao conectar com Google.');
+  }
+};
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
