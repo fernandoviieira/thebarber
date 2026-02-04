@@ -372,31 +372,41 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
       if (expensesRes.data) setAllExpenses(expensesRes.data as Expense[]);
 
       if (shopRes.data) {
-        setBarbershopName(shopRes.data.name);
-        setDbSubscriptionStatus(shopRes.data.subscription_status);
-        setExpiresAt(shopRes.data.expires_at);
-        setTrialEndsAt(shopRes.data.trial_ends_at);
-        setCurrentPlan(shopRes.data.current_plan);
+        const {
+          subscription_status: status,
+          expires_at: expiresAtDate,
+          trial_ends_at: trialEndsAtDate,
+          current_plan: plan
+        } = shopRes.data;
 
-        // ✅ LÓGICA DE BLOQUEIO APRIMORADA
-        const status = shopRes.data.subscription_status;
-        const expiresAtDate = shopRes.data.expires_at;
-        const trialEndsAtDate = shopRes.data.trial_ends_at;
+        setDbSubscriptionStatus(status);
+        setTrialEndsAt(trialEndsAtDate);
+        setExpiresAt(expiresAtDate);
+        setCurrentPlan(plan);
+        setBarbershopName(shopRes.data.name);
 
         const now = new Date();
-        const isTrialActive = trialEndsAtDate && new Date(trialEndsAtDate) > now;
+
+        // 1. Verifica Trial: Existe data e ela é maior que AGORA?
+        const isTrialActive = trialEndsAtDate ? new Date(trialEndsAtDate) > now : false;
+
+        // 2. Verifica Assinatura: Status é ativo E a data de expiração é maior que AGORA?
         const isSubscriptionActive =
           status === 'active' &&
           expiresAtDate &&
           new Date(expiresAtDate) > now;
 
-        // Bloqueia se não tem trial ativo E não tem assinatura válida
+        // BLOQUEIA se: NÃO está em trial E NÃO tem assinatura ativa
         const shouldBlock = !isTrialActive && !isSubscriptionActive;
+
+        console.log("🔒 STATUS DE ACESSO:", {
+          planoExpirou: expiresAtDate ? new Date(expiresAtDate) < now : 'sem data',
+          trialExpirou: trialEndsAtDate ? new Date(trialEndsAtDate) < now : 'sem data',
+          bloquearSistema: shouldBlock
+        });
 
         setIsBlocked(shouldBlock);
 
-        // ✅ IMPORTANTE: Se bloqueado, força dashboard (não billing)
-        // O dashboard bloqueado será mostrado
         if (shouldBlock && activeTab !== 'billing') {
           setActiveTab('dashboard');
         }
@@ -671,9 +681,22 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
   };
 
   const SubscriptionBanner = () => {
-    if (isBlocked) return null;
+    // Se ainda estiver carregando os dados iniciais, não mostra nada
+    if (loadingData || isBlocked) return null;
 
-    if (dbSubscriptionStatus === 'trialing') {
+    const now = new Date();
+
+    // Usa o valor direto que veio do banco ou o estado (garantindo que não seja undefined)
+    const currentStatus = dbSubscriptionStatus;
+    const trialDateStr = trialEndsAt;
+
+    const trialDate = trialDateStr ? new Date(trialDateStr) : null;
+    const isTrialValid = trialDate && trialDate > now;
+
+    // LOG de depuração para você ver no console
+    console.log("Banner Check:", { currentStatus, trialDate, isTrialValid });
+
+    if (currentStatus === 'trialing' || isTrialValid) {
       return (
         <div className="mb-8 bg-amber-500/10 border border-amber-500/20 p-4 lg:p-6 rounded-[2rem] flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in slide-in-from-top duration-500">
           <div className="flex items-center gap-4">
@@ -684,7 +707,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
               <p className="text-xs lg:text-sm font-black uppercase italic text-white leading-none">
                 Modo de Teste <span className="text-amber-500">Ativado</span>
               </p>
-              <p className="text-[10px] text-slate-500 uppercase font-bold mt-1">Aproveite todos os recursos Pro por 20 dias.</p>
+              <p className="text-[10px] text-slate-500 uppercase font-bold mt-1">
+                {trialDate
+                  ? `Sua avaliação expira em: ${trialDate.toLocaleDateString('pt-BR')}`
+                  : 'Aproveite seus dias de teste gratuito.'}
+              </p>
             </div>
           </div>
           <button
@@ -698,7 +725,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
     }
     return null;
   };
-
+  
   if (!barbershopId) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#0f1115] text-slate-300 font-black uppercase text-[10px] tracking-[0.5em] px-4">
@@ -1095,8 +1122,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId, subscript
               {activeTab === 'historico' && (
                 <SalesHistoryModule
                   appointments={(appointments as Appointment[]).filter(app => app.barbershop_id === barbershopId)}
-                  servicesList={availableServices} 
-                  productsList={inventory}         
+                  servicesList={availableServices}
+                  productsList={inventory}
                   barbershopId={barbershopId}
                   onDelete={async (id: string) => {
                     try {
