@@ -82,7 +82,7 @@ async function handleCreate() {
                 <Store size={32} className="text-black" />
               </div>
               <h2 className="text-3xl font-black text-white uppercase tracking-tighter italic">Nova Unidade</h2>
-              <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold">Configure seu espaço no ContaFácil Pro</p>
+              <p className="text-zinc-500 text-xs uppercase tracking-widest font-bold">Configure seu espaço no Barbers Pro</p>
             </header>
 
             <div className="space-y-4">

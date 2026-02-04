@@ -15,8 +15,8 @@ export default defineConfig(({ mode }) => {
         VitePWA({
           registerType: 'autoUpdate',
           manifest: {
-            name: 'ContaFácil Pro',
-            short_name: 'ContaFácil',
+            name: 'Barbers Pro',
+            short_name: 'Barbers',
             description: 'Gestão Inteligente com IA Sarah',
             theme_color: '#f59e0b',
             background_color: '#0f1115',

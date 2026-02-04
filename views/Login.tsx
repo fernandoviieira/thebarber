@@ -133,7 +133,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               <Scissors className="text-zinc-950" size={32} />
             </div>
             <h1 className="text-4xl font-serif font-bold italic text-white tracking-tighter uppercase leading-tight">
-              {currentBarbershop ? currentBarbershop.name : 'CONTAFÁCIL PRO'}
+              {currentBarbershop ? currentBarbershop.name : 'Barbers PRO'}
             </h1>
             <p className="text-zinc-400 mt-4 font-medium uppercase text-[10px] tracking-[0.3em]">
               {isRegister ? 'Crie sua conta mestre' : 'Acesse seu painel'}
