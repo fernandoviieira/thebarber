@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Service, Barber } from '../types';
-import { 
-  Check, ArrowLeft, Calendar as CalendarIcon, Clock, 
-  CheckCircle2, User, Phone, Scissors, Loader2, AlertTriangle 
+import {
+  Check, ArrowLeft, Calendar as CalendarIcon, Clock,
+  CheckCircle2, User, Phone, Scissors, Loader2, AlertTriangle
 } from 'lucide-react';
 import { useBooking } from './BookingContext';
 import { supabase } from '@/lib/supabase';
@@ -20,7 +20,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   const [currentBarbershopId, setCurrentBarbershopId] = useState<string | null>(null);
   const [availableBarbers, setAvailableBarbers] = useState<Barber[]>([]);
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
-  
+
   const [shopSettings, setShopSettings] = useState<{
     is_closed: boolean;
     opening_time: string;
@@ -68,8 +68,8 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   }, []);
 
   const totalDuration = selectedServices.reduce((acc, s) => {
-    const d = typeof s.duration === 'string' 
-      ? parseInt(s.duration.replace(/\D/g, '')) 
+    const d = typeof s.duration === 'string'
+      ? parseInt(s.duration.replace(/\D/g, ''))
       : s.duration;
     return acc + (Number(d) || 0);
   }, 0);
@@ -89,7 +89,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
     return appointments.some(app => {
       if (app.date !== date || app.barber !== barberName || app.status === 'cancelado') return false;
-      
+
       const appStart = timeToMinutes(app.time);
       const appDuration = typeof app.duration === 'string' ? parseInt(app.duration) : (app.duration || 30);
       const appEnd = appStart + appDuration;
@@ -199,7 +199,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">Escolha o Horário</h3>
-        
+
         <div className="flex gap-2 md:gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4">
           {Array.from({ length: 30 }, (_, i) => {
             const d = new Date(); d.setDate(d.getDate() + i);
@@ -220,13 +220,12 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
         </div>
 
         {selectedDate && (
-          <div className="grid grid-cols-3 gap-2">
-            {/* ✅ MUDANÇA: Exibindo de 30 em 30 minutos para evitar buracos de 15min */}
-            {Array.from({ length: 24 * 2 }, (_, i) => {
-              const hour = Math.floor(i / 2);
-              const min = (i % 2) * 30;
+          <div className="grid grid-cols-3 md:grid-cols-4 gap-2"> {/* Aumentei para 4 colunas em telas maiores para caber melhor */}
+            {Array.from({ length: 24 * 4 }, (_, i) => {
+              const hour = Math.floor(i / 4);
+              const min = (i % 4) * 15; // Muda de 30 para 15
               const timeStr = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
-              
+
               const dayConfig = selectedBarber?.work_days?.[new Date(selectedDate + 'T12:00:00').getDay().toString()];
               if (!dayConfig || !dayConfig.active) return null;
 
@@ -235,26 +234,27 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
               const shopCloseMin = shopSettings ? timeToMinutes(shopSettings.closing_time) : 1440;
               const barberStart = timeToMinutes(dayConfig.start);
               const barberEnd = timeToMinutes(dayConfig.end);
-              
-              // Garante que o serviço caiba no expediente
+
+              // Verifica se o serviço cabe dentro do horário de trabalho
               const isOutsideShop = slotMin < shopOpenMin || (slotMin + totalDuration) > shopCloseMin;
               const isOutsideBarber = slotMin < barberStart || (slotMin + totalDuration) > barberEnd;
-              
+
               const isOccupied = isRangeOccupied(selectedDate, timeStr, selectedBarber!.name, totalDuration);
               const isPastTime = selectedDate === todayStr && slotMin <= currentTotalMinutes;
-              
+
+              // Filtra horários fora do expediente
               if (isOutsideShop || isOutsideBarber) return null;
 
               return (
                 <button
-                  key={i} 
+                  key={i}
                   disabled={isOccupied || isPastTime}
                   onClick={() => setSelectedTime(timeStr)}
-                  className={`py-3 rounded-xl border transition-all text-xs font-black italic 
-                    ${selectedTime === timeStr 
-                      ? 'bg-amber-500 text-black border-amber-500 scale-105 shadow-lg shadow-amber-500/20' 
-                      : (isOccupied || isPastTime) 
-                        ? 'opacity-10 line-through cursor-not-allowed bg-black' 
+                  className={`py-3 rounded-xl border transition-all text-[11px] font-black italic 
+          ${selectedTime === timeStr
+                      ? 'bg-amber-500 text-black border-amber-500 scale-105 shadow-lg shadow-amber-500/20'
+                      : (isOccupied || isPastTime)
+                        ? 'opacity-20 line-through cursor-not-allowed bg-zinc-950 border-zinc-900'
                         : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-amber-500/50'
                     }`}
                 >

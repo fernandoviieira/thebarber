@@ -1,41 +1,41 @@
-
 <!DOCTYPE html>
 <html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>The Barber's Pro</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#f59e0b">
-    <link rel="apple-touch-icon" href="/icon-192.png">
-    <link rel="icon" type="image/png" href="/barber-shop.png">
-   
-   <style>
-        body { font-family: 'Inter', sans-serif; }
-        .font-serif { font-family: 'Playfair+Display', serif; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #1a1a1a; }
-        ::-webkit-scrollbar-thumb { background: #d4af37; border-radius: 3px; }
-    </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "recharts": "https://esm.sh/recharts@^3.7.0"
-  }
-}
-</script>
-<link rel="stylesheet" href="/index.css">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>The Barber's Pro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;500;600;700&display=swap"
+    rel="stylesheet">
+
+  <link rel="manifest" id="my-pwa-manifest">
+  <meta name="theme-color" content="#f59e0b">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="BarberPro">
+
+  <link rel="apple-touch-icon" href="/icon-192.png">
+
+  <link rel="icon" type="image/png" href="/barber-shop.png">
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      /* Previne o "pulo" da tela no iOS ao abrir teclado */
+      overscroll-behavior-y: none;
+    }
+
+    /* Resto do seu CSS... */
+  </style>
+
 </head>
+
 <body class="bg-zinc-950 text-zinc-100">
-    <div id="root"></div>
-<script type="module" src="/index.tsx"></script>
+  <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
 </body>
+
 </html>

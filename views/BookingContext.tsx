@@ -27,7 +27,7 @@ export interface Appointment {
 interface BookingContextType {
   appointments: Appointment[];
   addAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<void>;
-  updateStatus: (id: string, status: string) => Promise<void>;
+  updateStatus: (id: string, updates: any) => Promise<void>;
   deleteAppointment: (id: string) => Promise<void>;
   fetchAppointments: (barbershopId?: string) => Promise<void>;
   loading: boolean;
@@ -134,17 +134,17 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
               prev.map(app =>
                 app.id === payload.new.id
                   ? {
-                      ...app,
-                      status: payload.new.status,
-                      customerName: payload.new.customer_name,
-                      customerPhone: payload.new.customer_phone,
-                      service: payload.new.service,
-                      barber: payload.new.barber,
-                      date: payload.new.date,
-                      time: payload.new.time,
-                      price: Number(payload.new.price),
-                      payment_method: payload.new.payment_method
-                    }
+                    ...app,
+                    status: payload.new.status,
+                    customerName: payload.new.customer_name,
+                    customerPhone: payload.new.customer_phone,
+                    service: payload.new.service,
+                    barber: payload.new.barber,
+                    date: payload.new.date,
+                    time: payload.new.time,
+                    price: Number(payload.new.price),
+                    payment_method: payload.new.payment_method
+                  }
                   : app
               )
             );
@@ -241,21 +241,26 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const updateStatus = async (id: string, status: string) => {
-    try {
-      const { error } = await supabase
-        .from('appointments')
-        .update({ status })
-        .eq('id', id);
+  const updateStatus = async (id: string, updates: any) => {
+  try {
+    // Se updates for apenas uma string (legado), transforma em objeto
+    const payload = typeof updates === 'string' ? { status: updates } : updates;
 
-      if (error) throw error;
+    const { error } = await supabase
+      .from('appointments')
+      .update(payload)
+      .eq('id', id);
 
-      // ✅ Atualização local imediata (otimistic update)
-      setAppointments(prev => prev.map(app => app.id === id ? { ...app, status: status as any } : app));
-    } catch (err) {
-      console.error("Erro ao atualizar status:", err);
-    }
-  };
+    if (error) throw error;
+
+    // Atualiza o estado local para refletir a mudança na hora
+    setAppointments(prev => prev.map(app => 
+      app.id === id ? { ...app, ...payload } : app
+    ));
+  } catch (err) {
+    console.error("Erro ao atualizar agendamento:", err);
+  }
+};
 
   const deleteAppointment = async (id: string) => {
     try {

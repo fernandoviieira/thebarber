@@ -43,21 +43,28 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const handleGoogleLogin = async () => {
     setError('');
     try {
+      // Só vira admin se a URL for EXATAMENTE /registrar ou contiver /registrar
       const isRegistrarPath = window.location.pathname.includes('/registrar');
       const cleanTargetUrl = window.location.origin + window.location.pathname;
+
+      // Se estiver em uma barbearia (ex: /barbearia-do-ze), pegamos o ID dela
+      // para que o cliente já logue vinculado a ela.
+      const metadata: any = {
+        role: isRegistrarPath ? 'admin' : 'client'
+      };
+
+      if (currentBarbershop?.id && !isRegistrarPath) {
+        metadata.barbershop_id = currentBarbershop.id;
+      }
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: cleanTargetUrl,
-          data: {
-            full_name: name || undefined,
-            role: isRegistrarPath ? 'admin' : 'customer'
-            // REMOVA o barbershop_id daqui por enquanto. 
-            // Deixe para vincular a barbearia depois que o admin criar ela.
-          }
+          data: metadata // Passando o objeto que montamos acima
         },
       });
+
       if (error) throw error;
     } catch (err: any) {
       setError(err.message);
@@ -83,7 +90,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             data: {
               full_name: name,
               // Se estiver no /registrar, vira admin. Caso contrário, cliente.
-              role: isRegistrarPath ? 'admin' : 'customer',
+              role: isRegistrarPath ? 'admin' : 'client',
               // Se estiver em uma barbearia específica (ex: /barbearia-do-ze), vincula o cliente
               barbershop_id: currentBarbershop?.id || null
             }

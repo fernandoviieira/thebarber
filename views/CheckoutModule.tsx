@@ -22,24 +22,109 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 }) => {
   const [pdvItems, setPdvItems] = useState<any[]>([]);
   const [localInventory, setLocalInventory] = useState<any[]>(inventory);
+
+  // ✅ NOVO: clientes em estado local para refletir realtime sem F5
+  const [localCustomers, setLocalCustomers] = useState<any[]>(customers);
+
   const [selectedBarber, setSelectedBarber] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [isVipMode, setIsVipMode] = useState(false);
   const [isMisto, setIsMisto] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<'dinheiro' | 'pix' | 'debito' | 'credito' | 'pacote'>('pix');
-  const [fees, setFees] = useState<any>({ fee_dinheiro: 0, fee_pix: 0, fee_debito: 0, fee_credito: 0 });
+  const [paymentMethod, setPaymentMethod] =
+    useState<'dinheiro' | 'pix' | 'debito' | 'credito' | 'pacote'>('pix');
+
+  const [fees, setFees] = useState<any>({
+    fee_dinheiro: 0, fee_pix: 0, fee_debito: 0, fee_credito: 0
+  });
 
   const [splitValues, setSplitValues] = useState<Record<string, number>>({
     dinheiro: 0, pix: 0, debito: 0, credito: 0, pacote: 0
   });
 
   const [tip, setTip] = useState<number>(0);
+  const [loadingData, setLoadingData] = useState(true);
+
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCashSession, setActiveCashSession] = useState<any>(null);
   const [checkingCash, setCheckingCash] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
+
+  // ✅ Mantém localCustomers sincronizado com prop (primeiro load / mudanças externas)
+  useEffect(() => {
+    setLocalCustomers(customers || []);
+  }, [customers]);
+
+  // ✅ Mantém localInventory sincronizado com prop (primeiro load / mudanças externas)
+  useEffect(() => {
+    setLocalInventory(inventory || []);
+  }, [inventory]);
+
+  // ✅ NOVO: Função para recarregar dados do cliente selecionado (inclui pacotes)
+  const reloadSelectedCustomer = useCallback(async () => {
+    if (!selectedCustomer?.id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select(`*, customer_packages (*)`)
+        .eq('id', selectedCustomer.id)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setSelectedCustomer(data);
+
+        // ✅ também atualiza na lista local para refletir mudanças (nome, telefone etc.)
+        setLocalCustomers(prev => {
+          const exists = prev.some(c => c.id === data.id);
+          if (!exists) return [data, ...prev];
+          return prev.map(c => (c.id === data.id ? data : c));
+        });
+
+        console.log('✅ Cliente atualizado com sucesso:', data);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao recarregar cliente:', error);
+    }
+  }, [selectedCustomer?.id]);
+
+  const fetchInventory = useCallback(async () => {
+    if (!barbershopId) return;
+    setLoadingData(true);
+    try {
+      const { data, error } = await supabase
+        .from('inventory')
+        .select('*')
+        .eq('barbershop_id', barbershopId);
+
+      if (error) throw error;
+      if (data) setLocalInventory(data);
+    } catch (error) {
+      console.error('Erro ao carregar inventário:', error);
+    } finally {
+      setLoadingData(false);
+    }
+  }, [barbershopId]);
+
+  // ✅ NOVO: buscar clientes do barbershop (caso queira garantir que o realtime sempre tenha base correta)
+  const fetchCustomers = useCallback(async () => {
+    if (!barbershopId) return;
+    try {
+      const { data, error } = await supabase
+        .from('customers')
+        .select(`*, customer_packages (*)`)
+        .eq('barbershop_id', barbershopId)
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      if (data) setLocalCustomers(data);
+    } catch (error) {
+      console.error('Erro ao carregar clientes:', error);
+    }
+  }, [barbershopId]);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -50,7 +135,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         .maybeSingle();
       if (data) setFees(data);
     };
-    fetchSettings();
+    if (barbershopId) fetchSettings();
   }, [barbershopId]);
 
   const addItem = useCallback((item: any, type: 'servico' | 'produto') => {
@@ -75,23 +160,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     if (initialAppointment && services.length > 0 && !isInitialized) {
       setPdvItems([]);
 
-      if (initialAppointment.barber) {
-        setSelectedBarber(initialAppointment.barber);
-      }
-
-      if (initialAppointment.customerName) {
-        const foundCustomer = customers.find(c =>
-          c.name.toLowerCase() === initialAppointment.customerName.toLowerCase() ||
-          c.phone === initialAppointment.customerPhone
-        );
-
-        if (foundCustomer) {
-          setIsVipMode(true);
-          setSelectedCustomer(foundCustomer);
-        } else {
-          setIsVipMode(false);
-        }
-      }
+      if (initialAppointment.barber) setSelectedBarber(initialAppointment.barber);
 
       const serviceObj = services.find(s =>
         s.name.toLowerCase() === String(initialAppointment.service || '').toLowerCase()
@@ -104,18 +173,15 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           id: `temp-${Date.now()}`,
           originalId: initialAppointment.id,
           name: initialAppointment.service,
-          price: Number(initialAppointment.price) || 0,
           type: 'servico',
-          quantity: 1
+          quantity: 1,
+          price: Number(initialAppointment.price)
         }]);
       }
 
-      const valorInicial = Number(initialAppointment.price) || 0;
-      setSplitValues(prev => ({ ...prev, pix: valorInicial }));
-
       setIsInitialized(true);
     }
-  }, [initialAppointment, services, customers, isInitialized, addItem]);
+  }, [initialAppointment, services, isInitialized, addItem]);
 
   useEffect(() => {
     if (barbers.length === 1 && !selectedBarber) {
@@ -135,46 +201,49 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       setActiveCashSession(data);
       setCheckingCash(false);
     };
-    checkCash();
+    if (barbershopId) checkCash();
   }, [barbershopId]);
 
-  useEffect(() => {
-    setLocalInventory(inventory);
-  }, [inventory]);
-
+  // ✅ Pacote ativo do cliente (primeiro pacote com créditos restantes)
   const activePkg = useMemo(() => {
     if (!selectedCustomer?.customer_packages) return null;
-    return selectedCustomer.customer_packages.find(
+    const pkg = selectedCustomer.customer_packages.find(
       (p: any) => Number(p.used_credits) < Number(p.total_credits)
     );
+    return pkg;
   }, [selectedCustomer]);
 
-  const hasComboInCart = useMemo(() => {
-    return pdvItems.some(item =>
-      item.type === 'servico' &&
-      activePkg
-    );
-  }, [pdvItems, activePkg]);
+  const isItemInActivePackage = useCallback((itemName: string) => {
+    if (!activePkg) return false;
+    const pkgName = String(activePkg.package_name || activePkg.name || '').toLowerCase().trim();
+    const serviceName = String(itemName || '').toLowerCase().trim();
+
+    // combos genéricos
+    if (pkgName === 'combo' || pkgName === 'pacote' || pkgName === 'plano') return true;
+
+    return pkgName.includes(serviceName) || serviceName.includes(pkgName);
+  }, [activePkg]);
 
   const getItemPrice = useCallback((item: any) => {
     const baseService = services.find(s => s.id === item.originalId);
-    const baseProduct = inventory.find(p => p.id === item.originalId);
-    const basePrice = Number(baseService?.price || baseProduct?.price_sell || 0);
+    const baseProduct = localInventory.find(p => p.id === item.originalId);
 
-    if (item.type === 'servico' && activePkg) {
-      const isServiceInPackage =
-        String(activePkg.package_name || '').toLowerCase().includes(String(item.name || '').toLowerCase()) ||
-        String(activePkg.package_name || '').toLowerCase() === 'combo';
+    const fallbackPrice = item.price !== undefined ? item.price : 0;
+    const basePrice = Number(baseService?.price || baseProduct?.price_sell || fallbackPrice);
 
-      if (isServiceInPackage) {
-        const jaUsou = Number(activePkg.used_credits) || 0;
-        if (jaUsou === 0) return Number(activePkg.price_paid) || 0;
-        return 0;
-      }
+    if (item.type === 'produto') return basePrice;
+
+    // ✅ REGRA DO COMBO:
+    // 1º uso (used_credits == 0): cobra price_paid
+    // demais usos: isento (0)
+    if (item.type === 'servico' && activePkg && isItemInActivePackage(item.name)) {
+      const jaUsou = Number(activePkg.used_credits) || 0;
+      if (jaUsou > 0) return 0;
+      return Number(activePkg.price_paid) || 0;
     }
 
     return basePrice;
-  }, [activePkg, services, inventory]);
+  }, [activePkg, services, localInventory, isItemInActivePackage]);
 
   const totalFinal = useMemo(() =>
     pdvItems.reduce((acc, item) =>
@@ -202,61 +271,50 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     return devido > recebido ? devido - recebido : 0;
   }, [totalPagoInput, valorTotalAbsoluto]);
 
-  const calculateItemNetValue = useCallback((itemGrossPrice: number) => {
-    if (hasComboInCart || itemGrossPrice === 0) {
-      return itemGrossPrice;
-    }
+  const hasComboInCart = useMemo(() => {
+    if (!activePkg || pdvItems.length === 0) return false;
 
-    if (isMisto) {
-      let totalLiquido = 0;
-
-      Object.entries(splitValues).forEach(([method, value]) => {
-        const numValue = value as number;
-        if (numValue > 0) {
-          const proporcao = numValue / valorTotalAbsoluto;
-          const valorProporcional = itemGrossPrice * proporcao;
-          const feeKey = `fee_${method}`;
-          const feePercent = fees[feeKey] || 0;
-          totalLiquido += valorProporcional * (1 - feePercent / 100);
-        }
-      });
-
-      return totalLiquido;
-    } else {
-      return calculateNet(itemGrossPrice, paymentMethod);
-    }
-  }, [hasComboInCart, isMisto, splitValues, valorTotalAbsoluto, fees, paymentMethod, calculateNet]);
+    return pdvItems.some(item => {
+      const isService = item.type === 'servico';
+      const match = isItemInActivePackage(item.name);
+      return isService && match;
+    });
+  }, [pdvItems, activePkg, isItemInActivePackage]);
 
   useEffect(() => {
-    if (!isMisto && valorTotalAbsoluto > 0) {
+    if (isInitialized && valorTotalAbsoluto >= 0 && !isMisto) {
+      const method = hasComboInCart ? 'pacote' : paymentMethod;
       setSplitValues({
-        dinheiro: 0,
-        pix: 0,
-        debito: 0,
-        credito: 0,
-        pacote: 0,
-        [paymentMethod]: valorTotalAbsoluto
+        dinheiro: 0, pix: 0, debito: 0, credito: 0, pacote: 0,
+        [method]: valorTotalAbsoluto
       });
     }
-  }, [valorTotalAbsoluto, paymentMethod, isMisto]);
+  }, [valorTotalAbsoluto, hasComboInCart, isMisto, isInitialized, paymentMethod]);
 
   const { netValue, taxasCartao } = useMemo(() => {
     let liquidoTotal = 0;
     let totalTaxas = 0;
 
-    (Object.entries(splitValues) as [string, number][]).forEach(([method, value]) => {
-      if (value <= 0) return;
-
+    if (isMisto) {
+      (Object.entries(splitValues) as [string, number][]).forEach(([method, value]) => {
+        if (value <= 0) return;
+        const feeKey = `fee_${method}`;
+        const feePercent = fees[feeKey] || 0;
+        const valorTaxa = value * (feePercent / 100);
+        totalTaxas += valorTaxa;
+        liquidoTotal += (value - valorTaxa);
+      });
+    } else {
+      const method = hasComboInCart ? 'pacote' : paymentMethod;
       const feeKey = `fee_${method}`;
       const feePercent = fees[feeKey] || 0;
 
-      const valorTaxa = value * (feePercent / 100);
-      totalTaxas += valorTaxa;
-      liquidoTotal += (value - valorTaxa);
-    });
+      totalTaxas = valorTotalAbsoluto * (feePercent / 100);
+      liquidoTotal = valorTotalAbsoluto - totalTaxas;
+    }
 
     return { netValue: liquidoTotal, taxasCartao: totalTaxas };
-  }, [splitValues, fees]);
+  }, [splitValues, fees, isMisto, valorTotalAbsoluto, paymentMethod, hasComboInCart]);
 
   const handleMethodToggle = useCallback((method: string) => {
     if (hasComboInCart && method !== 'pacote') return;
@@ -286,6 +344,157 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       setPaymentMethod('pix');
     }
   }, [hasComboInCart, valorTotalAbsoluto, paymentMethod]);
+
+  // =========================================================
+  // ✅ REALTIME: INVENTORY + CUSTOMERS + CUSTOMER_PACKAGES
+  // =========================================================
+  useEffect(() => {
+    if (!barbershopId) return;
+
+    // base inicial (garante que o checkout já comece correto)
+    fetchInventory();
+    fetchCustomers();
+
+    const inventoryChannel = supabase
+      .channel(`rt_inventory_${barbershopId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'inventory',
+          filter: `barbershop_id=eq.${barbershopId}`
+        },
+        (payload) => {
+          console.log('🔄 Realtime inventory:', payload);
+
+          setLocalInventory((current) => {
+            if (payload.eventType === 'INSERT') {
+              const exists = current.find(i => i.id === payload.new.id);
+              if (exists) return current;
+              return [...current, payload.new];
+            }
+            if (payload.eventType === 'UPDATE') {
+              return current.map(item => item.id === payload.new.id ? payload.new : item);
+            }
+            if (payload.eventType === 'DELETE') {
+              return current.filter(item => item.id !== payload.old.id);
+            }
+            return current;
+          });
+        }
+      )
+      .subscribe();
+
+    // ✅ NOVO: Realtime customers para aparecer cliente novo sem F5
+    const customersChannel = supabase
+      .channel(`rt_customers_${barbershopId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'customers',
+          filter: `barbershop_id=eq.${barbershopId}`
+        },
+        (payload) => {
+          console.log('🔄 Realtime customers:', payload);
+
+          setLocalCustomers((current) => {
+            if (payload.eventType === 'INSERT') {
+              const exists = current.some(c => c.id === payload.new.id);
+              if (exists) return current;
+              return [payload.new, ...current].sort((a, b) =>
+                String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR')
+              );
+            }
+
+            if (payload.eventType === 'UPDATE') {
+              const updated = current.map(c => (c.id === payload.new.id ? payload.new : c));
+              return updated.sort((a, b) =>
+                String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR')
+              );
+            }
+
+            if (payload.eventType === 'DELETE') {
+              // se deletar o cliente que está selecionado, limpa seleção
+              if (selectedCustomer?.id === payload.old.id) {
+                setSelectedCustomer(null);
+                setIsVipMode(false);
+              }
+              return current.filter(c => c.id !== payload.old.id);
+            }
+
+            return current;
+          });
+
+          // Se o cliente selecionado foi alterado, recarrega completo (inclui pacotes)
+          if (payload.eventType === 'UPDATE' && selectedCustomer?.id === payload.new.id) {
+            reloadSelectedCustomer();
+          }
+        }
+      )
+      .subscribe();
+
+    // ✅ NOVO: Realtime customer_packages (INSERT/UPDATE/DELETE)
+    // Isso resolve "novo combo" sem F5 (ex: inseriu pacote para o cliente)
+    const packagesChannel = supabase
+      .channel(`rt_customer_packages_${barbershopId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'customer_packages',
+          filter: `barbershop_id=eq.${barbershopId}`
+        },
+        (payload) => {
+          console.log('🔄 Realtime customer_packages:', payload);
+
+          // Se afetar o cliente selecionado, recarrega para refletir combo/créditos na hora
+          const affectedCustomerId =
+            payload.eventType === 'DELETE' ? payload.old?.customer_id : payload.new?.customer_id;
+
+          if (selectedCustomer?.id && affectedCustomerId === selectedCustomer.id) {
+            reloadSelectedCustomer();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(inventoryChannel);
+      supabase.removeChannel(customersChannel);
+      supabase.removeChannel(packagesChannel);
+    };
+  }, [barbershopId, fetchInventory, fetchCustomers, selectedCustomer?.id, reloadSelectedCustomer]);
+
+  // ✅ Listener adicional: quando há cliente selecionado, escuta eventos dele (insert/update/delete)
+  // Isso ajuda mesmo que você não tenha barbershop_id no pacote (ou se o filtro do barbershop falhar)
+  useEffect(() => {
+    if (!selectedCustomer?.id) return;
+
+    const channel = supabase
+      .channel(`rt_customer_packages_customer_${selectedCustomer.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'customer_packages',
+          filter: `customer_id=eq.${selectedCustomer.id}`
+        },
+        (payload) => {
+          console.log('🔄 Pacotes do cliente em tempo real:', payload);
+          reloadSelectedCustomer();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [selectedCustomer?.id, reloadSelectedCustomer]);
 
   const handleUpdateQuantity = useCallback((originalId: string, delta: number) => {
     setPdvItems(prev => prev.map(item => {
@@ -328,7 +537,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       if (!confirmarDesconto) return;
     }
 
-    // Validar estoque
     const produtosNoCarrinho = pdvItems.filter(i => i.type === 'produto');
     for (const item of produtosNoCarrinho) {
       const produtoEstoque = localInventory.find(p => p.id === item.originalId);
@@ -346,7 +554,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     try {
       const now = new Date();
       const today = initialAppointment?.date || now.toLocaleDateString('en-CA');
-      // ✅ Se houver um agendamento inicial, usamos o horário dele. Se não (venda direta), usamos o atual.
       const time = initialAppointment?.time || now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
       const vendaIdUnica = `VENDA-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
@@ -362,7 +569,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
       const barberObj = barbers.find(b => b.name === selectedBarber);
 
-      // Resumo dos itens (para virar UMA linha)
       const serviceParts: string[] = [];
       const pdvServices = pdvItems.filter(i => i.type === 'servico');
       const pdvProducts = pdvItems.filter(i => i.type === 'produto');
@@ -381,9 +587,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
       const serviceResumo = serviceParts.length > 0 ? serviceParts.join(' + ') : 'Venda Direta';
 
-      // Atualizações de estoque e pacote (mantém)
       for (const item of pdvItems) {
-        const isPackageRedemption = !!(activePkg && item.type === 'servico');
+        const isPackageRedemption = !!(activePkg && item.type === 'servico' && isItemInActivePackage(item.name));
 
         if (item.type === 'produto') {
           const produtoAtual = localInventory.find(p => p.id === item.originalId);
@@ -403,8 +608,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         }
       }
 
-      // Montar UMA linha de appointment final
-      // OBS: aqui eu coloco original_price como "tabela/bruto" e price como líquido (netValue).
       const appointmentPayload: any = {
         venda_id: vendaIdUnica,
         barbershop_id: barbershopId,
@@ -414,8 +617,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         barber_id: barberObj?.id || null,
         date: today,
         time: time,
-        original_price: Number(valorTotalAbsoluto) || 0, // bruto
-        price: Number(netValue) || 0, // líquido (caixa)
+        original_price: Number(valorTotalAbsoluto) || 0,
+        price: Number(netValue) || 0,
         payment_method: methodsUsed,
         status: 'finalizado',
         customer_phone: finalPhone,
@@ -423,9 +626,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         tip_amount: tip || 0
       };
 
-      setLoadingMessage('Salvando venda (1 linha)...');
+      setLoadingMessage('Salvando venda...');
 
-      // Se veio de agendamento: UPDATE no registro existente (sem duplicar)
       if (initialAppointment?.id) {
         const { error: updateErr } = await supabase
           .from('appointments')
@@ -441,7 +643,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         if (insertErr) throw insertErr;
       }
 
-      // Atualizar estoque
       if (inventoryUpdates.length > 0) {
         setLoadingMessage('Atualizando estoque...');
         for (const update of inventoryUpdates) {
@@ -454,7 +655,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         }
       }
 
-      // Atualizar créditos do combo
       if (packageUpdates.length > 0) {
         setLoadingMessage('Atualizando combo...');
         for (const update of packageUpdates) {
@@ -465,9 +665,11 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
           if (pkgError) throw new Error(`Erro ao atualizar combo: ${pkgError.message}`);
         }
+
+        setLoadingMessage('Atualizando dados do cliente...');
+        await reloadSelectedCustomer();
       }
 
-      // Registrar no caixa
       setLoadingMessage('Registrando entrada no caixa...');
       const { error: cashError } = await supabase
         .from('cash_transactions')
@@ -481,9 +683,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           created_at: new Date().toISOString()
         });
 
-      if (cashError) {
-        console.error('⚠️ Falha ao registrar transação:', cashError);
-      }
+      if (cashError) console.error('⚠️ Falha ao registrar transação:', cashError);
 
       setLoadingMessage('Concluído!');
 
@@ -492,8 +692,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       setSplitValues({ dinheiro: 0, debito: 0, credito: 0, pacote: 0, pix: 0 });
       setTip(0);
       setIsMisto(false);
-      setSelectedCustomer(null);
-      setIsVipMode(false);
 
       const valorRecebido = totalPagoInput;
       const descontoAplicado = valorTotalAbsoluto - valorRecebido;
@@ -506,7 +704,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         `Recebido (Bruto): R$ ${valorRecebido.toFixed(2)}\n` +
         `Líquido (Caixa): R$ ${netValue.toFixed(2)}\n\n` +
         `Profissional: ${selectedBarber}\n` +
-        `Resumo: ${serviceResumo}`
+        `Resumo: ${serviceResumo}\n`
       );
 
     } catch (err: any) {
@@ -572,10 +770,14 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                 {!selectedCustomer ? (
                   <select
                     className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-xs font-bold outline-none italic text-white"
-                    onChange={(e) => setSelectedCustomer(customers.find(c => c.id === e.target.value))}
+                    onChange={(e) => {
+                      const customer = localCustomers.find(c => c.id === e.target.value);
+                      setSelectedCustomer(customer || null);
+                    }}
+                    value={''}
                   >
                     <option value="">Localizar Cliente...</option>
-                    {customers.map(c => (
+                    {localCustomers.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
@@ -591,7 +793,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                         </p>
                         {activePkg && (
                           <p className="text-[7px] text-amber-500 font-black uppercase mt-1">
-                            Combo: {activePkg.total_credits - activePkg.used_credits} restantes
+                            Combo: {Number(activePkg.total_credits) - Number(activePkg.used_credits)} restantes
                           </p>
                         )}
                       </div>
@@ -685,7 +887,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                   .filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
                   .map(s => {
                     const price = s.price || 0;
-                    const isCombo = activePkg;
+                    const isCombo = activePkg && isItemInActivePackage(s.name);
 
                     return (
                       <button
@@ -758,6 +960,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar pr-1">
             {pdvItems.map(item => {
               const currentPrice = getItemPrice(item);
+              const showComboTag = item.type === 'servico' && currentPrice === 0 && activePkg;
+
               return (
                 <div
                   key={item.id}
@@ -767,9 +971,9 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                     <p className="text-[10px] font-black uppercase text-white truncate italic">
                       {item.name}
                     </p>
-                    <p className={`text-[9px] font-black ${currentPrice === 0 ? 'text-green-500' : 'text-amber-500'
+                    <p className={`text-[9px] font-black ${showComboTag ? 'text-green-500' : 'text-amber-500'
                       }`}>
-                      {currentPrice === 0
+                      {showComboTag
                         ? 'DESCONTO COMBO'
                         : `R$ ${currentPrice.toFixed(2)}`}
                     </p>

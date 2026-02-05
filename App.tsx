@@ -2,43 +2,105 @@ import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import ClientHome from './views/ClientHome';
 import BookingFlow from './views/BookingFlow';
-import { BookingProvider } from './views/BookingContext';
+import { BookingProvider, useBooking } from './views/BookingContext'; // Importado useBooking
 import AdminDashboard from './views/AdminDashboard';
 import AdminSettings from './views/AdminSettings';
 import CreateBarbershop from './views/CreateBarbershop';
 import MyAppointments from './views/MyAppointments';
 import InstallBanner from './views/InstallBanner';
 import SubscriptionPage from './views/SubscriptionPage';
-
+import CustomersModule from './views/CustomersModule';
+import CommissionsModule from './views/CommissionsModule';
+import InventoryModule from './views/InventoryModule';
+import AdminCalendarView from './views/AdminCalendarView';
+import CashFlowModule from './views/CashFlowModule';
+import CheckoutModule from './views/CheckoutModule';
+import SalesHistoryModule from './views/SalesHistoryModule';
+import ExpensesModule from './views/ExpensesModule';
+import Sidebar from './views/Sidebar';
 import Login from './views/Login';
 import { MOCK_USER } from './constants';
 import { supabase } from '@/lib/supabase';
-import { User, LayoutDashboard, Calendar, Settings, Plus, ShieldCheck, LogOut } from 'lucide-react';
+import { Calendar, Settings, Plus, ShieldCheck, LogOut, LayoutDashboard } from 'lucide-react';
 
 type ViewState = 'client' | 'admin' | 'booking' | 'profile' | 'my_appointments' | 'settings' | 'create_barbershop' | 'subscription_plans';
 
-const App: React.FC = () => {
+type AdminTab =
+  | 'dashboard'
+  | 'agendamentos'
+  | 'lancamento'
+  | 'clientes'
+  | 'estoque'
+  | 'config'
+  | 'comissoes'
+  | 'historico'
+  | 'caixa'
+  | 'despesas'
+  | 'billing';
+
+const AppContent: React.FC = () => {
+  const { appointments, fetchAppointments, deleteAppointment, addAppointment, updateStatus } = useBooking();
+
   const [view, setView] = useState<ViewState>('client');
+  const [adminActiveTab, setAdminActiveTab] = useState<AdminTab>('dashboard');
   const [session, setSession] = useState<any>(null);
-  const [userPhone, setUserPhone] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userName, setUserName] = useState('');
   const [barbershopId, setBarbershopId] = useState<string | null>(null);
   const [urlSlug, setUrlSlug] = useState<string | null>(null);
+  const [adminSidebarOpen, setAdminSidebarOpen] = useState(false);
+  const [barbershopName, setBarbershopName] = useState('');
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [pendingCheckoutApp, setPendingCheckoutApp] = useState<any | null>(null);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
+
+  // Estados de Dados Centralizados
+  const [barbers, setBarbers] = useState<any[]>([]);
+  const [services, setServices] = useState<any[]>([]);
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
 
   const hasRedirected = useRef(false);
 
+  // Busca de dados globais quando o barbershopId for definido
   useEffect(() => {
+    const fetchAllAdminData = async () => {
+      if (!barbershopId || !isAdmin) return;
+
+      try {
+        if (fetchAppointments) await fetchAppointments(barbershopId);
+
+        const [barbersRes, servicesRes, inventoryRes, customersRes] = await Promise.all([
+          supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
+          supabase.from('services').select('*').eq('barbershop_id', barbershopId),
+          supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
+          // O '*' pega os dados do cliente e o 'customer_packages(*)' traz os combos vinculados
+          supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name')]);
+
+        if (barbersRes.data) setBarbers(barbersRes.data);
+        if (servicesRes.data) setServices(servicesRes.data);
+        if (inventoryRes.data) setInventory(inventoryRes.data);
+        if (customersRes.data) setCustomers(customersRes.data);
+      } catch (err) {
+        console.error("Erro ao carregar dados administrativos:", err);
+      }
+    };
+
+    fetchAllAdminData();
+  }, [barbershopId, isAdmin]);
+
+  useEffect(() => {
+    // --- 1. LÓGICA DE ROTEAMENTO E SLUG ---
     const path = window.location.pathname.split('/')[1];
     const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
 
-    // Lógica de Slug e Redirecionamento
+    // Se o usuário está em uma slug de barbearia, salva no localStorage e atualiza o estado
     if (path && !reservedRoutes.includes(path)) {
       localStorage.setItem('last_visited_slug', path);
-      setUrlSlug(path);
-      // Não forçamos setView('client') aqui para não sobrescrever o redirecionamento do admin depois
+      if (urlSlug !== path) setUrlSlug(path);
     }
+    // Se está na home vazia, tenta redirecionar para a última barbearia visitada
     else if (path === '' && localStorage.getItem('last_visited_slug')) {
       const savedSlug = localStorage.getItem('last_visited_slug');
       window.location.replace(`/${savedSlug}`);
@@ -48,12 +110,54 @@ const App: React.FC = () => {
       setView('create_barbershop');
     }
 
-    // Gerenciamento de Sessão Único
+    // --- 2. LÓGICA DO MANIFEST DINÂMICO ---
+    const updateDynamicManifest = () => {
+      // Busca pelo ID que sugerimos colocar no index.html
+      let manifestLink = document.getElementById('my-pwa-manifest') as HTMLLinkElement;
+
+      if (!manifestLink) {
+        // Fallback caso você ainda não tenha colocado o ID no index.html
+        manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
+      }
+
+      if (manifestLink) {
+        const currentSlug = urlSlug || path || ""; // Pega a slug do estado ou da URL atual
+        const name = barbershopName ? `Barbearia - ${barbershopName}` : "BarberPro";
+
+        const dynamicManifest = {
+          "name": barbershopName || "BarberPro",
+          "short_name": "BarberPro",
+          // Garante que a URL comece com / e seja válida
+          "start_url": window.location.origin + (urlSlug ? `/${urlSlug}` : "/"),
+          "display": "standalone",
+          "icons": [
+            {
+              "src": window.location.origin + "/icon-192.png", // URL completa
+              "sizes": "192x192",
+              "type": "image/png"
+            }
+          ]
+        };
+
+        const stringManifest = JSON.stringify(dynamicManifest);
+        const blob = new Blob([stringManifest], { type: 'application/json' });
+        const manifestUrl = URL.createObjectURL(blob);
+
+        // Limpeza de memória (Revoke)
+        const oldUrl = manifestLink.getAttribute('href');
+        if (oldUrl && oldUrl.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
+
+        manifestLink.setAttribute('href', manifestUrl);
+      }
+    };
+
+    updateDynamicManifest();
+
+    // --- 3. LÓGICA DE AUTENTICAÇÃO (SUPABASE) ---
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
 
       if (session) {
-        // Só buscamos o perfil se a sessão for nova ou se ainda não temos os dados
         const isNewSession = event === 'SIGNED_IN' || event === 'INITIAL_SESSION';
         if (isNewSession) {
           fetchProfile(session, true, window.location.pathname.split('/')[1]);
@@ -61,42 +165,33 @@ const App: React.FC = () => {
       } else {
         setLoading(false);
         hasRedirected.current = false;
-        // Se não tem sessão e não tem slug, manda pro login/perfil
-        if (!urlSlug && path === '') setView('profile');
+        if (!urlSlug && (path === '' || path === 'profile')) setView('profile');
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [urlSlug]); // Adicionado urlSlug como dependência para garantir consistência
+  }, [urlSlug, barbershopName]);
 
   const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
       const { data: profile, error } = await supabase
         .from('profiles')
         .select(`
-        role, 
-        full_name, 
-        barbershop_id, 
-        barbershops:barbershop_id(slug, subscription_status, trial_ends_at, expires_at)
-      `)
+          role, 
+          full_name, 
+          barbershop_id, 
+          barbershops:barbershop_id(name, slug, subscription_status, trial_ends_at, expires_at)
+        `)
         .eq('id', currentSession.user.id)
         .maybeSingle();
 
-      if (error) {
-        console.error("❌ Erro na query do perfil:", error);
-        throw error;
-      }
+      if (error) throw error;
 
       const normalizedCurrentPath = (currentPath || '').trim().toLowerCase();
       const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
 
-      // 1. TRATAMENTO PARA NOVO USUÁRIO (Perfil inexistente)
       if (!profile) {
-        console.warn("⏳ Perfil não encontrado, tentando novamente em 2s...");
-
-        // Aguarda 2 segundos para a Trigger terminar
         await new Promise(resolve => setTimeout(resolve, 2000));
-
         const { data: retryProfile } = await supabase
           .from('profiles')
           .select('role, full_name, barbershop_id')
@@ -104,32 +199,40 @@ const App: React.FC = () => {
           .maybeSingle();
 
         if (!retryProfile) {
-          // Se mesmo assim não achar, aí sim segue a lógica de novo usuário
           if (allowRedirect && !hasRedirected.current) {
             setView(normalizedCurrentPath === 'registrar' ? 'create_barbershop' : 'profile');
             hasRedirected.current = true;
           }
           return;
         }
-        // Se achou no retry, continua o código usando o retryProfile...
       }
 
-      // 2. DADOS DO PERFIL ENCONTRADOS
       const barbershopData = (profile as any).barbershops;
       const myBarbershopSlug = (barbershopData?.slug || '').trim().toLowerCase();
+      const shopName = barbershopData?.name || '';
 
       setUserName(profile.full_name || currentSession.user.email.split('@')[0]);
       setBarbershopId(profile.barbershop_id);
+      setBarbershopName(shopName);
+
+      if (barbershopData) {
+        const now = new Date();
+        const isTrialActive = barbershopData.trial_ends_at ? new Date(barbershopData.trial_ends_at) > now : false;
+        const isSubscriptionActive =
+          barbershopData.subscription_status === 'active' &&
+          barbershopData.expires_at &&
+          new Date(barbershopData.expires_at) > now;
+
+        setIsBlocked(!isTrialActive && !isSubscriptionActive);
+      }
 
       const isUserAdmin = profile.role === 'admin';
 
       if (isUserAdmin) {
         setIsAdmin(true);
-
         if (allowRedirect && !hasRedirected.current) {
           if (profile.barbershop_id) {
             setView('admin');
-            // Sincroniza URL se o admin estiver no slug errado
             if (myBarbershopSlug && normalizedCurrentPath !== myBarbershopSlug) {
               window.history.pushState({}, '', `/${myBarbershopSlug}`);
               setUrlSlug(myBarbershopSlug);
@@ -140,15 +243,11 @@ const App: React.FC = () => {
           hasRedirected.current = true;
         }
       } else {
-        // --- LOGICA CORRIGIDA PARA CLIENTE (NÃO-ADMIN) ---
         setIsAdmin(false);
-
         if (allowRedirect && !hasRedirected.current) {
-          // ✅ CORREÇÃO: Se existe um slug (na URL ou salvo), a prioridade é a Home do Cliente
           if (urlSlug || (normalizedCurrentPath !== '' && !reservedRoutes.includes(normalizedCurrentPath))) {
             setView('client');
           } else {
-            // Só vai para o perfil se realmente não estivermos em nenhuma barbearia específica
             setView('profile');
           }
           hasRedirected.current = true;
@@ -161,7 +260,6 @@ const App: React.FC = () => {
     }
   };
 
-
   const navigateTo = (newView: ViewState) => {
     if (isAdmin && !barbershopId && newView !== 'create_barbershop') {
       setView('create_barbershop');
@@ -171,157 +269,218 @@ const App: React.FC = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleAdminTabChange = (tab: AdminTab) => {
+    if (isBlocked && tab !== 'billing' && tab !== 'dashboard') {
+      alert('🔒 Sistema bloqueado. Renove sua licença para continuar.');
+      return;
+    }
+    setAdminActiveTab(tab);
+    setAdminSidebarOpen(false);
+  };
+
   const handleLogout = async () => {
     if (window.confirm("Deseja realmente sair?")) {
-      // 1. Resetamos o controle de redirecionamento
       hasRedirected.current = false;
-
-      // 2. Deslogamos do Supabase
       await supabase.auth.signOut();
-
-      // 3. Limpamos APENAS os dados do usuário, mas MANTEMOS o urlSlug
       setBarbershopId(null);
       setIsAdmin(false);
       setUserName('');
       setSession(null);
-
-      // 4. Lógica de permanência:
-      // Se ele tem um slug (está em uma barbearia), ele volta para a 'client' (vitrine).
-      // Se não tem slug, vai para a tela de login/perfil.
-      if (urlSlug) {
-        setView('client');
-      } else {
-        setView('profile');
-      }
-
-      // Opcional: Se quiser que a URL no navegador mude fisicamente para o slug:
+      if (urlSlug) setView('client'); else setView('profile');
       if (urlSlug && window.location.pathname !== `/${urlSlug}`) {
         window.history.pushState({}, '', `/${urlSlug}`);
       }
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
-      <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
-      <p className="text-amber-500 font-black animate-pulse uppercase tracking-[0.3em] text-[10px]">Barber Pro • Sincronizando</p>
-    </div>
-  );
+const handleFinalizeFromCalendar = (appointment: any) => {
+  // 1. Armazena os dados do agendamento para o checkout
+  setPendingCheckoutApp(appointment);
+  
+  // 2. Muda a aba para 'lancamento' (o nome correto do estado é adminActiveTab)
+  setAdminActiveTab('lancamento');
+  
+  // 3. Garante que a tela suba para o topo
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
+        <div className="w-12 h-12 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-amber-500 font-black animate-pulse uppercase tracking-[0.3em] text-[10px]">
+          Barber Pro • Sincronizando
+        </p>
+      </div>
+    );
+  }
 
-  if (!session) return (
-    <Login
-      onLoginSuccess={() => {
-        // Resetamos o controle de redirecionamento para o novo usuário que entrou
-        hasRedirected.current = false;
-        setLoading(true);
-        // O onAuthStateChange ali em cima vai detectar o login e chamar o fetchProfile sozinho
-      }}
-    />
-  );
+  if (!session) {
+    return (
+      <Login onLoginSuccess={() => { hasRedirected.current = false; setLoading(true); }} />
+    );
+  }
 
   return (
-    <BookingProvider>
-      <div className="min-h-screen flex flex-col bg-black text-white font-sans selection:bg-amber-500/30">
+    <div className="min-h-screen flex flex-col bg-black text-white font-sans selection:bg-amber-500/30">
+      <InstallBanner />
 
-        {/* Banner de Instalação Proativo */}
-        <InstallBanner />
+      {view !== 'create_barbershop' && (
+        <Header
+          view={isAdmin ? 'admin' : 'client'}
+          setView={(v) => navigateTo(v as ViewState)}
+          onProfileClick={() => navigateTo('profile')}
+          isAdmin={isAdmin}
+          showMenuButton={view === 'admin'}
+          onMenuClick={() => setAdminSidebarOpen(true)}
+        />
+      )}
 
-        {view !== 'create_barbershop' && (
-          <Header
-            view={isAdmin ? 'admin' : 'client'}
-            setView={(v) => navigateTo(v as ViewState)}
-            onProfileClick={() => navigateTo('profile')}
-            isAdmin={isAdmin}
-          />
+      <main className="flex-1">
+        {view === 'subscription_plans' && (
+          <SubscriptionPage barbershopId={barbershopId!} userEmail={session?.user?.email} />
         )}
 
-        <main className="flex-1">
-          {view === 'subscription_plans' && <SubscriptionPage barbershopId={barbershopId!} userEmail={session?.user?.email} />}
+        {view === 'client' && urlSlug && (
+          <ClientHome onStartBooking={() => navigateTo('booking')} />
+        )}
 
-          {view === 'client' && urlSlug && <ClientHome onStartBooking={() => navigateTo('booking')} />}
-
-          {view === 'admin' && isAdmin && barbershopId && (<AdminDashboard barbershopId={barbershopId} userEmail={session?.user?.email} />)}
-
-          {view === 'create_barbershop' && isAdmin && <CreateBarbershop />}
-
-          {view === 'settings' && isAdmin && barbershopId && (
-            <AdminSettings barbershopId={barbershopId} />
-          )}
-
-          {view === 'booking' && (
-            <BookingFlow
-              onComplete={() => navigateTo('client')}
-              onCancel={() => navigateTo('client')}
+        {view === 'admin' && isAdmin && barbershopId && (
+          <div className="flex min-h-screen bg-[#0f1115] overflow-hidden">
+            <Sidebar
+              activeTab={adminActiveTab}
+              onTabChange={handleAdminTabChange}
+              isBlocked={isBlocked}
+              barbershopName={barbershopName}
+              isOpen={adminSidebarOpen}
+              onClose={() => setAdminSidebarOpen(false)}
             />
-          )}
 
-          {view === 'my_appointments' && (
-            <MyAppointments
-              onBack={() => setView('profile')}
-              customerName={userName}
-              customerPhone={userPhone || session?.user?.phone || ""}
-              userId={session?.user?.id || ""}
-              isAdmin={isAdmin}
-            />
-          )}
-          {view === 'profile' && (
-            <div className="max-w-xl mx-auto px-4 py-12 animate-in fade-in slide-in-from-bottom duration-700 pb-32 text-center">
-              <div className="flex flex-col items-center space-y-6 mb-12">
-                <div className="relative group">
-                  <div className="absolute -inset-1.5 bg-gradient-to-r from-amber-500 to-yellow-600 rounded-full blur opacity-25 group-hover:opacity-60 transition duration-1000"></div>
-                  <img src={MOCK_USER.avatar} className="relative w-32 h-32 rounded-full border-4 border-black object-cover shadow-2xl" alt="Avatar" />
-                  {isAdmin && (
-                    <div className="absolute bottom-1 right-1 bg-amber-500 p-2.5 rounded-full border-4 border-black shadow-xl">
-                      <ShieldCheck size={24} className="text-black" />
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <h2 className="text-4xl font-black uppercase tracking-tighter italic">{userName}</h2>
-                  <p className="text-zinc-500 font-mono text-xs tracking-widest">{session.user.email}</p>
-                </div>
+            <div className="flex-1 overflow-y-auto">
+              {adminActiveTab === 'dashboard' && <AdminDashboard barbershopId={barbershopId} />}
+              {adminActiveTab === 'caixa' && <CashFlowModule barbershopId={barbershopId} appointments={appointments} />}
+              {adminActiveTab === 'agendamentos' && (
+                <AdminCalendarView
+                  barbershopId={barbershopId}
+                  barbers={barbers}
+                  services={services}
+                  onSave={addAppointment}
+                  onUpdate={updateStatus}
+                  onDelete={deleteAppointment}
+                  onFinalize={handleFinalizeFromCalendar}
+                  appointments={appointments?.filter((app: any) => app.status !== 'cancelado')}
+                />
+              )}
+              {adminActiveTab === 'lancamento' && (
+                <CheckoutModule
+                  barbershopId={barbershopId}
+                  barbers={barbers}
+                  services={services} // Use 'services' que é seu estado centralizado
+                  inventory={inventory}
+                  customers={customers} // Use 'customers' que já tem os pacotes inclusos
+                  initialAppointment={pendingCheckoutApp}
+                  onSuccess={() => {
+                    setAdminActiveTab('dashboard');
+                    setPendingCheckoutApp(null);
+                    if (fetchAppointments) fetchAppointments(barbershopId);
+                  }}
+                />
+              )}
+              {adminActiveTab === 'comissoes' && <CommissionsModule barbershopId={barbershopId} />}
+              {adminActiveTab === 'clientes' && <CustomersModule barbershopId={barbershopId} />}
+              {adminActiveTab === 'estoque' && <InventoryModule barbershopId={barbershopId} />}
+              {adminActiveTab === 'despesas' && <ExpensesModule barbershopId={barbershopId} />}
+              {adminActiveTab === 'historico' && (
+                <SalesHistoryModule
+                  barbershopId={barbershopId}
+                  appointments={appointments}
+                  servicesList={services}
+                  productsList={inventory}
+                  onDelete={async (id: string) => {
+                    if (confirm('Deseja estornar esta venda?')) {
+                      await deleteAppointment(id);
+                      if (fetchAppointments) fetchAppointments(barbershopId);
+                    }
+                  }}
+                />
+              )}
+              {adminActiveTab === 'billing' && (
+                <SubscriptionPage barbershopId={barbershopId} userEmail={session?.user?.email} />
+              )}
+              {adminActiveTab === 'config' && <AdminSettings barbershopId={barbershopId} />}
+            </div>
+          </div>
+        )}
+
+        {view === 'create_barbershop' && isAdmin && <CreateBarbershop />}
+        {view === 'settings' && isAdmin && barbershopId && <AdminSettings barbershopId={barbershopId} />}
+        {view === 'booking' && <BookingFlow onComplete={() => navigateTo('client')} onCancel={() => navigateTo('client')} />}
+        {view === 'my_appointments' && (
+          <MyAppointments onBack={() => setView('profile')} customerName={userName} customerPhone={session?.user?.phone || ""} userId={session?.user?.id || ""} isAdmin={isAdmin} />
+        )}
+
+        {view === 'profile' && (
+          <div className="max-w-xl mx-auto px-4 py-12 animate-in fade-in slide-in-from-bottom duration-700 pb-32 text-center">
+            <div className="flex flex-col items-center space-y-6 mb-12">
+              <div className="relative group">
+                <div className="absolute -inset-1.5 bg-gradient-to-r from-amber-500 to-yellow-600 rounded-full blur opacity-25 group-hover:opacity-60 transition duration-1000" />
+                <img src={MOCK_USER.avatar} className="relative w-32 h-32 rounded-full border-4 border-black object-cover shadow-2xl" alt="Avatar" />
+                {isAdmin && (
+                  <div className="absolute bottom-1 right-1 bg-amber-500 p-2.5 rounded-full border-4 border-black shadow-xl">
+                    <ShieldCheck size={24} className="text-black" />
+                  </div>
+                )}
               </div>
+              <div className="space-y-2">
+                <h2 className="text-4xl font-black uppercase tracking-tighter italic">{userName}</h2>
+                <p className="text-zinc-500 font-mono text-xs tracking-widest">{session.user.email}</p>
+              </div>
+            </div>
 
-              <div className="space-y-6 max-w-md mx-auto">
-                <div className="bg-zinc-900/80 backdrop-blur-md border border-zinc-800 rounded-[3rem] overflow-hidden shadow-2xl text-left">
-                  {isAdmin && barbershopId && (
-                    <button onClick={() => navigateTo('admin')} className="w-full flex items-center justify-between p-7 hover:bg-zinc-800 transition-all border-b border-zinc-800 text-amber-500 group">
-                      <div className="flex items-center gap-5">
-                        <LayoutDashboard size={24} className="group-hover:rotate-6 transition-transform" />
-                        <span className="font-black uppercase text-xs tracking-[0.2em]">Painel do Gestor</span>
-                      </div>
-                      <Plus size={18} className="text-zinc-700" />
-                    </button>
-                  )}
-
-                  <button onClick={() => navigateTo('my_appointments')} className="w-full flex items-center justify-between p-7 hover:bg-zinc-800 transition-all border-b border-zinc-800 group">
+            <div className="space-y-6 max-w-md mx-auto">
+              <div className="bg-zinc-900/80 backdrop-blur-md border border-zinc-800 rounded-[3rem] overflow-hidden shadow-2xl text-left">
+                {isAdmin && barbershopId && (
+                  <button onClick={() => navigateTo('admin')} className="w-full flex items-center justify-between p-7 hover:bg-zinc-800 transition-all border-b border-zinc-800 text-amber-500 group">
                     <div className="flex items-center gap-5">
-                      <Calendar size={24} className="text-amber-500 group-hover:scale-110 transition-transform" />
-                      <span className="font-black uppercase text-xs tracking-[0.2em]">{isAdmin ? 'Agenda da Unidade' : 'Meus Agendamentos'}</span>
+                      <LayoutDashboard size={24} className="group-hover:rotate-6 transition-transform" />
+                      <span className="font-black uppercase text-xs tracking-[0.2em]">Painel do Gestor</span>
                     </div>
                     <Plus size={18} className="text-zinc-700" />
                   </button>
-
-                  {isAdmin && barbershopId && (
-                    <button onClick={() => navigateTo('settings')} className="w-full flex items-center justify-between p-7 hover:bg-zinc-800 transition-all border-b border-zinc-800 group text-zinc-300">
-                      <div className="flex items-center gap-5">
-                        <Settings size={24} className="group-hover:rotate-90 transition-transform duration-500" />
-                        <span className="font-black uppercase text-xs tracking-[0.2em]">Configurações de Trabalho</span>
-                      </div>
-                      <Plus size={18} className="text-zinc-700" />
-                    </button>
-                  )}
-
-                  <button onClick={handleLogout} className="w-full flex items-center gap-5 p-7 hover:bg-red-500/10 transition-all text-red-500 group">
-                    <LogOut size={24} className="group-hover:-translate-x-1 transition-transform" />
-                    <span className="font-black uppercase text-xs tracking-[0.2em]">Sair da Plataforma</span>
+                )}
+                <button onClick={() => navigateTo('my_appointments')} className="w-full flex items-center justify-between p-7 hover:bg-zinc-800 transition-all border-b border-zinc-800 group">
+                  <div className="flex items-center gap-5">
+                    <Calendar size={24} className="text-amber-500 group-hover:scale-110 transition-transform" />
+                    <span className="font-black uppercase text-xs tracking-[0.2em]">{isAdmin ? 'Agenda da Unidade' : 'Meus Agendamentos'}</span>
+                  </div>
+                  <Plus size={18} className="text-zinc-700" />
+                </button>
+                {isAdmin && barbershopId && (
+                  <button onClick={() => navigateTo('settings')} className="w-full flex items-center justify-between p-7 hover:bg-zinc-800 transition-all border-b border-zinc-800 group text-zinc-300">
+                    <div className="flex items-center gap-5">
+                      <Settings size={24} className="group-hover:rotate-90 transition-transform duration-500" />
+                      <span className="font-black uppercase text-xs tracking-[0.2em]">Configurações de Trabalho</span>
+                    </div>
+                    <Plus size={18} className="text-zinc-700" />
                   </button>
-                </div>
+                )}
+                <button onClick={handleLogout} className="w-full flex items-center gap-5 p-7 hover:bg-red-500/10 transition-all text-red-500 group">
+                  <LogOut size={24} className="group-hover:-translate-x-1 transition-transform" />
+                  <span className="font-black uppercase text-xs tracking-[0.2em]">Sair da Plataforma</span>
+                </button>
               </div>
             </div>
-          )}
-        </main>
-      </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
+// O componente App principal apenas envolve o AppContent com o BookingProvider
+const App: React.FC = () => {
+  return (
+    <BookingProvider>
+      <AppContent />
     </BookingProvider>
   );
 };

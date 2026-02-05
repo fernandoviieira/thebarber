@@ -393,7 +393,7 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
                         <div className="text-[11px] text-slate-500 line-through font-bold mt-1 uppercase tracking-widest whitespace-nowrap">R$ {Number(sale.brutoTotal).toFixed(2)}</div>
                       </td>
                       <td className="px-4 py-5 text-right">
-                        <button onClick={() => { if (window.confirm('Estornar esta venda?')) sale.allIds.forEach((id: string) => onDelete(id)) }} className="p-3 rounded-2xl text-red-500/20 hover:text-red-500 hover:bg-red-500/10 transition-all active:scale-90"><Trash2 size={18} /></button>
+                        <button onClick={() => { sale.allIds.forEach((id: string) => onDelete(id)) }} className="p-3 rounded-2xl text-red-500/20 hover:text-red-500 hover:bg-red-500/10 transition-all active:scale-90"><Trash2 size={18} /></button>
                       </td>
                     </tr>
 
