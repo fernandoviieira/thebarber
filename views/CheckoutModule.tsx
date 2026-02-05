@@ -253,11 +253,18 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
   const valorTotalAbsoluto = totalFinal + tip;
 
-  const totalPagoInput = useMemo(() =>
-    Object.values(splitValues).reduce((acc, curr) =>
+  // ✅ CORREÇÃO DO BUG: totalPagoInput agora considera corretamente o modo misto
+  const totalPagoInput = useMemo(() => {
+    // Se não está no modo misto, considera o valor total absoluto como pago
+    if (!isMisto) {
+      return valorTotalAbsoluto;
+    }
+    
+    // Se está no modo misto, soma os valores inseridos manualmente
+    return Object.values(splitValues).reduce((acc, curr) =>
       Number(acc) + Number(curr), 0
-    ) as number, [splitValues]
-  );
+    ) as number;
+  }, [splitValues, isMisto, valorTotalAbsoluto]);
 
   const calculateNet = useCallback((bruto: number, method: string) => {
     const feeKey = `fee_${method.toLowerCase()}`;
@@ -265,11 +272,14 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     return bruto * (1 - feePercent / 100);
   }, [fees]);
 
+  // ✅ CORREÇÃO: descontoNominal agora só calcula se estiver no modo misto
   const descontoNominal = useMemo(() => {
+    if (!isMisto) return 0; // Sem desconto se não estiver no modo misto
+    
     const recebido = totalPagoInput;
     const devido = valorTotalAbsoluto;
     return devido > recebido ? devido - recebido : 0;
-  }, [totalPagoInput, valorTotalAbsoluto]);
+  }, [totalPagoInput, valorTotalAbsoluto, isMisto]);
 
   const hasComboInCart = useMemo(() => {
     if (!activePkg || pdvItems.length === 0) return false;
@@ -526,7 +536,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       return alert("⚠️ Valor total inválido!");
     }
 
-    if (!hasComboInCart && valorTotalAbsoluto > 0 && valorFaltante > 0.01) {
+    // ✅ CORREÇÃO: só valida desconto se estiver no modo misto
+    if (isMisto && !hasComboInCart && valorTotalAbsoluto > 0 && valorFaltante > 0.01) {
       const confirmarDesconto = window.confirm(
         `⚠️ VALOR ABAIXO DO TOTAL!\n\n` +
         `Total: R$ ${valorTotalAbsoluto.toFixed(2)}\n` +
@@ -694,7 +705,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       setIsMisto(false);
 
       const valorRecebido = totalPagoInput;
-      const descontoAplicado = valorTotalAbsoluto - valorRecebido;
+      const descontoAplicado = isMisto ? (valorTotalAbsoluto - valorRecebido) : 0;
 
       alert(
         `✅ VENDA FINALIZADA COM SUCESSO!\n\n` +
@@ -1086,7 +1097,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             <div className="bg-black/60 p-6 rounded-[2rem] border border-white/5 space-y-2">
               <div className="flex justify-between text-[9px] text-slate-500 uppercase font-black">
                 <span>Preço de Tabela: R$ {valorTotalAbsoluto.toFixed(2)}</span>
-                {descontoNominal > 0.01 && (
+                {/* ✅ CORREÇÃO: só mostra desconto se houver e estiver no modo misto */}
+                {isMisto && descontoNominal > 0.01 && (
                   <span className="text-amber-500">
                     Desconto: - R$ {descontoNominal.toFixed(2)}
                   </span>
