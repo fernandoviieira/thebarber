@@ -174,14 +174,15 @@ const AppContent: React.FC = () => {
 
   const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
-      const { data: profile, error } = await supabase
+      // 1. Busca inicial do perfil
+      let { data: profile, error } = await supabase
         .from('profiles')
         .select(`
-          role, 
-          full_name, 
-          barbershop_id, 
-          barbershops:barbershop_id(name, slug, subscription_status, trial_ends_at, expires_at)
-        `)
+        role, 
+        full_name, 
+        barbershop_id, 
+        barbershops:barbershop_id(name, slug, subscription_status, trial_ends_at, expires_at)
+      `)
         .eq('id', currentSession.user.id)
         .maybeSingle();
 
@@ -189,6 +190,44 @@ const AppContent: React.FC = () => {
 
       const normalizedCurrentPath = (currentPath || '').trim().toLowerCase();
       const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
+      const isRegistrarRoute = normalizedCurrentPath === 'registrar';
+
+      // --- INÍCIO DA LÓGICA DE REPARAÇÃO AVANÇADA ---
+      if (profile) {
+        // CASO A: Usuário no /registrar que o Google criou como client
+        if (isRegistrarRoute && profile.role !== 'admin') {
+          console.log("🛠️ Promovendo usuário para ADMIN (Rota de Registro)...");
+          await supabase
+            .from('profiles')
+            .update({ role: 'admin' })
+            .eq('id', currentSession.user.id);
+
+          profile.role = 'admin';
+        }
+        // CASO B: Usuário em uma barbearia específica sem vínculo
+        else if (!profile.barbershop_id && normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath)) {
+          console.log("🛠️ Reparando vínculo com a barbearia...");
+
+          const { data: bData } = await supabase
+            .from('barbershops')
+            .select('id, name, slug, subscription_status, trial_ends_at, expires_at')
+            .eq('slug', normalizedCurrentPath)
+            .maybeSingle();
+
+          if (bData) {
+            await supabase
+              .from('profiles')
+              .update({ barbershop_id: bData.id, role: 'client' })
+              .eq('id', currentSession.user.id);
+
+            profile.barbershop_id = bData.id;
+            profile.role = 'client';
+            (profile as any).barbershops = bData;
+            console.log("✅ Vínculo reparado como CLIENT com sucesso!");
+          }
+        }
+      }
+      // --- FIM DA LÓGICA DE REPARAÇÃO ---
 
       if (!profile) {
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -200,11 +239,12 @@ const AppContent: React.FC = () => {
 
         if (!retryProfile) {
           if (allowRedirect && !hasRedirected.current) {
-            setView(normalizedCurrentPath === 'registrar' ? 'create_barbershop' : 'profile');
+            setView(isRegistrarRoute ? 'create_barbershop' : 'profile');
             hasRedirected.current = true;
           }
           return;
         }
+        profile = retryProfile;
       }
 
       const barbershopData = (profile as any).barbershops;
@@ -293,16 +333,16 @@ const AppContent: React.FC = () => {
     }
   };
 
-const handleFinalizeFromCalendar = (appointment: any) => {
-  // 1. Armazena os dados do agendamento para o checkout
-  setPendingCheckoutApp(appointment);
-  
-  // 2. Muda a aba para 'lancamento' (o nome correto do estado é adminActiveTab)
-  setAdminActiveTab('lancamento');
-  
-  // 3. Garante que a tela suba para o topo
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-};
+  const handleFinalizeFromCalendar = (appointment: any) => {
+    // 1. Armazena os dados do agendamento para o checkout
+    setPendingCheckoutApp(appointment);
+
+    // 2. Muda a aba para 'lancamento' (o nome correto do estado é adminActiveTab)
+    setAdminActiveTab('lancamento');
+
+    // 3. Garante que a tela suba para o topo
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">

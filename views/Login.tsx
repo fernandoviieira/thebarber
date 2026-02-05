@@ -43,25 +43,36 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   const handleGoogleLogin = async () => {
     setError('');
     try {
-      // Só vira admin se a URL for EXATAMENTE /registrar ou contiver /registrar
-      const isRegistrarPath = window.location.pathname.includes('/registrar');
+      const path = window.location.pathname.split('/')[1];
+      const isRegistrarPath = path === 'registrar';
       const cleanTargetUrl = window.location.origin + window.location.pathname;
 
-      // Se estiver em uma barbearia (ex: /barbearia-do-ze), pegamos o ID dela
-      // para que o cliente já logue vinculado a ela.
-      const metadata: any = {
-        role: isRegistrarPath ? 'admin' : 'client'
-      };
+      // 1. Tenta pegar o ID do estado
+      let barbershopId = currentBarbershop?.id;
 
-      if (currentBarbershop?.id && !isRegistrarPath) {
-        metadata.barbershop_id = currentBarbershop.id;
+      // 2. SE ESTIVER VAZIO, busca no banco agora mesmo antes de prosseguir
+      if (!barbershopId && !isRegistrarPath && path) {
+        console.log("Buscando ID manualmente para a slug:", path);
+        const { data: bData } = await supabase
+          .from('barbershops')
+          .select('id')
+          .eq('slug', path)
+          .maybeSingle();
+
+        if (bData) barbershopId = bData.id;
       }
+
+      console.log("Enviando para o Google com ID:", barbershopId);
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: cleanTargetUrl,
-          data: metadata // Passando o objeto que montamos acima
+          data: {
+            full_name: name || undefined, // O Google já manda o nome, mas mantemos por segurança
+            role: isRegistrarPath ? 'admin' : 'client',
+            barbershop_id: barbershopId // <--- AQUI ESTÁ A CHAVE
+          }
         },
       });
 
