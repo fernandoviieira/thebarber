@@ -40,7 +40,9 @@ type AdminTab =
 
 const AppContent: React.FC = () => {
   const { appointments, fetchAppointments, deleteAppointment, addAppointment, updateStatus } = useBooking();
-
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [currentPlan, setCurrentPlan] = useState<string | null>(null);
+  const [dbSubscriptionStatus, setDbSubscriptionStatus] = useState<string | null>(null);
   const [view, setView] = useState<ViewState>('client');
   const [adminActiveTab, setAdminActiveTab] = useState<AdminTab>('dashboard');
   const [session, setSession] = useState<any>(null);
@@ -71,12 +73,16 @@ const AppContent: React.FC = () => {
       try {
         if (fetchAppointments) await fetchAppointments(barbershopId);
 
-        const [barbersRes, servicesRes, inventoryRes, customersRes] = await Promise.all([
+        const [barbersRes, servicesRes, inventoryRes, customersRes, settingsRes, shopRes, expensesRes] = await Promise.all([
           supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
           supabase.from('services').select('*').eq('barbershop_id', barbershopId),
           supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
-          // O '*' pega os dados do cliente e o 'customer_packages(*)' traz os combos vinculados
-          supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name')]);
+          supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name'),
+          supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
+          supabase.from('barbershops').select('name, subscription_status, expires_at, trial_ends_at, current_plan').eq('id', barbershopId).single(),
+          supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
+
+        ]);
 
         if (barbersRes.data) setBarbers(barbersRes.data);
         if (servicesRes.data) setServices(servicesRes.data);
@@ -256,6 +262,9 @@ const AppContent: React.FC = () => {
       setBarbershopName(shopName);
 
       if (barbershopData) {
+        setDbSubscriptionStatus(barbershopData.subscription_status);
+        setExpiresAt(barbershopData.expires_at);
+        setCurrentPlan(barbershopData.current_plan);
         const now = new Date();
         const isTrialActive = barbershopData.trial_ends_at ? new Date(barbershopData.trial_ends_at) > now : false;
         const isSubscriptionActive =
@@ -377,7 +386,13 @@ const AppContent: React.FC = () => {
 
       <main className="flex-1">
         {view === 'subscription_plans' && (
-          <SubscriptionPage barbershopId={barbershopId!} userEmail={session?.user?.email} />
+          <SubscriptionPage
+            barbershopId={barbershopId!}
+            userEmail={session?.user?.email}
+            subscriptionStatus={dbSubscriptionStatus} // Estado novo
+            expiresAt={expiresAt}                     // Estado novo
+            currentPlan={currentPlan}                 // Estado novo
+          />
         )}
 
         {view === 'client' && urlSlug && (
@@ -444,7 +459,13 @@ const AppContent: React.FC = () => {
                 />
               )}
               {adminActiveTab === 'billing' && (
-                <SubscriptionPage barbershopId={barbershopId} userEmail={session?.user?.email} />
+                <SubscriptionPage
+                  barbershopId={barbershopId!}
+                  userEmail={session?.user?.email}
+                  subscriptionStatus={dbSubscriptionStatus}
+                  expiresAt={expiresAt}
+                  currentPlan={currentPlan}
+                />
               )}
               {adminActiveTab === 'config' && <AdminSettings barbershopId={barbershopId} />}
             </div>
