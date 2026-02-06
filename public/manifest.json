@@ -2,7 +2,7 @@
   "name": "Barbearia",
   "short_name": "BarberPro",
   "description": "Agendamento e Gestão de Barbearia",
-  "start_url": "./?utm_source=pwa",
+  "start_url": "/",
   "display": "standalone",
   "scope": "/",
   "background_color": "#0f1115",

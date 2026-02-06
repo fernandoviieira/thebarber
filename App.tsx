@@ -116,24 +116,35 @@ const AppContent: React.FC = () => {
       setView('create_barbershop');
     }
 
-    // --- 2. LÓGICA DO MANIFEST DINÂMICO ---
+    // --- 2. LÓGICA DO MANIFEST DINÂMICO (CORRIGIDO PARA iOS) ---
     const updateDynamicManifest = () => {
       const manifestLink = document.getElementById('my-pwa-manifest') as HTMLLinkElement;
-      if (!manifestLink) return;
+      if (!manifestLink) {
+        console.warn('⚠️ Manifest link não encontrado no HTML');
+        return;
+      }
 
-      const currentSlug = urlSlug || "";
-      // A URL de início deve ser a rota da barbearia específica
-      const startUrl = currentSlug ? `${window.location.origin}/${currentSlug}` : window.location.origin;
+      // CORREÇÃO CRÍTICA: Usa a slug atual da URL, não do estado (que pode estar desatualizado)
+      const currentPath = window.location.pathname.split('/')[1];
+      const currentSlug = currentPath && !reservedRoutes.includes(currentPath) ? currentPath : '';
+
+      // URL absoluta completa com a slug
+      const startUrl = currentSlug
+        ? `${window.location.origin}/${currentSlug}`
+        : window.location.origin;
+
+      console.log('🔧 Atualizando manifest para:', startUrl);
 
       const dynamicManifest = {
         "name": barbershopName || "BarberPro",
         "short_name": barbershopName || "BarberPro",
-        "description": "Sistema de Agendamento Profissional",
-        "start_url": startUrl,
+        "description": "Agendamento e Gestão de Barbearia",
+        "start_url": startUrl, // ✅ CORRIGIDO: URL completa com slug
         "display": "standalone",
         "background_color": "#000000",
-        "theme_color": "#000000",
-        "scope": "/", // Permite que o app navegue em qualquer rota do seu domínio
+        "theme_color": "#f59e0b",
+        "scope": "/", // Permite navegação em todo o site
+        "orientation": "portrait",
         "icons": [
           {
             "src": "/icon-192.png",
@@ -144,7 +155,8 @@ const AppContent: React.FC = () => {
           {
             "src": "/icon-512.png",
             "sizes": "512x512",
-            "type": "image/png"
+            "type": "image/png",
+            "purpose": "any maskable"
           }
         ]
       };
@@ -153,17 +165,33 @@ const AppContent: React.FC = () => {
       const blob = new Blob([stringManifest], { type: 'application/manifest+json' });
       const manifestUrl = URL.createObjectURL(blob);
 
-      const oldUrl = manifestLink.getAttribute('href');
-      if (oldUrl?.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
+      // Limpa o blob anterior para evitar memory leak
+      const oldHref = manifestLink.getAttribute('href');
+      if (oldHref && oldHref.startsWith('blob:')) {
+        URL.revokeObjectURL(oldHref);
+      }
 
+      // Atualiza o manifest
       manifestLink.setAttribute('href', manifestUrl);
 
-      // DICA EXTRA: Atualiza o título da aba para o iOS capturar o nome correto
+      // ✅ CORREÇÃO PARA iOS: Atualiza o título da página
       if (barbershopName) {
         document.title = barbershopName;
       }
+
+      // ✅ CORREÇÃO PARA iOS: Meta tag apple-mobile-web-app-title
+      let appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+      if (!appleTitle) {
+        appleTitle = document.createElement('meta');
+        appleTitle.setAttribute('name', 'apple-mobile-web-app-title');
+        document.head.appendChild(appleTitle);
+      }
+      appleTitle.setAttribute('content', barbershopName || "BarberPro");
+
+      console.log('✅ Manifest atualizado com sucesso!');
     };
 
+    // Executa a atualização do manifest
     updateDynamicManifest();
 
     // --- 3. LÓGICA DE AUTENTICAÇÃO (SUPABASE) ---
@@ -183,7 +211,8 @@ const AppContent: React.FC = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, [urlSlug, barbershopName]);
+  }, [urlSlug, barbershopName]); // ✅ Reage a mudanças na slug e no nome
+
 
   const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
