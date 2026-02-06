@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import ClientHome from './views/ClientHome';
 import BookingFlow from './views/BookingFlow';
-import { BookingProvider, useBooking } from './views/BookingContext'; // Importado useBooking
+import { BookingProvider, useBooking } from './views/BookingContext';
 import AdminDashboard from './views/AdminDashboard';
 import AdminSettings from './views/AdminSettings';
 import CreateBarbershop from './views/CreateBarbershop';
@@ -55,7 +55,6 @@ const AppContent: React.FC = () => {
   const [barbershopName, setBarbershopName] = useState('');
   const [isBlocked, setIsBlocked] = useState(false);
   const [pendingCheckoutApp, setPendingCheckoutApp] = useState<any | null>(null);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
 
   // Estados de Dados Centralizados
   const [barbers, setBarbers] = useState<any[]>([]);
@@ -64,6 +63,211 @@ const AppContent: React.FC = () => {
   const [customers, setCustomers] = useState<any[]>([]);
 
   const hasRedirected = useRef(false);
+  const manifestUpdated = useRef(false);
+
+  // ============================================
+  // 🔧 FUNÇÃO DE ATUALIZAÇÃO DO MANIFEST (CORRIGIDA)
+  // ============================================
+  const updateDynamicManifest = (slugToUse: string, shopName: string) => {
+    // Evita múltiplas atualizações desnecessárias
+    if (manifestUpdated.current) return;
+
+    const manifestLink = document.getElementById('my-pwa-manifest') as HTMLLinkElement;
+    if (!manifestLink) {
+      console.warn('⚠️ Manifest link não encontrado no HTML');
+      return;
+    }
+
+    const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
+    
+    // ✅ CORREÇÃO CRÍTICA 1: Usa a slug VALIDADA, não a da URL
+    const finalSlug = slugToUse && !reservedRoutes.includes(slugToUse) ? slugToUse : '';
+    
+    // ✅ CORREÇÃO CRÍTICA 2: URL completa e absoluta com protocolo
+    const startUrl = finalSlug 
+      ? `${window.location.origin}/${finalSlug}`
+      : window.location.origin;
+
+    // ✅ CORREÇÃO CRÍTICA 3: Scope específico para a barbearia
+    const scopeUrl = finalSlug ? `/${finalSlug}/` : '/';
+
+    console.log('🔧 Atualizando manifest:', { startUrl, scopeUrl, shopName });
+
+    const dynamicManifest = {
+      "name": shopName || "BarberPro",
+      "short_name": shopName || "BarberPro",
+      "description": "Agendamento e Gestão de Barbearia",
+      "start_url": startUrl, // ✅ URL completa com protocolo
+      "scope": scopeUrl, // ✅ Scope específico
+      "display": "standalone",
+      "background_color": "#000000",
+      "theme_color": "#f59e0b",
+      "orientation": "portrait",
+      "prefer_related_applications": false, // ✅ Força usar o PWA
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "any maskable"
+        },
+        {
+          "src": "/icon-512.png",
+          "sizes": "512x512",
+          "type": "image/png",
+          "purpose": "any maskable"
+        }
+      ]
+    };
+
+    const stringManifest = JSON.stringify(dynamicManifest);
+    const blob = new Blob([stringManifest], { type: 'application/manifest+json' });
+    const manifestUrl = URL.createObjectURL(blob);
+
+    // Limpa o blob anterior
+    const oldHref = manifestLink.getAttribute('href');
+    if (oldHref && oldHref.startsWith('blob:')) {
+      URL.revokeObjectURL(oldHref);
+    }
+
+    // Atualiza o manifest
+    manifestLink.setAttribute('href', manifestUrl);
+
+    // ✅ CORREÇÃO PARA iOS: Atualiza meta tags
+    document.title = shopName || "BarberPro";
+    
+    let appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+    if (!appleTitle) {
+      appleTitle = document.createElement('meta');
+      appleTitle.setAttribute('name', 'apple-mobile-web-app-title');
+      document.head.appendChild(appleTitle);
+    }
+    appleTitle.setAttribute('content', shopName || "BarberPro");
+
+    // ✅ CORREÇÃO CRÍTICA 4: Força iOS standalone mode
+    let appleCapable = document.querySelector('meta[name="apple-mobile-web-app-capable"]');
+    if (!appleCapable) {
+      appleCapable = document.createElement('meta');
+      appleCapable.setAttribute('name', 'apple-mobile-web-app-capable');
+      document.head.appendChild(appleCapable);
+    }
+    appleCapable.setAttribute('content', 'yes');
+
+    manifestUpdated.current = true;
+    console.log('✅ Manifest atualizado com sucesso!');
+  };
+
+  // ============================================
+  // 🚀 useEffect PRINCIPAL (REORGANIZADO)
+  // ============================================
+  useEffect(() => {
+    const initializeApp = async () => {
+      // --- PASSO 1: DETECTA SE FOI ABERTO COMO PWA ---
+      const isPWA = window.matchMedia('(display-mode: standalone)').matches || 
+                    (window.navigator as any).standalone === true;
+      
+      console.log('📱 Modo PWA:', isPWA);
+
+      // --- PASSO 2: PROCESSA A ROTA ATUAL ---
+      const fullPath = window.location.pathname;
+      const pathSegments = fullPath.split('/').filter(Boolean);
+      const firstSegment = pathSegments[0] || '';
+      
+      const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar'];
+
+      console.log('🛣️ Rota detectada:', { fullPath, firstSegment, isPWA });
+
+      // --- PASSO 3: DETERMINA A SLUG CORRETA ---
+      let detectedSlug: string | null = null;
+
+      if (firstSegment && !reservedRoutes.includes(firstSegment)) {
+        // Rota de barbearia detectada
+        detectedSlug = firstSegment;
+        localStorage.setItem('last_visited_slug', firstSegment);
+        console.log('✅ Slug detectada na URL:', detectedSlug);
+      } else if (isPWA) {
+        // ✅ CORREÇÃO CRÍTICA 5: Se foi aberto como PWA sem slug, busca do localStorage
+        const savedSlug = localStorage.getItem('last_visited_slug');
+        if (savedSlug) {
+          detectedSlug = savedSlug;
+          console.log('🔄 Redirecionando PWA para slug salva:', detectedSlug);
+          window.location.replace(`/${detectedSlug}`);
+          return; // Aguarda o redirect
+        }
+      } else if (firstSegment === '' || firstSegment === 'profile') {
+        // Home vazia - tenta recuperar última barbearia
+        const savedSlug = localStorage.getItem('last_visited_slug');
+        if (savedSlug) {
+          detectedSlug = savedSlug;
+          console.log('🔄 Redirecionando para última barbearia:', detectedSlug);
+          window.location.replace(`/${detectedSlug}`);
+          return;
+        }
+      } else if (firstSegment === 'registrar') {
+        setView('create_barbershop');
+        setLoading(false);
+        return;
+      }
+
+      // --- PASSO 4: BUSCA DADOS DA BARBEARIA (SE HOUVER SLUG) ---
+      let fetchedShopName = '';
+      
+      if (detectedSlug) {
+        try {
+          const { data: shopData } = await supabase
+            .from('barbershops')
+            .select('name, id')
+            .eq('slug', detectedSlug)
+            .maybeSingle();
+
+          if (shopData) {
+            fetchedShopName = shopData.name;
+            console.log('🏪 Barbearia encontrada:', fetchedShopName);
+          }
+        } catch (err) {
+          console.error('❌ Erro ao buscar barbearia:', err);
+        }
+      }
+
+      // --- PASSO 5: ATUALIZA O MANIFEST ANTES DA AUTENTICAÇÃO ---
+      if (detectedSlug) {
+        setUrlSlug(detectedSlug);
+        setBarbershopName(fetchedShopName);
+        updateDynamicManifest(detectedSlug, fetchedShopName);
+      }
+
+      // --- PASSO 6: CONFIGURAÇÃO DE AUTENTICAÇÃO ---
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+        setSession(session);
+
+        if (session) {
+          const isNewSession = event === 'SIGNED_IN' || event === 'INITIAL_SESSION';
+          if (isNewSession) {
+            await fetchProfile(session, true, detectedSlug);
+          }
+        } else {
+          setLoading(false);
+          hasRedirected.current = false;
+          if (!detectedSlug && (firstSegment === '' || firstSegment === 'profile')) {
+            setView('profile');
+          }
+        }
+      });
+
+      return () => subscription.unsubscribe();
+    };
+
+    initializeApp();
+  }, []); // ✅ Executa apenas UMA vez na montagem
+
+  // ============================================
+  // 🔄 ATUALIZA MANIFEST QUANDO MUDA A BARBEARIA
+  // ============================================
+  useEffect(() => {
+    if (urlSlug && barbershopName && !manifestUpdated.current) {
+      updateDynamicManifest(urlSlug, barbershopName);
+    }
+  }, [urlSlug, barbershopName]);
 
   // Busca de dados globais quando o barbershopId for definido
   useEffect(() => {
@@ -73,15 +277,11 @@ const AppContent: React.FC = () => {
       try {
         if (fetchAppointments) await fetchAppointments(barbershopId);
 
-        const [barbersRes, servicesRes, inventoryRes, customersRes, settingsRes, shopRes, expensesRes] = await Promise.all([
+        const [barbersRes, servicesRes, inventoryRes, customersRes] = await Promise.all([
           supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
           supabase.from('services').select('*').eq('barbershop_id', barbershopId),
           supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
           supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name'),
-          supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
-          supabase.from('barbershops').select('name, subscription_status, expires_at, trial_ends_at, current_plan').eq('id', barbershopId).single(),
-          supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
-
         ]);
 
         if (barbersRes.data) setBarbers(barbersRes.data);
@@ -96,164 +296,40 @@ const AppContent: React.FC = () => {
     fetchAllAdminData();
   }, [barbershopId, isAdmin]);
 
-  useEffect(() => {
-    // --- 1. LÓGICA DE ROTEAMENTO E SLUG ---
-    const path = window.location.pathname.split('/')[1];
-    const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
-
-    // Se o usuário está em uma slug de barbearia, salva no localStorage e atualiza o estado
-    if (path && !reservedRoutes.includes(path)) {
-      localStorage.setItem('last_visited_slug', path);
-      if (urlSlug !== path) setUrlSlug(path);
-    }
-    // Se está na home vazia, tenta redirecionar para a última barbearia visitada
-    else if (path === '' && localStorage.getItem('last_visited_slug')) {
-      const savedSlug = localStorage.getItem('last_visited_slug');
-      window.location.replace(`/${savedSlug}`);
-      return;
-    }
-    else if (path === 'registrar') {
-      setView('create_barbershop');
-    }
-
-    // --- 2. LÓGICA DO MANIFEST DINÂMICO (CORRIGIDO PARA iOS) ---
-    const updateDynamicManifest = () => {
-      const manifestLink = document.getElementById('my-pwa-manifest') as HTMLLinkElement;
-      if (!manifestLink) {
-        console.warn('⚠️ Manifest link não encontrado no HTML');
-        return;
-      }
-
-      // CORREÇÃO CRÍTICA: Usa a slug atual da URL, não do estado (que pode estar desatualizado)
-      const currentPath = window.location.pathname.split('/')[1];
-      const currentSlug = currentPath && !reservedRoutes.includes(currentPath) ? currentPath : '';
-
-      // URL absoluta completa com a slug
-      const startUrl = currentSlug
-        ? `${window.location.origin}/${currentSlug}`
-        : window.location.origin;
-
-      console.log('🔧 Atualizando manifest para:', startUrl);
-
-      const dynamicManifest = {
-        "name": barbershopName || "BarberPro",
-        "short_name": barbershopName || "BarberPro",
-        "description": "Agendamento e Gestão de Barbearia",
-        "start_url": startUrl, // ✅ CORRIGIDO: URL completa com slug
-        "display": "standalone",
-        "background_color": "#000000",
-        "theme_color": "#f59e0b",
-        "scope": "/", // Permite navegação em todo o site
-        "orientation": "portrait",
-        "icons": [
-          {
-            "src": "/icon-192.png",
-            "sizes": "192x192",
-            "type": "image/png",
-            "purpose": "any maskable"
-          },
-          {
-            "src": "/icon-512.png",
-            "sizes": "512x512",
-            "type": "image/png",
-            "purpose": "any maskable"
-          }
-        ]
-      };
-
-      const stringManifest = JSON.stringify(dynamicManifest);
-      const blob = new Blob([stringManifest], { type: 'application/manifest+json' });
-      const manifestUrl = URL.createObjectURL(blob);
-
-      // Limpa o blob anterior para evitar memory leak
-      const oldHref = manifestLink.getAttribute('href');
-      if (oldHref && oldHref.startsWith('blob:')) {
-        URL.revokeObjectURL(oldHref);
-      }
-
-      // Atualiza o manifest
-      manifestLink.setAttribute('href', manifestUrl);
-
-      // ✅ CORREÇÃO PARA iOS: Atualiza o título da página
-      if (barbershopName) {
-        document.title = barbershopName;
-      }
-
-      // ✅ CORREÇÃO PARA iOS: Meta tag apple-mobile-web-app-title
-      let appleTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
-      if (!appleTitle) {
-        appleTitle = document.createElement('meta');
-        appleTitle.setAttribute('name', 'apple-mobile-web-app-title');
-        document.head.appendChild(appleTitle);
-      }
-      appleTitle.setAttribute('content', barbershopName || "BarberPro");
-
-      console.log('✅ Manifest atualizado com sucesso!');
-    };
-
-    // Executa a atualização do manifest
-    updateDynamicManifest();
-
-    // --- 3. LÓGICA DE AUTENTICAÇÃO (SUPABASE) ---
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
-
-      if (session) {
-        const isNewSession = event === 'SIGNED_IN' || event === 'INITIAL_SESSION';
-        if (isNewSession) {
-          fetchProfile(session, true, window.location.pathname.split('/')[1]);
-        }
-      } else {
-        setLoading(false);
-        hasRedirected.current = false;
-        if (!urlSlug && (path === '' || path === 'profile')) setView('profile');
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [urlSlug, barbershopName]); // ✅ Reage a mudanças na slug e no nome
-
-
-  const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
+  const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentSlug: string | null) => {
     try {
-      // 1. Busca inicial do perfil
       let { data: profile, error } = await supabase
         .from('profiles')
         .select(`
-        role, 
-        full_name, 
-        barbershop_id, 
-        barbershops:barbershop_id(name, slug, subscription_status, trial_ends_at, expires_at)
-      `)
+          role, 
+          full_name, 
+          barbershop_id, 
+          barbershops:barbershop_id(name, slug, subscription_status, trial_ends_at, expires_at, current_plan)
+        `)
         .eq('id', currentSession.user.id)
         .maybeSingle();
 
       if (error) throw error;
 
-      const normalizedCurrentPath = (currentPath || '').trim().toLowerCase();
+      const normalizedCurrentSlug = (currentSlug || '').trim().toLowerCase();
       const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
-      const isRegistrarRoute = normalizedCurrentPath === 'registrar';
+      const isRegistrarRoute = normalizedCurrentSlug === 'registrar';
 
-      // --- INÍCIO DA LÓGICA DE REPARAÇÃO AVANÇADA ---
+      // --- LÓGICA DE REPARAÇÃO ---
       if (profile) {
-        // CASO A: Usuário no /registrar que o Google criou como client
         if (isRegistrarRoute && profile.role !== 'admin') {
-          console.log("🛠️ Promovendo usuário para ADMIN (Rota de Registro)...");
+          console.log("🛠️ Promovendo usuário para ADMIN...");
           await supabase
             .from('profiles')
             .update({ role: 'admin' })
             .eq('id', currentSession.user.id);
-
           profile.role = 'admin';
-        }
-        // CASO B: Usuário em uma barbearia específica sem vínculo
-        else if (!profile.barbershop_id && normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath)) {
-          console.log("🛠️ Reparando vínculo com a barbearia...");
-
+        } else if (!profile.barbershop_id && normalizedCurrentSlug && !reservedRoutes.includes(normalizedCurrentSlug)) {
+          console.log("🛠️ Vinculando usuário à barbearia...");
           const { data: bData } = await supabase
             .from('barbershops')
-            .select('id, name, slug, subscription_status, trial_ends_at, expires_at')
-            .eq('slug', normalizedCurrentPath)
+            .select('id, name, slug, subscription_status, trial_ends_at, expires_at, current_plan')
+            .eq('slug', normalizedCurrentSlug)
             .maybeSingle();
 
           if (bData) {
@@ -265,11 +341,9 @@ const AppContent: React.FC = () => {
             profile.barbershop_id = bData.id;
             profile.role = 'client';
             (profile as any).barbershops = bData;
-            console.log("✅ Vínculo reparado como CLIENT com sucesso!");
           }
         }
       }
-      // --- FIM DA LÓGICA DE REPARAÇÃO ---
 
       if (!profile) {
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -284,6 +358,7 @@ const AppContent: React.FC = () => {
             setView(isRegistrarRoute ? 'create_barbershop' : 'profile');
             hasRedirected.current = true;
           }
+          setLoading(false);
           return;
         }
         profile = retryProfile;
@@ -295,12 +370,21 @@ const AppContent: React.FC = () => {
 
       setUserName(profile.full_name || currentSession.user.email.split('@')[0]);
       setBarbershopId(profile.barbershop_id);
-      setBarbershopName(shopName);
+      
+      // ✅ Atualiza o nome e o manifest se mudou
+      if (shopName && shopName !== barbershopName) {
+        setBarbershopName(shopName);
+        if (myBarbershopSlug) {
+          manifestUpdated.current = false; // Permite nova atualização
+          updateDynamicManifest(myBarbershopSlug, shopName);
+        }
+      }
 
       if (barbershopData) {
         setDbSubscriptionStatus(barbershopData.subscription_status);
         setExpiresAt(barbershopData.expires_at);
         setCurrentPlan(barbershopData.current_plan);
+        
         const now = new Date();
         const isTrialActive = barbershopData.trial_ends_at ? new Date(barbershopData.trial_ends_at) > now : false;
         const isSubscriptionActive =
@@ -312,34 +396,30 @@ const AppContent: React.FC = () => {
       }
 
       const isUserAdmin = profile.role === 'admin';
+      setIsAdmin(isUserAdmin);
 
-      if (isUserAdmin) {
-        setIsAdmin(true);
-        if (allowRedirect && !hasRedirected.current) {
+      if (allowRedirect && !hasRedirected.current) {
+        if (isUserAdmin) {
           if (profile.barbershop_id) {
             setView('admin');
-            if (myBarbershopSlug && normalizedCurrentPath !== myBarbershopSlug) {
+            if (myBarbershopSlug && normalizedCurrentSlug !== myBarbershopSlug) {
               window.history.pushState({}, '', `/${myBarbershopSlug}`);
               setUrlSlug(myBarbershopSlug);
             }
           } else {
             setView('create_barbershop');
           }
-          hasRedirected.current = true;
-        }
-      } else {
-        setIsAdmin(false);
-        if (allowRedirect && !hasRedirected.current) {
-          if (urlSlug || (normalizedCurrentPath !== '' && !reservedRoutes.includes(normalizedCurrentPath))) {
+        } else {
+          if (currentSlug || (normalizedCurrentSlug !== '' && !reservedRoutes.includes(normalizedCurrentSlug))) {
             setView('client');
           } else {
             setView('profile');
           }
-          hasRedirected.current = true;
         }
+        hasRedirected.current = true;
       }
     } catch (err) {
-      console.error("❌ Erro fatal no fetchProfile:", err);
+      console.error("❌ Erro no fetchProfile:", err);
     } finally {
       setLoading(false);
     }
@@ -371,7 +451,8 @@ const AppContent: React.FC = () => {
       setIsAdmin(false);
       setUserName('');
       setSession(null);
-      if (urlSlug) setView('client'); else setView('profile');
+      if (urlSlug) setView('client'); 
+      else setView('profile');
       if (urlSlug && window.location.pathname !== `/${urlSlug}`) {
         window.history.pushState({}, '', `/${urlSlug}`);
       }
@@ -379,15 +460,11 @@ const AppContent: React.FC = () => {
   };
 
   const handleFinalizeFromCalendar = (appointment: any) => {
-    // 1. Armazena os dados do agendamento para o checkout
     setPendingCheckoutApp(appointment);
-
-    // 2. Muda a aba para 'lancamento' (o nome correto do estado é adminActiveTab)
     setAdminActiveTab('lancamento');
-
-    // 3. Garante que a tela suba para o topo
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
@@ -425,9 +502,9 @@ const AppContent: React.FC = () => {
           <SubscriptionPage
             barbershopId={barbershopId!}
             userEmail={session?.user?.email}
-            subscriptionStatus={dbSubscriptionStatus} // Estado novo
-            expiresAt={expiresAt}                     // Estado novo
-            currentPlan={currentPlan}                 // Estado novo
+            subscriptionStatus={dbSubscriptionStatus}
+            expiresAt={expiresAt}
+            currentPlan={currentPlan}
           />
         )}
 
@@ -465,9 +542,9 @@ const AppContent: React.FC = () => {
                 <CheckoutModule
                   barbershopId={barbershopId}
                   barbers={barbers}
-                  services={services} // Use 'services' que é seu estado centralizado
+                  services={services}
                   inventory={inventory}
-                  customers={customers} // Use 'customers' que já tem os pacotes inclusos
+                  customers={customers}
                   initialAppointment={pendingCheckoutApp}
                   onSuccess={() => {
                     setAdminActiveTab('dashboard');
@@ -512,7 +589,13 @@ const AppContent: React.FC = () => {
         {view === 'settings' && isAdmin && barbershopId && <AdminSettings barbershopId={barbershopId} />}
         {view === 'booking' && <BookingFlow onComplete={() => navigateTo('client')} onCancel={() => navigateTo('client')} />}
         {view === 'my_appointments' && (
-          <MyAppointments onBack={() => setView('profile')} customerName={userName} customerPhone={session?.user?.phone || ""} userId={session?.user?.id || ""} isAdmin={isAdmin} />
+          <MyAppointments 
+            onBack={() => setView('profile')} 
+            customerName={userName} 
+            customerPhone={session?.user?.phone || ""} 
+            userId={session?.user?.id || ""} 
+            isAdmin={isAdmin} 
+          />
         )}
 
         {view === 'profile' && (
@@ -573,7 +656,6 @@ const AppContent: React.FC = () => {
   );
 };
 
-// O componente App principal apenas envolve o AppContent com o BookingProvider
 const App: React.FC = () => {
   return (
     <BookingProvider>
