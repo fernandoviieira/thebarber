@@ -118,42 +118,49 @@ const AppContent: React.FC = () => {
 
     // --- 2. LÓGICA DO MANIFEST DINÂMICO ---
     const updateDynamicManifest = () => {
-      // Busca pelo ID que sugerimos colocar no index.html
-      let manifestLink = document.getElementById('my-pwa-manifest') as HTMLLinkElement;
+      const manifestLink = document.getElementById('my-pwa-manifest') as HTMLLinkElement;
+      if (!manifestLink) return;
 
-      if (!manifestLink) {
-        // Fallback caso você ainda não tenha colocado o ID no index.html
-        manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
-      }
+      const currentSlug = urlSlug || "";
+      // A URL de início deve ser a rota da barbearia específica
+      const startUrl = currentSlug ? `${window.location.origin}/${currentSlug}` : window.location.origin;
 
-      if (manifestLink) {
-        const currentSlug = urlSlug || path || ""; // Pega a slug do estado ou da URL atual
-        const name = barbershopName ? `Barbearia - ${barbershopName}` : "BarberPro";
+      const dynamicManifest = {
+        "name": barbershopName || "BarberPro",
+        "short_name": barbershopName || "BarberPro",
+        "description": "Sistema de Agendamento Profissional",
+        "start_url": startUrl,
+        "display": "standalone",
+        "background_color": "#000000",
+        "theme_color": "#000000",
+        "scope": "/", // Permite que o app navegue em qualquer rota do seu domínio
+        "icons": [
+          {
+            "src": "/icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any maskable"
+          },
+          {
+            "src": "/icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+          }
+        ]
+      };
 
-        const dynamicManifest = {
-          "name": barbershopName || "BarberPro",
-          "short_name": "BarberPro",
-          // Garante que a URL comece com / e seja válida
-          "start_url": window.location.origin + (urlSlug ? `/${urlSlug}` : "/"),
-          "display": "standalone",
-          "icons": [
-            {
-              "src": window.location.origin + "/icon-192.png", // URL completa
-              "sizes": "192x192",
-              "type": "image/png"
-            }
-          ]
-        };
+      const stringManifest = JSON.stringify(dynamicManifest);
+      const blob = new Blob([stringManifest], { type: 'application/manifest+json' });
+      const manifestUrl = URL.createObjectURL(blob);
 
-        const stringManifest = JSON.stringify(dynamicManifest);
-        const blob = new Blob([stringManifest], { type: 'application/json' });
-        const manifestUrl = URL.createObjectURL(blob);
+      const oldUrl = manifestLink.getAttribute('href');
+      if (oldUrl?.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
 
-        // Limpeza de memória (Revoke)
-        const oldUrl = manifestLink.getAttribute('href');
-        if (oldUrl && oldUrl.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
+      manifestLink.setAttribute('href', manifestUrl);
 
-        manifestLink.setAttribute('href', manifestUrl);
+      // DICA EXTRA: Atualiza o título da aba para o iOS capturar o nome correto
+      if (barbershopName) {
+        document.title = barbershopName;
       }
     };
 
