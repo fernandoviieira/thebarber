@@ -83,7 +83,8 @@ const AppContent: React.FC = () => {
     // ✅ URLs absolutas com protocolo
     const origin = window.location.origin;
     const startUrl = finalSlug ? `${origin}/${finalSlug}` : origin;
-    const scopeUrl = finalSlug ? `/${finalSlug}/` : '/';
+    //const scopeUrl = finalSlug ? `/${finalSlug}/` : '/';
+    const scopeUrl = '/';
 
     console.log('🔧 Atualizando manifest:', { startUrl, scopeUrl, shopName });
 

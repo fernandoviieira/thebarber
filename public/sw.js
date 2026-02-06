@@ -37,28 +37,32 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch - Network First, fallback para cache
 self.addEventListener('fetch', (event) => {
-  // Ignora requisições não-GET
   if (event.request.method !== 'GET') return;
 
+  const url = new URL(event.request.url);
+
+  // ✅ ESTRATÉGIA PARA NAVEGAÇÃO: 
+  // Se for uma navegação de página (ex: /slug), retorna o index.html
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match('/'); // Retorna a raiz onde o React está
+      })
+    );
+    return;
+  }
+
+  // Estratégia para arquivos estáticos (JS, CSS, Imagens)
   event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Cacheia respostas bem-sucedidas
+    caches.match(event.request).then((cached) => {
+      return cached || fetch(event.request).then((response) => {
         if (response.status === 200) {
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseClone);
-          });
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
         }
         return response;
-      })
-      .catch(() => {
-        // Fallback para cache
-        return caches.match(event.request).then(cached => {
-          return cached || caches.match(OFFLINE_URL);
-        });
-      })
+      });
+    })
   );
 });
