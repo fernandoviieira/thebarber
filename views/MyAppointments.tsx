@@ -144,7 +144,7 @@ const MyAppointments: React.FC<MyAppointmentsProps> = ({ onBack, customerName, c
                   </h4>
                 </div>
 
-                {isAdmin || app.status !== 'confirmado' ? (
+                {isAdmin || (!['confirmado', 'finalizado'].includes(app.status)) ? (
                   <button
                     onClick={() => handleCancel(app.id)}
                     className="p-4 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-2xl transition-all shadow-lg group"

@@ -14,7 +14,9 @@
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.93.1",
     "canvas-confetti": "^1.9.4",
+    "cors": "^2.8.6",
     "date-fns": "^4.1.0",
+    "express": "^5.2.1",
     "lucide-react": "^0.563.0",
     "react": "^19.2.3",
     "react-datepicker": "^9.1.0",
@@ -29,5 +31,21 @@
     "typescript": "~5.8.2",
     "vite": "^6.2.0",
     "vite-plugin-pwa": "^1.2.0"
-  }
+  },
+  "description": "<div align=\"center\"> <img width=\"1200\" height=\"475\" alt=\"GHBanner\" src=\"https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6\" /> </div>",
+  "main": "index.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fernandoviieira/thebarber.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/fernandoviieira/thebarber/issues"
+  },
+  "homepage": "https://github.com/fernandoviieira/thebarber#readme"
 }

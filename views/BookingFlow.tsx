@@ -149,13 +149,19 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
           <button
             key={service.id}
             onClick={() => {
-              if (selectedServices.find(s => s.id === service.id)) {
-                setSelectedServices(selectedServices.filter(s => s.id !== service.id));
+              // ✅ Permite apenas UM serviço selecionado
+              // Se clicar no mesmo serviço, desmarca
+              if (selectedServices[0]?.id === service.id) {
+                setSelectedServices([]);
               } else {
-                setSelectedServices([...selectedServices, service]);
+                // ✅ Seleciona apenas este serviço
+                setSelectedServices([service]);
               }
             }}
-            className={`w-full flex items-center justify-between p-4 md:p-5 rounded-2xl border transition-all ${selectedServices.find(s => s.id === service.id) ? 'bg-amber-500/10 border-amber-500' : 'bg-zinc-900 border-zinc-800'}`}
+            className={`w-full flex items-center justify-between p-4 md:p-5 rounded-2xl border transition-all ${selectedServices[0]?.id === service.id
+                ? 'bg-amber-500/10 border-amber-500'
+                : 'bg-zinc-900 border-zinc-800'
+              }`}
           >
             <div className="text-left">
               <p className="font-black text-white italic uppercase text-sm md:text-base">{service.name}</p>
@@ -165,7 +171,13 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
           </button>
         ))}
       </div>
-      <button disabled={selectedServices.length === 0} onClick={() => setStep(2)} className="w-full bg-amber-500 text-black font-black py-4 md:py-5 rounded-2xl uppercase italic text-sm shadow-lg shadow-amber-500/20">Continuar</button>
+      <button
+        disabled={selectedServices.length === 0}
+        onClick={() => setStep(2)}
+        className="w-full bg-amber-500 text-black font-black py-4 md:py-5 rounded-2xl uppercase italic text-sm shadow-lg shadow-amber-500/20"
+      >
+        Continuar
+      </button>
     </div>
   );
 

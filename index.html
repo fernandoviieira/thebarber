@@ -3,57 +3,62 @@
 
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>The Barber's Pro</title>
+
   <script src="https://cdn.tailwindcss.com"></script>
   <link
     href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Inter:wght@300;400;500;600;700&display=swap"
     rel="stylesheet">
 
   <meta name="theme-color" content="#f59e0b">
-
-  <!-- ✅ META TAGS ESSENCIAIS PARA IOS PWA -->
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="BarberPro">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <link rel="manifest" href="/api/manifest/default">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="apple-touch-startup-image" href="/icon-512.png">
   <link rel="icon" type="image/png" href="/barber-shop.png">
-  
-  <!-- ✅ MANIFEST COM HREF INICIAL -->
-  <link id="my-pwa-manifest" rel="manifest" href="/manifest.json">
-  
+
   <style>
     body {
       font-family: 'Inter', sans-serif;
       overscroll-behavior-y: none;
-      /* Previne bounce no iOS */
       -webkit-overflow-scrolling: touch;
+      background-color: #09090b;
     }
 
-    /* Ajuste para safe area do iPhone */
     body {
       padding-top: env(safe-area-inset-top);
       padding-bottom: env(safe-area-inset-bottom);
     }
   </style>
-
 </head>
 
 <body class="bg-zinc-950 text-zinc-100">
   <div id="root"></div>
-  
-  <!-- ✅ REGISTRA SERVICE WORKER ANTES DO APP -->
+
+  <!-- ✅ SERVICE WORKER REGISTRATION -->
   <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(reg => console.log('✅ SW registrado:', reg.scope))
-          .catch(err => console.error('❌ Erro no SW:', err));
-      });
-    }
+    document.addEventListener('DOMContentLoaded', function () {
+      const path = window.location.pathname.split('/').filter(Boolean)[0];
+      const reserved = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'install', ''];
+
+      // ✅ NO INDEX.HTML
+      const manifestLink = document.querySelector('link[rel="manifest"]');
+      if (manifestLink) {
+        // SUBSTITUA "SEU_IP_OU_DOMINIO" pelo IP da Hostinger ou o domínio da API
+        const baseApi = "https://applications-shares-coal-queries.trycloudflare.com";
+        if (path && !reserved.includes(path)) {
+          manifestLink.href = `${baseApi}/api/manifest/${path}?t=${Date.now()}`;
+        } else {
+          manifestLink.href = `${baseApi}/api/manifest/default?t=${Date.now()}`;
+        }
+      }
+    });
   </script>
-  
   <script type="module" src="/index.tsx"></script>
 </body>
 

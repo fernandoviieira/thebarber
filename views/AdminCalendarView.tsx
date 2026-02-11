@@ -328,14 +328,22 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
   ): boolean => {
     const key = `${date}|${normalize(barberName)}`;
     const intervals = occupiedIntervals.get(key);
+
+    // Se não há nada agendado para esse barbeiro nesse dia, está livre
     if (!intervals || intervals.length === 0) return true;
 
     const newStart = timeToMinutes(startTime);
     const newEnd = newStart + durationMinutes;
 
+    // LÓGICA DE OVERLAP (SOBREPOSIÇÃO)
+    // Um intervalo sobrepõe o outro se:
+    // (Início1 < Fim2) E (Fim1 > Início2)
     return !intervals.some(interval => {
+      // Ignora o próprio agendamento se for uma edição/movimentação
       if (ignoreAppointmentId && interval.appointmentId === ignoreAppointmentId) return false;
-      return (newStart < interval.end && newEnd > interval.start);
+
+      const hasOverlap = newStart < interval.end && newEnd > interval.start;
+      return hasOverlap;
     });
   }, [occupiedIntervals]);
 

@@ -73,6 +73,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const { appointments, fetchAppointments, loading: bookingLoading } = useBooking();
 
   const [barbers, setBarbers] = useState<Barber[]>([]);
+  const [trialDate, setTrialDate] = useState<barbershops[]>([]);
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [machineFees, setMachineFees] = useState({
@@ -86,21 +87,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const [startDate, endDate] = dateRange;
   const [isSarahAnalyzing, setIsSarahAnalyzing] = useState(false);
   const [sarahMessage, setSarahMessage] = useState<string | null>(null);
-  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(() => {
+    // Inicializa com o valor salvo no localStorage, padrão false caso não exista
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`audio_enabled_${barbershopId}`);
+      return saved === 'true';
+    }
+    return false;
+  });
 
   // Busca dados administrativos (sem appointments)
   const fetchData = useCallback(async () => {
     if (!barbershopId) return;
     setLoadingData(true);
     try {
-      const [barbersRes, settingsRes, expensesRes] = await Promise.all([
+      const [barbersRes, settingsRes, expensesRes, shopRes] = await Promise.all([
         supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
         supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
-        supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
+        supabase.from('expenses').select('*').eq('barbershop_id', barbershopId),
+        supabase.from('barbershops').select('trial_ends_at').eq('id', barbershopId).single()
       ]);
 
       if (barbersRes.data) setBarbers(barbersRes.data);
       if (expensesRes.data) setAllExpenses(expensesRes.data);
+      if (shopRes.data) setTrialDate(shopRes.data.trial_ends_at);
       if (settingsRes.data) {
         setMachineFees({
           dinheiro: parseNumberSafe(settingsRes.data.fee_dinheiro),
@@ -167,6 +177,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
     return () => clearTimeout(timeout);
   }, [loadingData]);
+
+  // Salva a preferência sempre que o usuário alternar o botão
+  useEffect(() => {
+    if (barbershopId) {
+      localStorage.setItem(`audio_enabled_${barbershopId}`, isAudioEnabled.toString());
+    }
+  }, [isAudioEnabled, barbershopId]);
 
   // Cálculos Memoizados
   const pendingApps = useMemo(() => {
@@ -313,6 +330,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
         <header className="flex flex-col gap-6 border-b border-white/5 pb-8">
           <div className="flex justify-between items-start">
             <div className="space-y-3">
+
+             {trialDate && (
+  <div className="relative overflow-hidden group bg-slate-900/50 border border-white/5 p-4 rounded-2xl flex items-center gap-4 min-w-[240px] shadow-2xl">
+    {/* Efeito de brilho de fundo */}
+    <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-500/10 blur-3xl rounded-full" />
+    
+    <div className="relative w-12 h-12 flex-shrink-0">
+      {/* Círculo de progresso simplificado ou Ícone */}
+      <div className="absolute inset-0 border-2 border-amber-500/20 rounded-full" />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <Clock size={18} className="text-amber-500 animate-pulse" />
+      </div>
+    </div>
+
+    <div className="flex flex-col">
+      <div className="flex items-center gap-2">
+        <span className="text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] italic">
+          Free Trial Mode
+        </span>
+        <div className="w-1 h-1 rounded-full bg-amber-500 animate-ping" />
+      </div>
+      
+      <h5 className="text-white font-black text-sm uppercase tracking-tighter">
+        {Math.max(0, Math.ceil((new Date(trialDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} Dias Restantes
+      </h5>
+      
+      {/* Barra de progresso micro */}
+      <div className="w-full h-1 bg-white/5 rounded-full mt-2 overflow-hidden">
+        <div 
+          className="h-full bg-gradient-to-r from-amber-600 to-amber-400" 
+          style={{ width: '65%' }} // Aqui você calcularia a % baseada no total de 7 ou 15 dias
+        />
+      </div>
+    </div>
+  </div>
+)}
+
               <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 w-fit px-4 py-1.5 rounded-full border border-amber-500/20">
                 <Activity size={12} className="animate-pulse" />
                 <span className="text-[10px] font-black uppercase tracking-widest">Painel Administrativo</span>
@@ -323,7 +377,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
             </div>
 
             <button
-              onClick={() => setIsAudioEnabled(!isAudioEnabled)}
+              onClick={() => setIsAudioEnabled(prev => !prev)}
               className={`p-4 rounded-2xl border transition-all flex items-center gap-3 ${isAudioEnabled
                 ? 'bg-amber-500 text-black border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
                 : 'bg-red-500/10 text-red-500 border-red-500/20 shadow-[0_0_20px_rgba(239,68,68,0.1)]'
@@ -414,25 +468,25 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <StatCard
             label="Faturamento"
-            value={totalBruto}
+            value={totalBruto.toFixed(2)}
             icon={<DollarSign size={18} />}
             variant="amber"
           />
           <StatCard
             label="Custos Operacionais"
-            value={custosOperacionais}
+            value={custosOperacionais.toFixed(2)}
             icon={<CreditCard size={18} />}
             variant="slate"
           />
           <StatCard
             label="Líquido Real"
-            value={lucroLiquidoRealFinal}
+            value={lucroLiquidoRealFinal.toFixed(2)}
             icon={<TrendingUp size={18} />}
             variant="green"
           />
           <StatCard
             label="Despesas"
-            value={totalExpenses}
+            value={totalExpenses.toFixed(2)}
             icon={<MinusCircle size={18} />}
             variant="red"
           />

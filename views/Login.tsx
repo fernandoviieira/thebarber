@@ -42,17 +42,18 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
   const handleGoogleLogin = async () => {
     setError('');
-    try {
-      const path = window.location.pathname.split('/')[1];
-      const isRegistrarPath = path === 'registrar';
-      const cleanTargetUrl = window.location.origin + window.location.pathname;
+    setLoading(true);
 
-      // 1. Tenta pegar o ID do estado
+    // ✅ DEFINA AQUI NO TOPO
+    const cleanTargetUrl = window.location.origin + window.location.pathname;
+    const path = window.location.pathname.split('/').filter(Boolean)[0];
+    const isRegistrarPath = window.location.pathname.includes('registrar');
+
+    try {
       let barbershopId = currentBarbershop?.id;
 
-      // 2. SE ESTIVER VAZIO, busca no banco agora mesmo antes de prosseguir
+      // Se não tem ID e não é registro, tenta buscar pelo slug na URL
       if (!barbershopId && !isRegistrarPath && path) {
-        console.log("Buscando ID manualmente para a slug:", path);
         const { data: bData } = await supabase
           .from('barbershops')
           .select('id')
@@ -61,26 +62,30 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
         if (bData) barbershopId = bData.id;
       }
-
-      console.log("Enviando para o Google com ID:", barbershopId);
-
+      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: cleanTargetUrl,
+          redirectTo: cleanTargetUrl, // Agora a variável existe!
+          queryParams: {
+            prompt: 'select_account', // Força a escolha de e-mail para você testar Admin vs Cliente
+            access_type: 'offline',
+          },
           data: {
-            full_name: name || undefined, // O Google já manda o nome, mas mantemos por segurança
             role: isRegistrarPath ? 'admin' : 'client',
-            barbershop_id: barbershopId // <--- AQUI ESTÁ A CHAVE
+            barbershop_id: barbershopId || null
           }
         },
       });
 
       if (error) throw error;
     } catch (err: any) {
+      console.error("Erro no Login Google:", err);
       setError(err.message);
+      setLoading(false);
     }
   };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,8 +95,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     try {
       if (isRegister) {
         // 1. Criar o usuário no Supabase Auth
-        // Passamos o full_name no metadata para a Trigger do Banco ler e criar o perfil
-        // ✅ LOGICA DE DETECÇÃO DE ROTA
         const isRegistrarPath = window.location.pathname.includes('/registrar');
 
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
@@ -100,9 +103,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           options: {
             data: {
               full_name: name,
-              // Se estiver no /registrar, vira admin. Caso contrário, cliente.
               role: isRegistrarPath ? 'admin' : 'client',
-              // Se estiver em uma barbearia específica (ex: /barbearia-do-ze), vincula o cliente
               barbershop_id: currentBarbershop?.id || null
             }
           }
@@ -110,15 +111,27 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
         if (signUpError) throw signUpError;
 
-        // Se o usuário foi criado, a Trigger no Postgres já criou o perfil em profiles.
-
         const newUser = signUpData.user;
         if (newUser) {
           if (!currentBarbershop) {
             alert('Conta de Administrador criada! Vamos configurar sua unidade.');
-            // No login de admin (SaaS), o login costuma ser automático após registro em algumas configs
-            // Caso peça confirmação de e-mail, avise o usuário aqui.
-            onLoginSuccess();
+
+            // 🔴 PROBLEMA AQUI: Não chame onLoginSuccess no registro!
+            // O usuário ainda precisa confirmar email ou fazer login
+            // Deixe o App detectar quando o usuário realmente fizer login
+
+            // Em vez de chamar onLoginSuccess, faça login automaticamente
+            // após o registro bem-sucedido
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+              email,
+              password
+            });
+
+            if (signInError) {
+              // Se não conseguir login automático, volte para tela de login
+              setError('Conta criada! Por favor, faça login.');
+              setIsRegister(false);
+            }
           } else {
             alert('Cadastro realizado com sucesso! Agora você pode entrar.');
             setIsRegister(false);
@@ -128,7 +141,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         // 2. Login simples
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) throw signInError;
-        onLoginSuccess();
       }
     } catch (err: any) {
       setError(err.message || 'Erro na operação.');
@@ -209,27 +221,34 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           <button
             onClick={handleGoogleLogin}
             type="button"
-            className="w-full bg-white/5 border border-white/10 text-white font-bold py-4 rounded-2xl hover:bg-white/10 transition-all flex items-center justify-center gap-3 active:scale-95 group"
+            disabled={loading}
+            className="w-full bg-white/5 border border-white/10 text-white font-bold py-4 rounded-2xl hover:bg-white/10 transition-all flex items-center justify-center gap-3 active:scale-95 group disabled:opacity-50"
           >
-            <svg className="w-5 h-5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
-              <path
-                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                fill="#4285F4"
-              />
-              <path
-                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                fill="#34A853"
-              />
-              <path
-                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.84z"
-                fill="#FBBC05"
-              />
-              <path
-                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l2.85 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                fill="#EA4335"
-              />
-            </svg>
-            <span className="uppercase tracking-widest text-[10px]">Entrar com Google</span>
+            {loading ? (
+              <Loader2 className="animate-spin" size={20} />
+            ) : (
+              <>
+                <svg className="w-5 h-5 group-hover:scale-110 transition-transform" viewBox="0 0 24 24">
+                  <path
+                    d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    fill="#4285F4"
+                  />
+                  <path
+                    d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    fill="#34A853"
+                  />
+                  <path
+                    d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.84z"
+                    fill="#FBBC05"
+                  />
+                  <path
+                    d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l2.85 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                    fill="#EA4335"
+                  />
+                </svg>
+                <span className="uppercase tracking-widest text-[10px]">Entrar com Google</span>
+              </>
+            )}
           </button>
 
           <div className="mt-8 text-center">

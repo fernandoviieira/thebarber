@@ -55,8 +55,6 @@ const AppContent: React.FC = () => {
   const [barbershopName, setBarbershopName] = useState('');
   const [isBlocked, setIsBlocked] = useState(false);
   const [pendingCheckoutApp, setPendingCheckoutApp] = useState<any | null>(null);
-  const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
-
   // Estados de Dados Centralizados
   const [barbers, setBarbers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
@@ -116,48 +114,22 @@ const AppContent: React.FC = () => {
       setView('create_barbershop');
     }
 
-    // --- 2. LÓGICA DO MANIFEST DINÂMICO ---
-    const updateDynamicManifest = () => {
-      // Busca pelo ID que sugerimos colocar no index.html
-      let manifestLink = document.getElementById('my-pwa-manifest') as HTMLLinkElement;
-
-      if (!manifestLink) {
-        // Fallback caso você ainda não tenha colocado o ID no index.html
-        manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
-      }
-
+    // ✅ NO APP.TSX (Linha ~147 no seu código)
+    if (urlSlug) {
+      const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
-        const currentSlug = urlSlug || path || ""; // Pega a slug do estado ou da URL atual
-        const name = barbershopName ? `Barbearia - ${barbershopName}` : "BarberPro";
+        // SUBSTITUA pelo endereço da sua VPS
+        const baseApi = "https://applications-shares-coal-queries.trycloudflare.com";
+        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
-        const dynamicManifest = {
-          "name": barbershopName || "BarberPro",
-          "short_name": "BarberPro",
-          // Garante que a URL comece com / e seja válida
-          "start_url": window.location.origin + (urlSlug ? `/${urlSlug}` : "/"),
-          "display": "standalone",
-          "icons": [
-            {
-              "src": window.location.origin + "/icon-192.png", // URL completa
-              "sizes": "192x192",
-              "type": "image/png"
-            }
-          ]
-        };
-
-        const stringManifest = JSON.stringify(dynamicManifest);
-        const blob = new Blob([stringManifest], { type: 'application/json' });
-        const manifestUrl = URL.createObjectURL(blob);
-
-        // Limpeza de memória (Revoke)
-        const oldUrl = manifestLink.getAttribute('href');
-        if (oldUrl && oldUrl.startsWith('blob:')) URL.revokeObjectURL(oldUrl);
-
-        manifestLink.setAttribute('href', manifestUrl);
+        if (manifestLink.href !== newManifestHref) {
+          manifestLink.setAttribute('crossorigin', 'use-credentials');
+          manifestLink.href = newManifestHref;
+          console.log('📡 [PWA] Manifest via VPS:', newManifestHref);
+        }
       }
-    };
+    }
 
-    updateDynamicManifest();
 
     // --- 3. LÓGICA DE AUTENTICAÇÃO (SUPABASE) ---
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {

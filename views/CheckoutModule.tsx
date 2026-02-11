@@ -84,7 +84,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           return prev.map(c => (c.id === data.id ? data : c));
         });
 
-        console.log('✅ Cliente atualizado com sucesso:', data);
       }
     } catch (error) {
       console.error('❌ Erro ao recarregar cliente:', error);
@@ -376,8 +375,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           filter: `barbershop_id=eq.${barbershopId}`
         },
         (payload) => {
-          console.log('🔄 Realtime inventory:', payload);
-
           setLocalInventory((current) => {
             if (payload.eventType === 'INSERT') {
               const exists = current.find(i => i.id === payload.new.id);
@@ -408,8 +405,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           filter: `barbershop_id=eq.${barbershopId}`
         },
         (payload) => {
-          console.log('🔄 Realtime customers:', payload);
-
           setLocalCustomers((current) => {
             if (payload.eventType === 'INSERT') {
               const exists = current.some(c => c.id === payload.new.id);
@@ -459,8 +454,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           filter: `barbershop_id=eq.${barbershopId}`
         },
         (payload) => {
-          console.log('🔄 Realtime customer_packages:', payload);
-
           // Se afetar o cliente selecionado, recarrega para refletir combo/créditos na hora
           const affectedCustomerId =
             payload.eventType === 'DELETE' ? payload.old?.customer_id : payload.new?.customer_id;
@@ -495,7 +488,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           filter: `customer_id=eq.${selectedCustomer.id}`
         },
         (payload) => {
-          console.log('🔄 Pacotes do cliente em tempo real:', payload);
           reloadSelectedCustomer();
         }
       )

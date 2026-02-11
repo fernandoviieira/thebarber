@@ -135,49 +135,35 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
     };
 
     const calculateSaleCommission = (venda: any, barberRate: number) => {
-        // Se for apenas gorjeta
-        if (venda.service === "Caixinha / Gorjeta") {
-            return 0;
-        }
+        // 1. Se for APENAS gorjeta na venda inteira, comissão de serviço é 0
+        if (venda.service === "Caixinha / Gorjeta") return 0;
 
         const serviceText = venda.service || '';
         let comissaoVenda = 0;
 
-        // Verificar se tem produto na venda
-        if (serviceText.includes('(Produto)')) {
+        // 2. Se for venda composta, processamos cada item separadamente
+        if (serviceText.includes('+') || serviceText.includes('(Produto)')) {
             const parts = serviceText.split('+').map(p => p.trim());
 
             parts.forEach(part => {
+                // IGNORA se for gorjeta (ela será somada à parte pelo tip_amount)
+                if (part.toLowerCase().includes('gorjeta')) return;
+
                 if (part.includes('(Produto)')) {
-                    // É um produto
                     const productName = part.replace('(Produto)', '').trim().split(' x')[0].trim();
-                    const product = inventoryCache.find(p =>
-                        p.name.toLowerCase() === productName.toLowerCase()
-                    );
-
-                    if (product && product.commission_rate) {
-                        const productPrice = Number(product.price_sell) || 0;
-                        comissaoVenda += productPrice * (Number(product.commission_rate) / 100);
-                    }
-                } else if (!part.toLowerCase().includes('gorjeta')) {
-                    // É um serviço
+                    const product = inventoryCache.find(p => p.name.toLowerCase() === productName.toLowerCase());
+                    if (product) comissaoVenda += (Number(product.price_sell) || 0) * (Number(product.commission_rate) / 100);
+                } else {
                     const serviceName = part.split(' x')[0].trim();
-                    const service = servicesCache.find(s =>
-                        s.name.toLowerCase() === serviceName.toLowerCase()
-                    );
-
-                    if (service) {
-                        const servicePrice = Number(service.price) || 0;
-                        comissaoVenda += servicePrice * (barberRate / 100);
-                    }
+                    const service = servicesCache.find(s => s.name.toLowerCase() === serviceName.toLowerCase());
+                    if (service) comissaoVenda += (Number(service.price) || 0) * (barberRate / 100);
                 }
             });
-
             return comissaoVenda;
-        } else {
-            // Venda apenas de serviço(s)
-            return Number(venda.price) * (barberRate / 100);
         }
+
+        // 3. Venda simples de serviço (garantindo que não é gorjeta)
+        return Number(venda.price) * (barberRate / 100);
     };
 
     const updateLocalValue = (id: string, field: 'currentRate' | 'expenses', value: number) => {
