@@ -237,6 +237,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         }
         throw insertError;
       }
+    }
 
       // O realtime atualiza o estado, mas o refetch garante a sincronia total
       await fetchAppointments(data.barbershop_id);
