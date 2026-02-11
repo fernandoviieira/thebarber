@@ -211,7 +211,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       }
 
       const { data: userData } = await supabase.auth.getUser();
-
       const { error: insertError } = await supabase
         .from('appointments')
         .insert([{
@@ -230,59 +229,68 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
           tip_amount: data.tip_amount || 0
         }]);
 
-      if (insertError) throw insertError;
+      // ✅ Verificação específica para erro de duplicidade
+      if (insertError) {
+        if (insertError.code === '23505') {
+          alert(`Ops! O horário das ${data.time} com ${data.barber} acabou de ser preenchido por outra pessoa. Por favor, escolha outro horário.`);
+          return; // Para a execução aqui para não disparar o alert genérico do catch
+        }
+        throw insertError;
+      }
 
-      // ✅ O realtime vai atualizar automaticamente, mas forçamos refetch por garantia
+      // O realtime atualiza o estado, mas o refetch garante a sincronia total
       await fetchAppointments(data.barbershop_id);
 
     } catch (err: any) {
       console.error("Erro ao adicionar:", err);
-      alert(`Erro ao salvar: ${err.message}`);
+      // Se não for o erro 23505 (que já tratamos acima), exibe o erro genérico
+      if (err.code !== '23505') {
+        alert(`Erro ao salvar: ${err.message}`);
+      }
     }
+
+    const updateStatus = async (id: string, updates: any) => {
+      try {
+        // Se updates for apenas uma string (legado), transforma em objeto
+        const payload = typeof updates === 'string' ? { status: updates } : updates;
+
+        const { error } = await supabase
+          .from('appointments')
+          .update(payload)
+          .eq('id', id);
+
+        if (error) throw error;
+
+        // Atualiza o estado local para refletir a mudança na hora
+        setAppointments(prev => prev.map(app =>
+          app.id === id ? { ...app, ...payload } : app
+        ));
+      } catch (err) {
+        console.error("Erro ao atualizar agendamento:", err);
+      }
+    };
+
+    const deleteAppointment = async (id: string) => {
+      try {
+        const { error } = await supabase.from('appointments').delete().eq('id', id);
+        if (error) throw error;
+
+        // ✅ Remoção local imediata (otimistic update)
+        setAppointments(prev => prev.filter(app => app.id !== id));
+      } catch (err) {
+        console.error("Erro ao deletar:", err);
+      }
+    };
+
+    return (
+      <BookingContext.Provider value={{ appointments, addAppointment, updateStatus, deleteAppointment, fetchAppointments, loading }}>
+        {children}
+      </BookingContext.Provider>
+    );
   };
 
-  const updateStatus = async (id: string, updates: any) => {
-  try {
-    // Se updates for apenas uma string (legado), transforma em objeto
-    const payload = typeof updates === 'string' ? { status: updates } : updates;
-
-    const { error } = await supabase
-      .from('appointments')
-      .update(payload)
-      .eq('id', id);
-
-    if (error) throw error;
-
-    // Atualiza o estado local para refletir a mudança na hora
-    setAppointments(prev => prev.map(app => 
-      app.id === id ? { ...app, ...payload } : app
-    ));
-  } catch (err) {
-    console.error("Erro ao atualizar agendamento:", err);
-  }
-};
-
-  const deleteAppointment = async (id: string) => {
-    try {
-      const { error } = await supabase.from('appointments').delete().eq('id', id);
-      if (error) throw error;
-
-      // ✅ Remoção local imediata (otimistic update)
-      setAppointments(prev => prev.filter(app => app.id !== id));
-    } catch (err) {
-      console.error("Erro ao deletar:", err);
-    }
+  export const useBooking = () => {
+    const context = useContext(BookingContext);
+    if (!context) throw new Error('useBooking deve ser usado dentro de um BookingProvider');
+    return context;
   };
-
-  return (
-    <BookingContext.Provider value={{ appointments, addAppointment, updateStatus, deleteAppointment, fetchAppointments, loading }}>
-      {children}
-    </BookingContext.Provider>
-  );
-};
-
-export const useBooking = () => {
-  const context = useContext(BookingContext);
-  if (!context) throw new Error('useBooking deve ser usado dentro de um BookingProvider');
-  return context;
-};

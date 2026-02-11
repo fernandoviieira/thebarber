@@ -119,13 +119,12 @@ const AppContent: React.FC = () => {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
         // SUBSTITUA pelo endereço da sua VPS
-const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
+        const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
         const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
         if (manifestLink.href !== newManifestHref) {
           manifestLink.setAttribute('crossorigin', 'use-credentials');
           manifestLink.href = newManifestHref;
-          console.log('📡 [PWA] Manifest via VPS:', newManifestHref);
         }
       }
     }
