@@ -163,12 +163,14 @@ const AppContent: React.FC = () => {
 
     // Se o usuário está em uma slug de barbearia, salva no localStorage e atualiza o estado
     if (path && !reservedRoutes.includes(path)) {
+      console.log('🔧 [App] Detectada slug de barbearia:', path);
       localStorage.setItem('last_visited_slug', path);
       if (urlSlug !== path) setUrlSlug(path);
     }
     // Se está na home vazia, tenta redirecionar para a última barbearia visitada
     else if (path === '' && localStorage.getItem('last_visited_slug')) {
       const savedSlug = localStorage.getItem('last_visited_slug');
+      console.log('🔧 [App] Redirecionando para última slug visitada:', savedSlug);
       window.location.replace(`/${savedSlug}`);
       return;
     }
@@ -176,18 +178,70 @@ const AppContent: React.FC = () => {
       setView('create_barbershop');
     }
 
-    // ✅ MANIFEST VIA VPS
+    // ✅ MANIFEST DINÂMICO VIA BLOB (100% COMPATÍVEL COM iOS)
     if (urlSlug) {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
-        const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
-        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
-        if (manifestLink.href !== newManifestHref) {
-          manifestLink.setAttribute('crossorigin', 'use-credentials');
-          manifestLink.href = newManifestHref;
-          console.log('📡 [PWA] Manifest via VPS:', newManifestHref);
+        // 🎯 CRIA MANIFEST DINÂMICO EM MEMÓRIA (BLOB)
+        const createDynamicManifest = () => {
+          const manifest = {
+            name: `BarberPro - ${barbershopName || urlSlug}`,
+            short_name: barbershopName || urlSlug,
+            start_url: `/${urlSlug}`,
+            scope: '/',
+            display: 'standalone',
+            orientation: 'portrait',
+            background_color: '#09090b',
+            theme_color: '#f59e0b',
+            prefer_related_applications: false,
+            icons: [
+              {
+                src: '/icon-192.png',
+                sizes: '192x192',
+                type: 'image/png',
+                purpose: 'any maskable'
+              },
+              {
+                src: '/icon-512.png',
+                sizes: '512x512',
+                type: 'image/png',
+                purpose: 'any maskable'
+              }
+            ]
+          };
+
+          const stringManifest = JSON.stringify(manifest, null, 2);
+          const blob = new Blob([stringManifest], { type: 'application/json' });
+          return URL.createObjectURL(blob);
+        };
+
+        // Remove crossorigin para evitar CORS issues no iOS
+        manifestLink.removeAttribute('crossorigin');
+
+        // Gera nova URL do manifest
+        const manifestUrl = createDynamicManifest();
+
+        // Revoga URL antiga se for blob
+        const oldUrl = manifestLink.getAttribute('href');
+        if (oldUrl && oldUrl.startsWith('blob:')) {
+          URL.revokeObjectURL(oldUrl);
         }
+
+        // Atualiza o href do manifest
+        manifestLink.href = manifestUrl;
+
+        console.log('✅ [Manifest] Gerado com start_url:', `/${urlSlug}`);
+        console.log('📄 [Manifest] URL:', manifestUrl);
+
+        // Dispara evento para o InstallBanner
+        window.dispatchEvent(new CustomEvent('manifestupdated', {
+          detail: {
+            slug: urlSlug,
+            start_url: `/${urlSlug}`,
+            url: manifestUrl
+          }
+        }));
       }
     }
 
@@ -208,7 +262,7 @@ const AppContent: React.FC = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, [urlSlug, barbershopName]);
+  }, [urlSlug, barbershopName]); // Dependências corretas
 
   const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
