@@ -177,34 +177,19 @@ const AppContent: React.FC = () => {
     }
 
     // ✅ MANIFEST VIA VPS
-    if (!urlSlug) return;
+    if (urlSlug) {
+      const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
+      if (manifestLink) {
+        const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
+        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
-    const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
-    if (!manifestLink) return;
-
-    const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
-    const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?t=${Date.now()}`;
-
-    // Remove o atributo crossorigin (pode causar problemas com Cloudflare)
-    manifestLink.removeAttribute('crossorigin');
-
-    // Testa se a API está acessível antes de trocar o manifest
-    fetch(`${baseApi}/health`, {
-      method: 'GET',
-      headers: { 'ngrok-skip-browser-warning': 'true' }
-    })
-      .then(res => {
-        if (res.ok) {
+        if (manifestLink.href !== newManifestHref) {
+          manifestLink.setAttribute('crossorigin', 'use-credentials');
           manifestLink.href = newManifestHref;
-          console.log('✅ [PWA] Manifest dinâmico carregado:', newManifestHref);
-        } else {
-          console.warn('⚠️ [PWA] API indisponível, usando manifest estático');
+          console.log('📡 [PWA] Manifest via VPS:', newManifestHref);
         }
-      })
-      .catch(err => {
-        console.warn('⚠️ [PWA] Falha ao conectar API, usando manifest estático:', err);
-      });
-
+      }
+    }
 
     // --- 3. LÓGICA DE AUTENTICAÇÃO (SUPABASE) ---
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
