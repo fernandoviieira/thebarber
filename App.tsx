@@ -119,7 +119,7 @@ const AppContent: React.FC = () => {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
         // SUBSTITUA pelo endereço da sua VPS
-        const baseApi = "https://applications-shares-coal-queries.trycloudflare.com";
+const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
         const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
         if (manifestLink.href !== newManifestHref) {
