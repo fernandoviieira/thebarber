@@ -179,69 +179,20 @@ const AppContent: React.FC = () => {
     }
 
     // ✅ MANIFEST DINÂMICO VIA BLOB (100% COMPATÍVEL COM iOS)
+    // ✅ NO APP.TSX
     if (urlSlug) {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
+        // URL da sua VPS que já configuramos o CORS
+        const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
+        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
-        // 🎯 CRIA MANIFEST DINÂMICO EM MEMÓRIA (BLOB)
-        const createDynamicManifest = () => {
-          const manifest = {
-            name: `BarberPro - ${barbershopName || urlSlug}`,
-            short_name: barbershopName || urlSlug,
-            start_url: `/${urlSlug}`,
-            scope: '/',
-            display: 'standalone',
-            orientation: 'portrait',
-            background_color: '#09090b',
-            theme_color: '#f59e0b',
-            prefer_related_applications: false,
-            icons: [
-              {
-                src: '/icon-192.png',
-                sizes: '192x192',
-                type: 'image/png',
-                purpose: 'any maskable'
-              },
-              {
-                src: '/icon-512.png',
-                sizes: '512x512',
-                type: 'image/png',
-                purpose: 'any maskable'
-              }
-            ]
-          };
-
-          const stringManifest = JSON.stringify(manifest, null, 2);
-          const blob = new Blob([stringManifest], { type: 'application/json' });
-          return URL.createObjectURL(blob);
-        };
-
-        // Remove crossorigin para evitar CORS issues no iOS
-        manifestLink.removeAttribute('crossorigin');
-
-        // Gera nova URL do manifest
-        const manifestUrl = createDynamicManifest();
-
-        // Revoga URL antiga se for blob
-        const oldUrl = manifestLink.getAttribute('href');
-        if (oldUrl && oldUrl.startsWith('blob:')) {
-          URL.revokeObjectURL(oldUrl);
+        // ✅ IMPORTANTE: Não use Blob. Aponte diretamente para a API.
+        if (manifestLink.href !== newManifestHref) {
+          manifestLink.setAttribute('crossorigin', 'anonymous');
+          manifestLink.href = newManifestHref;
+          console.log('📡 [PWA] Manifest via VPS atualizado:', newManifestHref);
         }
-
-        // Atualiza o href do manifest
-        manifestLink.href = manifestUrl;
-
-        console.log('✅ [Manifest] Gerado com start_url:', `/${urlSlug}`);
-        console.log('📄 [Manifest] URL:', manifestUrl);
-
-        // Dispara evento para o InstallBanner
-        window.dispatchEvent(new CustomEvent('manifestupdated', {
-          detail: {
-            slug: urlSlug,
-            start_url: `/${urlSlug}`,
-            url: manifestUrl
-          }
-        }));
       }
     }
 
