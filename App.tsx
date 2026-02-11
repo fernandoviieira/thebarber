@@ -183,7 +183,7 @@ const AppContent: React.FC = () => {
     if (urlSlug) {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
-        const baseApi = "https://yoga-chemical-move-brother.trycloudflare.com";
+        const baseApi = "https://api.contafacilpro.com.br";
         const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
         // ✅ IMPORTANTE: Não use Blob. Aponte diretamente para a API.

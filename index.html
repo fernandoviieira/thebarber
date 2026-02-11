@@ -49,8 +49,7 @@
       // ✅ NO INDEX.HTML
       const manifestLink = document.querySelector('link[rel="manifest"]');
       if (manifestLink) {
-        // SUBSTITUA "SEU_IP_OU_DOMINIO" pelo IP da Hostinger ou o domínio da API
-        const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
+        const baseApi = "https://api.contafacilpro.com.br";
         if (path && !reserved.includes(path)) {
           manifestLink.href = `${baseApi}/api/manifest/${path}?t=${Date.now()}`;
         } else {
