@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import ClientHome from './views/ClientHome';
 import BookingFlow from './views/BookingFlow';
-import { BookingProvider, useBooking } from './views/BookingContext'; // Importado useBooking
+import { BookingProvider, useBooking } from './views/BookingContext';
 import AdminDashboard from './views/AdminDashboard';
 import AdminSettings from './views/AdminSettings';
 import CreateBarbershop from './views/CreateBarbershop';
@@ -21,7 +21,7 @@ import Sidebar from './views/Sidebar';
 import Login from './views/Login';
 import { MOCK_USER } from './constants';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Settings, Plus, ShieldCheck, LogOut, LayoutDashboard } from 'lucide-react';
+import { Calendar, Settings, Plus, ShieldCheck, LogOut, LayoutDashboard, Loader2 } from 'lucide-react';
 
 type ViewState = 'client' | 'admin' | 'booking' | 'profile' | 'my_appointments' | 'settings' | 'create_barbershop' | 'subscription_plans';
 
@@ -47,6 +47,7 @@ const AppContent: React.FC = () => {
   const [adminActiveTab, setAdminActiveTab] = useState<AdminTab>('dashboard');
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(false); // 🔥 NOVO: Loading para dados
   const [isAdmin, setIsAdmin] = useState(false);
   const [userName, setUserName] = useState('');
   const [barbershopId, setBarbershopId] = useState<string | null>(null);
@@ -55,6 +56,7 @@ const AppContent: React.FC = () => {
   const [barbershopName, setBarbershopName] = useState('');
   const [isBlocked, setIsBlocked] = useState(false);
   const [pendingCheckoutApp, setPendingCheckoutApp] = useState<any | null>(null);
+
   // Estados de Dados Centralizados
   const [barbers, setBarbers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
@@ -62,24 +64,25 @@ const AppContent: React.FC = () => {
   const [customers, setCustomers] = useState<any[]>([]);
 
   const hasRedirected = useRef(false);
+  const lastFetchedBarbershopId = useRef<string | null>(null); // 🔥 NOVO: Controle de última barbearia carregada
 
-  // Busca de dados globais quando o barbershopId for definido
+  // 🔥 NOVO: Busca de dados globais quando o barbershopId for definido
   useEffect(() => {
     const fetchAllAdminData = async () => {
-      if (!barbershopId || !isAdmin) return;
+      // Evita recarregar se já carregou essa barbearia
+      if (!barbershopId || !isAdmin || lastFetchedBarbershopId.current === barbershopId) return;
+
+      setDataLoading(true); // 🔥 Ativa loading de dados
+      lastFetchedBarbershopId.current = barbershopId;
 
       try {
         if (fetchAppointments) await fetchAppointments(barbershopId);
 
-        const [barbersRes, servicesRes, inventoryRes, customersRes, settingsRes, shopRes, expensesRes] = await Promise.all([
+        const [barbersRes, servicesRes, inventoryRes, customersRes] = await Promise.all([
           supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
           supabase.from('services').select('*').eq('barbershop_id', barbershopId),
           supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
-          supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name'),
-          supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
-          supabase.from('barbershops').select('name, subscription_status, expires_at, trial_ends_at, current_plan').eq('id', barbershopId).single(),
-          supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
-
+          supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name')
         ]);
 
         if (barbersRes.data) setBarbers(barbersRes.data);
@@ -87,12 +90,14 @@ const AppContent: React.FC = () => {
         if (inventoryRes.data) setInventory(inventoryRes.data);
         if (customersRes.data) setCustomers(customersRes.data);
       } catch (err) {
-        console.error("Erro ao carregar dados administrativos:", err);
+        console.error("❌ Erro ao carregar dados administrativos:", err);
+      } finally {
+        setDataLoading(false); // 🔥 Desativa loading de dados
       }
     };
 
     fetchAllAdminData();
-  }, [barbershopId, isAdmin]);
+  }, [barbershopId, isAdmin, fetchAppointments]);
 
   useEffect(() => {
     // --- 1. LÓGICA DE ROTEAMENTO E SLUG ---
@@ -102,7 +107,10 @@ const AppContent: React.FC = () => {
     // Se o usuário está em uma slug de barbearia, salva no localStorage e atualiza o estado
     if (path && !reservedRoutes.includes(path)) {
       localStorage.setItem('last_visited_slug', path);
-      if (urlSlug !== path) setUrlSlug(path);
+      if (urlSlug !== path) {
+        setUrlSlug(path);
+        lastFetchedBarbershopId.current = null; // 🔥 Reseta o controle ao mudar de slug
+      }
     }
     // Se está na home vazia, tenta redirecionar para a última barbearia visitada
     else if (path === '' && localStorage.getItem('last_visited_slug')) {
@@ -114,11 +122,10 @@ const AppContent: React.FC = () => {
       setView('create_barbershop');
     }
 
-    // ✅ NO APP.TSX (Linha ~147 no seu código)
+    // Manifest dinâmico
     if (urlSlug) {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
-        // SUBSTITUA pelo endereço da sua VPS
         const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
         const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
@@ -129,7 +136,6 @@ const AppContent: React.FC = () => {
       }
     }
 
-
     // --- 3. LÓGICA DE AUTENTICAÇÃO (SUPABASE) ---
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
@@ -137,28 +143,31 @@ const AppContent: React.FC = () => {
       if (session) {
         const isNewSession = event === 'SIGNED_IN' || event === 'INITIAL_SESSION';
         if (isNewSession) {
-          fetchProfile(session, true, window.location.pathname.split('/')[1]);
+          await fetchProfile(session, true, window.location.pathname.split('/')[1]);
         }
       } else {
         setLoading(false);
         hasRedirected.current = false;
+        lastFetchedBarbershopId.current = null; // 🔥 Reseta ao deslogar
         if (!urlSlug && (path === '' || path === 'profile')) setView('profile');
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [urlSlug, barbershopName]);
+  }, [urlSlug]);
 
   const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
+      setLoading(true); // 🔥 Garante que o loading está ativo
+
       // 1. Busca inicial do perfil
       let { data: profile, error } = await supabase
         .from('profiles')
         .select(`
-        role, 
-        full_name, 
-        barbershop_id, 
-        barbershops:barbershop_id(name, slug, subscription_status, trial_ends_at, expires_at)
+        role,
+        full_name,
+        barbershop_id,
+        barbershops:barbershop_id(name, slug, subscription_status, trial_ends_at, expires_at, current_plan)
       `)
         .eq('id', currentSession.user.id)
         .maybeSingle();
@@ -173,7 +182,6 @@ const AppContent: React.FC = () => {
       if (profile) {
         // CASO A: Usuário no /registrar que o Google criou como client
         if (isRegistrarRoute && profile.role !== 'admin') {
-          console.log("🛠️ Promovendo usuário para ADMIN (Rota de Registro)...");
           await supabase
             .from('profiles')
             .update({ role: 'admin' })
@@ -183,11 +191,9 @@ const AppContent: React.FC = () => {
         }
         // CASO B: Usuário em uma barbearia específica sem vínculo
         else if (!profile.barbershop_id && normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath)) {
-          console.log("🛠️ Reparando vínculo com a barbearia...");
-
           const { data: bData } = await supabase
             .from('barbershops')
-            .select('id, name, slug, subscription_status, trial_ends_at, expires_at')
+            .select('id, name, slug, subscription_status, trial_ends_at, expires_at, current_plan')
             .eq('slug', normalizedCurrentPath)
             .maybeSingle();
 
@@ -200,7 +206,6 @@ const AppContent: React.FC = () => {
             profile.barbershop_id = bData.id;
             profile.role = 'client';
             (profile as any).barbershops = bData;
-            console.log("✅ Vínculo reparado como CLIENT com sucesso!");
           }
         }
       }
@@ -210,7 +215,7 @@ const AppContent: React.FC = () => {
         await new Promise(resolve => setTimeout(resolve, 2000));
         const { data: retryProfile } = await supabase
           .from('profiles')
-          .select('role, full_name, barbershop_id')
+          .select('role, full_name, barbershop_id, barbershops:barbershop_id(name, slug, subscription_status, trial_ends_at, expires_at, current_plan)')
           .eq('id', currentSession.user.id)
           .maybeSingle();
 
@@ -219,6 +224,7 @@ const AppContent: React.FC = () => {
             setView(isRegistrarRoute ? 'create_barbershop' : 'profile');
             hasRedirected.current = true;
           }
+          setLoading(false);
           return;
         }
         profile = retryProfile;
@@ -229,13 +235,21 @@ const AppContent: React.FC = () => {
       const shopName = barbershopData?.name || '';
 
       setUserName(profile.full_name || currentSession.user.email.split('@')[0]);
-      setBarbershopId(profile.barbershop_id);
+      
+      // 🔥 CORREÇÃO CRÍTICA: Atualiza barbershopId ANTES de tudo
+      const newBarbershopId = profile.barbershop_id;
+      if (newBarbershopId !== barbershopId) {
+        lastFetchedBarbershopId.current = null; // Força recarregamento de dados
+        setBarbershopId(newBarbershopId);
+      }
+      
       setBarbershopName(shopName);
 
       if (barbershopData) {
         setDbSubscriptionStatus(barbershopData.subscription_status);
         setExpiresAt(barbershopData.expires_at);
         setCurrentPlan(barbershopData.current_plan);
+        
         const now = new Date();
         const isTrialActive = barbershopData.trial_ends_at ? new Date(barbershopData.trial_ends_at) > now : false;
         const isSubscriptionActive =
@@ -247,23 +261,30 @@ const AppContent: React.FC = () => {
       }
 
       const isUserAdmin = profile.role === 'admin';
+      setIsAdmin(isUserAdmin);
 
       if (isUserAdmin) {
-        setIsAdmin(true);
         if (allowRedirect && !hasRedirected.current) {
-          if (profile.barbershop_id) {
-            setView('admin');
-            if (myBarbershopSlug && normalizedCurrentPath !== myBarbershopSlug) {
-              window.history.pushState({}, '', `/${myBarbershopSlug}`);
-              setUrlSlug(myBarbershopSlug);
+          if (profile.barbershop_id && myBarbershopSlug) {
+            // 🔥 Atualiza o slug ANTES de mudar a view
+            setUrlSlug(myBarbershopSlug);
+            
+            // Atualiza a URL do navegador se necessário
+            if (normalizedCurrentPath !== myBarbershopSlug) {
+              window.history.replaceState({}, '', `/${myBarbershopSlug}`);
             }
+            
+            // Salva no localStorage
+            localStorage.setItem('last_visited_slug', myBarbershopSlug);
+            
+            // Só então muda para a view admin
+            setView('admin');
           } else {
             setView('create_barbershop');
           }
           hasRedirected.current = true;
         }
       } else {
-        setIsAdmin(false);
         if (allowRedirect && !hasRedirected.current) {
           if (urlSlug || (normalizedCurrentPath !== '' && !reservedRoutes.includes(normalizedCurrentPath))) {
             setView('client');
@@ -301,11 +322,16 @@ const AppContent: React.FC = () => {
   const handleLogout = async () => {
     if (window.confirm("Deseja realmente sair?")) {
       hasRedirected.current = false;
+      lastFetchedBarbershopId.current = null; // 🔥 Reseta controle
       await supabase.auth.signOut();
       setBarbershopId(null);
       setIsAdmin(false);
       setUserName('');
       setSession(null);
+      setBarbers([]);
+      setServices([]);
+      setInventory([]);
+      setCustomers([]);
       if (urlSlug) setView('client'); else setView('profile');
       if (urlSlug && window.location.pathname !== `/${urlSlug}`) {
         window.history.pushState({}, '', `/${urlSlug}`);
@@ -314,15 +340,12 @@ const AppContent: React.FC = () => {
   };
 
   const handleFinalizeFromCalendar = (appointment: any) => {
-    // 1. Armazena os dados do agendamento para o checkout
     setPendingCheckoutApp(appointment);
-
-    // 2. Muda a aba para 'lancamento' (o nome correto do estado é adminActiveTab)
     setAdminActiveTab('lancamento');
-
-    // 3. Garante que a tela suba para o topo
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // 🔥 NOVO: Loading Screen Melhorado
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
@@ -336,7 +359,11 @@ const AppContent: React.FC = () => {
 
   if (!session) {
     return (
-      <Login onLoginSuccess={() => { hasRedirected.current = false; setLoading(true); }} />
+      <Login onLoginSuccess={() => { 
+        hasRedirected.current = false; 
+        lastFetchedBarbershopId.current = null; // 🔥 Reseta ao logar
+        setLoading(true); 
+      }} />
     );
   }
 
@@ -355,14 +382,24 @@ const AppContent: React.FC = () => {
         />
       )}
 
-      <main className="flex-1">
+      <main className="flex-1 relative">
+        {/* 🔥 NOVO: Overlay de Loading para dados */}
+        {dataLoading && (
+          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm z-50 flex flex-col items-center justify-center gap-4">
+            <Loader2 className="w-12 h-12 text-amber-500 animate-spin" />
+            <p className="text-amber-500 font-black uppercase tracking-[0.3em] text-[10px] animate-pulse">
+              Carregando dados da barbearia...
+            </p>
+          </div>
+        )}
+
         {view === 'subscription_plans' && (
           <SubscriptionPage
             barbershopId={barbershopId!}
             userEmail={session?.user?.email}
-            subscriptionStatus={dbSubscriptionStatus} // Estado novo
-            expiresAt={expiresAt}                     // Estado novo
-            currentPlan={currentPlan}                 // Estado novo
+            subscriptionStatus={dbSubscriptionStatus}
+            expiresAt={expiresAt}
+            currentPlan={currentPlan}
           />
         )}
 
@@ -400,9 +437,9 @@ const AppContent: React.FC = () => {
                 <CheckoutModule
                   barbershopId={barbershopId}
                   barbers={barbers}
-                  services={services} // Use 'services' que é seu estado centralizado
+                  services={services}
                   inventory={inventory}
-                  customers={customers} // Use 'customers' que já tem os pacotes inclusos
+                  customers={customers}
                   initialAppointment={pendingCheckoutApp}
                   onSuccess={() => {
                     setAdminActiveTab('dashboard');
@@ -508,7 +545,6 @@ const AppContent: React.FC = () => {
   );
 };
 
-// O componente App principal apenas envolve o AppContent com o BookingProvider
 const App: React.FC = () => {
   return (
     <BookingProvider>

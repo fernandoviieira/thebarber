@@ -1,8 +1,8 @@
-// BookingContext.tsx - CORREÇÃO COMPLETA COM REALTIME
-
-import React, { createContext, useContext, useState, ReactNode, useEffect } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+
+// ==================== INTERFACES ====================
 
 export interface Appointment {
   id: string;
@@ -13,7 +13,7 @@ export interface Appointment {
   date: string;
   time: string;
   price: number;
-  status: 'pendente' | 'confirmado' | 'finalizado';
+  status: 'pendente' | 'confirmado' | 'finalizado' | 'cancelado';
   payment_method?: string;
   barbershop_id: string;
   user_id?: string;
@@ -22,22 +22,56 @@ export interface Appointment {
   created_by_admin?: boolean;
   original_price?: number;
   tip_amount?: number;
+  barber_id?: string
 }
 
 interface BookingContextType {
   appointments: Appointment[];
-  addAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<void>;
-  updateStatus: (id: string, updates: any) => Promise<void>;
-  deleteAppointment: (id: string) => Promise<void>;
+  addAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<{ success: boolean; error?: string }>;
+  updateStatus: (id: string, updates: any) => Promise<{ success: boolean; error?: string }>;
+  deleteAppointment: (id: string) => Promise<{ success: boolean; error?: string }>;
   fetchAppointments: (barbershopId?: string) => Promise<void>;
   loading: boolean;
 }
 
-const timeToMinutes = (t: string) => {
-  if (!t) return 0;
-  const [h, m] = t.split(':').map(Number);
+// ==================== FUNÇÕES AUXILIARES ====================
+const formatAppointment = (app: any): Appointment => ({
+  id: app.id,
+  customerName: app.customer_name,
+  customerPhone: app.customer_phone,
+  service: app.service,
+  barber: app.barber,
+  date: app.date,
+  time: app.time,
+  price: Number(app.price) || 0,
+  original_price: app.original_price ? Number(app.original_price) : Number(app.price) || 0,
+  status: app.status,
+  barbershop_id: app.barbershop_id,
+  payment_method: app.payment_method,
+  user_id: app.user_id,
+  duration: app.duration,
+  venda_id: app.venda_id,
+  created_by_admin: app.created_by_admin,
+  barber_id: app.barber_id,
+  tip_amount: app.tip_amount || 0
+});
+
+const timeToMinutes = (t: string): number | null => {
+  if (!t || typeof t !== 'string') return null;
+
+  const parts = t.split(':');
+  if (parts.length !== 2) return null;
+
+  const [h, m] = parts.map(Number);
+
+  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
+    return null;
+  }
+
   return h * 60 + m;
 };
+
+// ==================== CONTEXT ====================
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
 
@@ -45,13 +79,20 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchAppointments = async (barbershopId?: string) => {
+  const mountedRef = useRef(true);
+  const channelRef = useRef<RealtimeChannel | null>(null);
+  const currentBarbershopIdRef = useRef<string | undefined>(undefined);
+
+  // ==================== FETCH APPOINTMENTS ====================
+
+  const fetchAppointments = useCallback(async (barbershopId?: string) => {
     try {
       setLoading(true);
       let query = supabase.from('appointments').select('*');
 
       if (barbershopId) {
         query = query.eq('barbershop_id', barbershopId);
+        currentBarbershopIdRef.current = barbershopId;
       }
 
       const { data, error } = await query
@@ -60,157 +101,172 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
 
-      const formattedData = data.map((app: any) => ({
-        id: app.id,
-        customerName: app.customer_name,
-        customerPhone: app.customer_phone,
-        service: app.service,
-        barber: app.barber,
-        date: app.date,
-        time: app.time,
-        price: Number(app.price),
-        original_price: app.original_price ? Number(app.original_price) : Number(app.price),
-        status: app.status,
-        barbershop_id: app.barbershop_id,
-        payment_method: app.payment_method,
-        user_id: app.user_id,
-        duration: app.duration,
-        venda_id: app.venda_id,
-        created_by_admin: app.created_by_admin,
-        tip_amount: app.tip_amount
-      }));
+      if (!mountedRef.current) return;
 
-      setAppointments(formattedData);
+      setAppointments(data?.map(formatAppointment) || []);
     } catch (err) {
-      console.error("Erro ao carregar agendamentos:", err);
+      console.error("❌ Erro ao carregar agendamentos:", err);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) {
+        setLoading(false);
+      }
     }
-  };
+  }, []);
 
-  // ✅ CORREÇÃO: Implementar Realtime Subscription
+  // ==================== REALTIME SUBSCRIPTION ====================
+
   useEffect(() => {
-    fetchAppointments();
+    mountedRef.current = true;
 
-    // ✅ Criar canal de realtime
-    const channel: RealtimeChannel = supabase
-      .channel('appointments-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // INSERT, UPDATE, DELETE
+    const setupRealtime = async () => {
+      try {
+        // ✅ Buscar barbershopId do usuário autenticado
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('barbershop_id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const barbershopId = profile?.barbershop_id;
+
+        // Carregar appointments iniciais
+        await fetchAppointments(barbershopId);
+
+        // ✅ Limpar canal anterior se existir
+        if (channelRef.current) {
+          await supabase.removeChannel(channelRef.current);
+          channelRef.current = null;
+        }
+
+        // ✅ Configurar filtro de realtime
+        const channelConfig: any = {
+          event: '*',
           schema: 'public',
           table: 'appointments'
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            // ✅ Novo agendamento
-            const newApp = {
-              id: payload.new.id,
-              customerName: payload.new.customer_name,
-              customerPhone: payload.new.customer_phone,
-              service: payload.new.service,
-              barber: payload.new.barber,
-              date: payload.new.date,
-              time: payload.new.time,
-              price: Number(payload.new.price),
-              original_price: payload.new.original_price ? Number(payload.new.original_price) : Number(payload.new.price),
-              status: payload.new.status,
-              barbershop_id: payload.new.barbershop_id,
-              payment_method: payload.new.payment_method,
-              user_id: payload.new.user_id,
-              duration: payload.new.duration,
-              venda_id: payload.new.venda_id,
-              created_by_admin: payload.new.created_by_admin,
-              tip_amount: payload.new.tip_amount
-            };
+        };
 
-            setAppointments(prev => [...prev, newApp]);
-          }
-
-          if (payload.eventType === 'UPDATE') {
-            // ✅ Agendamento atualizado (ex: status mudou para 'confirmado')
-            setAppointments(prev =>
-              prev.map(app =>
-                app.id === payload.new.id
-                  ? {
-                    ...app,
-                    status: payload.new.status,
-                    customerName: payload.new.customer_name,
-                    customerPhone: payload.new.customer_phone,
-                    service: payload.new.service,
-                    barber: payload.new.barber,
-                    date: payload.new.date,
-                    time: payload.new.time,
-                    price: Number(payload.new.price),
-                    payment_method: payload.new.payment_method
-                  }
-                  : app
-              )
-            );
-          }
-
-          if (payload.eventType === 'DELETE') {
-            // ✅ Agendamento cancelado/deletado
-            setAppointments(prev => prev.filter(app => app.id !== payload.old.id));
-          }
+        if (barbershopId) {
+          channelConfig.filter = `barbershop_id=eq.${barbershopId}`;
         }
-      )
-      .subscribe();
 
-    // ✅ Cleanup: desinscrever ao desmontar
+        // ✅ Criar canal de realtime
+        const channel: RealtimeChannel = supabase
+          .channel('appointments-changes')
+          .on('postgres_changes', channelConfig, (payload) => {
+            if (!mountedRef.current) return;
+
+            try {
+              if (payload.eventType === 'INSERT') {
+                const newApp = formatAppointment(payload.new);
+
+                // Verificar barbershopId
+                if (barbershopId && newApp.barbershop_id !== barbershopId) {
+                  return;
+                }
+
+                setAppointments(prev => {
+                  const exists = prev.some(app => app.id === newApp.id);
+                  if (exists) return prev;
+
+                  return [...prev, newApp].sort((a, b) => {
+                    if (a.date !== b.date) return a.date.localeCompare(b.date);
+                    return a.time.localeCompare(b.time);
+                  });
+                });
+              }
+
+              if (payload.eventType === 'UPDATE') {
+                const updatedApp = formatAppointment(payload.new);
+                setAppointments(prev =>
+                  prev.map(app => app.id === updatedApp.id ? updatedApp : app)
+                );
+              }
+
+              if (payload.eventType === 'DELETE') {
+                setAppointments(prev => prev.filter(app => app.id !== payload.old.id));
+              }
+            } catch (err) {
+              console.error('❌ Erro ao processar evento realtime:', err, payload);
+            }
+          })
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+            } else if (status === 'CHANNEL_ERROR') {
+              console.error('❌ Erro no canal realtime');
+            }
+          });
+
+        channelRef.current = channel;
+
+      } catch (err) {
+        console.error('❌ Erro ao configurar realtime:', err);
+      }
+    };
+
+    setupRealtime();
+
     return () => {
-      supabase.removeChannel(channel);
+      mountedRef.current = false;
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, []);
 
-  const addAppointment = async (data: Omit<Appointment, 'id'>) => {
+  // ==================== ADD APPOINTMENT ====================
+
+  const addAppointment = async (data: Omit<Appointment, 'id'>): Promise<{ success: boolean; error?: string }> => {
     try {
-      const { data: existingApp, error: checkError } = await supabase
-        .from('appointments')
-        .select('id')
-        .eq('barber', data.barber)
-        .eq('date', data.date)
-        .eq('time', data.time)
-        .eq('barbershop_id', data.barbershop_id)
-        .in('status', ['confirmado', 'pendente']);
-
-      if (checkError) throw checkError;
-
-      if (existingApp && existingApp.length > 0) {
-        alert(`Indisponível: O barbeiro ${data.barber} já possui um agendamento às ${data.time}.`);
-        return;
-      }
-
+      // ✅ Validações de horário
       if (data.status !== 'confirmado' && !data.created_by_admin) {
         const { data: barberData } = await supabase
           .from('barbers')
           .select('work_days')
           .eq('name', data.barber)
-          .eq('barbershop_id', data.barbershop_id);
+          .eq('barbershop_id', data.barbershop_id)
+          .single();
 
-        const barberInfo = barberData?.[0];
-
-        if (barberInfo?.work_days) {
+        if (barberData?.work_days) {
           const [year, month, day] = data.date.split('-').map(Number);
           const dateObj = new Date(year, month - 1, day);
           const dayOfWeek = dateObj.getDay().toString();
-          const dayConfig = barberInfo.work_days[dayOfWeek];
+          const dayConfig = barberData.work_days[dayOfWeek];
 
           if (!dayConfig || !dayConfig.active) {
-            alert(`O barbeiro ${data.barber} não atende neste dia.`);
-            return;
+            return {
+              success: false,
+              error: `O barbeiro ${data.barber} não atende neste dia.`
+            };
           }
 
           const currentMin = timeToMinutes(data.time);
-          if (currentMin < timeToMinutes(dayConfig.start) || currentMin >= timeToMinutes(dayConfig.end)) {
-            alert(`Fora da jornada: ${data.barber} atende das ${dayConfig.start} às ${dayConfig.end}.`);
-            return;
+          const startMin = timeToMinutes(dayConfig.start);
+          const endMin = timeToMinutes(dayConfig.end);
+
+          if (currentMin === null || startMin === null || endMin === null) {
+            return {
+              success: false,
+              error: 'Horário inválido.'
+            };
+          }
+
+          if (currentMin < startMin || currentMin >= endMin) {
+            return {
+              success: false,
+              error: `Fora da jornada: ${data.barber} atende das ${dayConfig.start} às ${dayConfig.end}.`
+            };
           }
         }
       }
 
+      // ✅ Pegar user_id do usuário autenticado
       const { data: userData } = await supabase.auth.getUser();
+
+      // ✅ Inserir no banco
       const { error: insertError } = await supabase
         .from('appointments')
         .insert([{
@@ -220,78 +276,118 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
           barber: data.barber,
           date: data.date,
           time: data.time,
+          barber_id: data.barber_id,
           price: data.price,
+          original_price: data.original_price || data.price,
           status: data.status,
           barbershop_id: data.barbershop_id,
           user_id: userData.user?.id,
           duration: data.duration,
           created_by_admin: data.created_by_admin ?? false,
-          tip_amount: data.tip_amount || 0
+          tip_amount: data.tip_amount || 0,
+          payment_method: data.payment_method,
+          venda_id: data.venda_id
         }]);
 
-      // ✅ Verificação específica para erro de duplicidade
       if (insertError) {
         if (insertError.code === '23505') {
-          alert(`Ops! O horário das ${data.time} com ${data.barber} acabou de ser preenchido por outra pessoa. Por favor, escolha outro horário.`);
-          return; // Para a execução aqui para não disparar o alert genérico do catch
+          return {
+            success: false,
+            error: `Ops! O horário das ${data.time} com ${data.barber} acabou de ser preenchido. Por favor, escolha outro horário.`
+          };
         }
         throw insertError;
       }
-    }
 
-      // O realtime atualiza o estado, mas o refetch garante a sincronia total
-      await fetchAppointments(data.barbershop_id);
+      return { success: true };
 
     } catch (err: any) {
-      console.error("Erro ao adicionar:", err);
-      // Se não for o erro 23505 (que já tratamos acima), exibe o erro genérico
-      if (err.code !== '23505') {
-        alert(`Erro ao salvar: ${err.message}`);
-      }
+      console.error("❌ Erro ao adicionar agendamento:", err);
+      return {
+        success: false,
+        error: err.message || 'Erro ao criar agendamento.'
+      };
     }
-
-    const updateStatus = async (id: string, updates: any) => {
-      try {
-        // Se updates for apenas uma string (legado), transforma em objeto
-        const payload = typeof updates === 'string' ? { status: updates } : updates;
-
-        const { error } = await supabase
-          .from('appointments')
-          .update(payload)
-          .eq('id', id);
-
-        if (error) throw error;
-
-        // Atualiza o estado local para refletir a mudança na hora
-        setAppointments(prev => prev.map(app =>
-          app.id === id ? { ...app, ...payload } : app
-        ));
-      } catch (err) {
-        console.error("Erro ao atualizar agendamento:", err);
-      }
-    };
-
-    const deleteAppointment = async (id: string) => {
-      try {
-        const { error } = await supabase.from('appointments').delete().eq('id', id);
-        if (error) throw error;
-
-        // ✅ Remoção local imediata (otimistic update)
-        setAppointments(prev => prev.filter(app => app.id !== id));
-      } catch (err) {
-        console.error("Erro ao deletar:", err);
-      }
-    };
-
-    return (
-      <BookingContext.Provider value={{ appointments, addAppointment, updateStatus, deleteAppointment, fetchAppointments, loading }}>
-        {children}
-      </BookingContext.Provider>
-    );
   };
 
-  export const useBooking = () => {
-    const context = useContext(BookingContext);
-    if (!context) throw new Error('useBooking deve ser usado dentro de um BookingProvider');
-    return context;
+  // ==================== UPDATE STATUS ====================
+
+  const updateStatus = async (id: string, updates: any): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const payload = typeof updates === 'string' ? { status: updates } : updates;
+
+      const { error } = await supabase
+        .from('appointments')
+        .update(payload)
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Update otimista local
+      setAppointments(prev => prev.map(app =>
+        app.id === id ? { ...app, ...payload } : app
+      ));
+
+      return { success: true };
+
+    } catch (err: any) {
+      console.error("❌ Erro ao atualizar agendamento:", err);
+      return {
+        success: false,
+        error: err.message || 'Erro ao atualizar agendamento.'
+      };
+    }
   };
+
+  // ==================== DELETE APPOINTMENT ====================
+
+  const deleteAppointment = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Remoção otimista local
+      setAppointments(prev => prev.filter(app => app.id !== id));
+
+      return { success: true };
+
+    } catch (err: any) {
+      console.error("❌ Erro ao deletar agendamento:", err);
+      return {
+        success: false,
+        error: err.message || 'Erro ao deletar agendamento.'
+      };
+    }
+  };
+
+  // ==================== PROVIDER ====================
+
+  return (
+    <BookingContext.Provider
+      value={{
+        appointments,
+        addAppointment,
+        updateStatus,
+        deleteAppointment,
+        fetchAppointments,
+        loading
+      }}
+    >
+      {children}
+    </BookingContext.Provider>
+  );
+};
+
+// ==================== HOOK ====================
+
+export const useBooking = () => {
+  const context = useContext(BookingContext);
+  if (!context) {
+    throw new Error('useBooking deve ser usado dentro de um BookingProvider');
+  }
+  return context;
+};

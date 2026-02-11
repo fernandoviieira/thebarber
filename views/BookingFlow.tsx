@@ -13,7 +13,7 @@ interface BookingFlowProps {
 }
 
 const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
-  const { addAppointment, appointments } = useBooking();
+  const { addAppointment, appointments, fetchAppointments } = useBooking();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
 
@@ -82,26 +82,24 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     return h * 60 + m;
   };
 
-  // ✅ LÓGICA DE COLISÃO CORRIGIDA: Estrita para permitir agendamentos colados
-  const isRangeOccupied = (date: string, startTime: string, barberName: string, duration: number) => {
-    const startMin = timeToMinutes(startTime);
-    const endMin = startMin + duration;
+const isRangeOccupied = (date: string, startTime: string, barberName: string, duration: number) => {
+  const startMin = timeToMinutes(startTime);
+  const endMin = startMin + duration;
 
-    return appointments.some(app => {
-      if (app.date !== date || app.barber !== barberName || app.status === 'cancelado') return false;
+  return appointments.some(app => {
+    if (app.date !== date || app.barber !== barberName || app.status === 'cancelado') return false;
 
-      const appStart = timeToMinutes(app.time);
-      const appDuration = typeof app.duration === 'string' ? parseInt(app.duration) : (app.duration || 30);
-      const appEnd = appStart + appDuration;
+    const appStart = timeToMinutes(app.time);
+    const appDuration = typeof app.duration === 'string' ? parseInt(app.duration) : (app.duration || 30);
+    const appEnd = appStart + appDuration;
 
-      // Conflito apenas se houver sobreposição real de minutos
-      return (startMin < appEnd && endMin > appStart);
-    });
-  };
-
+    // VERIFICAÇÃO DE COLISÃO
+    const hasCollision = (startMin < appEnd && endMin > appStart);
+    return hasCollision;
+  });
+};
   const handleFinalizeBooking = async () => {
     if (!selectedBarber || !currentBarbershopId) return;
-
     const newBooking = {
       customerName,
       customerPhone,
@@ -109,6 +107,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       barber: selectedBarber.name,
       date: selectedDate,
       time: selectedTime,
+      barber_id: selectedBarber.id,
       price: totalPrice,
       status: 'pendente' as const,
       barbershop_id: currentBarbershopId,
@@ -116,11 +115,19 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       created_by_admin: false
     };
 
-    try {
-      await addAppointment(newBooking as any);
+    const result = await addAppointment(newBooking as any);
+
+    if (result.success) {
       setStep(5);
-    } catch (err: any) {
-      alert(`Erro ao agendar: ${err.message}`);
+    } else {
+      // 🚨 Se cair aqui, a mensagem do Unique Index (23505) será exibida
+      alert(result.error);
+
+      // Agora o fetchAppointments vai funcionar porque você o importou no topo!
+      await fetchAppointments(currentBarbershopId);
+
+      setSelectedTime(''); // Limpa a seleção inválida
+      setStep(3); // Volta para o grid de horários atualizado
     }
   };
 
@@ -159,8 +166,8 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
               }
             }}
             className={`w-full flex items-center justify-between p-4 md:p-5 rounded-2xl border transition-all ${selectedServices[0]?.id === service.id
-                ? 'bg-amber-500/10 border-amber-500'
-                : 'bg-zinc-900 border-zinc-800'
+              ? 'bg-amber-500/10 border-amber-500'
+              : 'bg-zinc-900 border-zinc-800'
               }`}
           >
             <div className="text-left">
