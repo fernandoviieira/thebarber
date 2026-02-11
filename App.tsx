@@ -183,8 +183,7 @@ const AppContent: React.FC = () => {
     if (urlSlug) {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
-        // URL da sua VPS que já configuramos o CORS
-        const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
+        const baseApi = "https://yoga-chemical-move-brother.trycloudflare.com";
         const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
         // ✅ IMPORTANTE: Não use Blob. Aponte diretamente para a API.
