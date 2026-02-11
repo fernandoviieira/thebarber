@@ -2,53 +2,38 @@ import express from 'express';
 import cors from 'cors';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = 3001; // Fixamos em 3001 para bater com o Túnel
+const FRONTEND_URL = "https://thebarber-delta.vercel.app";
 
-// Configuração de CORS para permitir acesso do Frontend na Vercel
 app.use(cors({
-  origin: '*', 
-  methods: ['GET'],
+  origin: FRONTEND_URL,
+  credentials: true,
+  methods: ['GET', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'ngrok-skip-browser-warning']
 }));
 
-app.get('/', (req, res) => {
-  res.send('BarberPro API Online 🚀');
-});
-
 app.get('/api/manifest/:slug', (req, res) => {
   const { slug } = req.params;
-  
-  // URL principal do seu Frontend na Vercel
-  const frontendUrl = "https://thebarber-delta.vercel.app"; 
-
   const manifest = {
     "name": `BarberPro - ${slug}`,
     "short_name": "BarberPro",
-    "start_url": `${frontendUrl}/${slug}`, // ✅ Corrigido para a origem da Vercel
+    "start_url": `${FRONTEND_URL}/${slug}`,
     "display": "standalone",
     "background_color": "#09090b",
     "theme_color": "#f59e0b",
     "icons": [
-      { 
-        "src": `${frontendUrl}/icon-192.png`, // ✅ Busca o ícone na Vercel
-        "sizes": "192x192", 
-        "type": "image/png",
-        "purpose": "any maskable"
-      },
-      { 
-        "src": `${frontendUrl}/icon-512.png`, // ✅ Busca o ícone na Vercel
-        "sizes": "512x512", 
-        "type": "image/png",
-        "purpose": "any maskable"
-      }
+      { "src": `${FRONTEND_URL}/icon-192.png`, "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+      { "src": `${FRONTEND_URL}/icon-512.png`, "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
     ]
   };
 
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // Cabeçalhos críticos para o PWA e Túnel
   res.setHeader('ngrok-skip-browser-warning', 'true');
   res.setHeader('Content-Type', 'application/manifest+json; charset=utf-8');
+  res.setHeader('Access-Control-Allow-Origin', FRONTEND_URL); // Reforço para o Cloudflare
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
   
-  res.send(JSON.stringify(manifest));
+  res.json(manifest);
 });
 
 app.listen(PORT, '0.0.0.0', () => {

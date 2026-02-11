@@ -55,7 +55,7 @@ const AppContent: React.FC = () => {
   const [barbershopName, setBarbershopName] = useState('');
   const [isBlocked, setIsBlocked] = useState(false);
   const [pendingCheckoutApp, setPendingCheckoutApp] = useState<any | null>(null);
-  
+
   // Estados de Dados Centralizados
   const [barbers, setBarbers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
@@ -103,16 +103,16 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     const pathSlug = window.location.pathname.split('/')[1];
     const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
-    
+
     // Se é admin e está em uma slug diferente da sua barbearia
     if (isAdmin && barbershopSlug && pathSlug && !reservedRoutes.includes(pathSlug)) {
       if (pathSlug !== barbershopSlug) {
         console.log(`🔄 [App] Admin acessando barbearia diferente: ${pathSlug} (sua barbearia: ${barbershopSlug})`);
         console.log('📱 [App] Recarregando página automaticamente...');
-        
+
         // Salva a slug atual como última visitada
         localStorage.setItem('last_visited_slug', pathSlug);
-        
+
         // Recarrega a página após um pequeno delay
         setTimeout(() => {
           window.location.reload();
@@ -126,12 +126,12 @@ const AppContent: React.FC = () => {
     const handleLocationChange = () => {
       const pathSlug = window.location.pathname.split('/')[1];
       const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
-      
+
       if (isAdmin && barbershopSlug && pathSlug && !reservedRoutes.includes(pathSlug)) {
         if (pathSlug !== barbershopSlug && previousSlug.current !== pathSlug) {
           previousSlug.current = pathSlug;
           console.log(`🔄 [App] Navegação detectada para slug: ${pathSlug}`);
-          
+
           // Pequeno delay para garantir que tudo foi processado
           setTimeout(() => {
             window.location.reload();
@@ -142,10 +142,10 @@ const AppContent: React.FC = () => {
 
     // Monitora mudanças no histórico
     window.addEventListener('popstate', handleLocationChange);
-    
+
     // Monkey patch no pushState para detectar navegação SPA
     const originalPushState = window.history.pushState;
-    window.history.pushState = function(...args) {
+    window.history.pushState = function (...args) {
       originalPushState.apply(this, args);
       handleLocationChange();
     };
@@ -177,19 +177,34 @@ const AppContent: React.FC = () => {
     }
 
     // ✅ MANIFEST VIA VPS
-    if (urlSlug) {
-      const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
-      if (manifestLink) {
-        const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
-        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
+    if (!urlSlug) return;
 
-        if (manifestLink.href !== newManifestHref) {
-          manifestLink.setAttribute('crossorigin', 'use-credentials');
+    const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
+    if (!manifestLink) return;
+
+    const baseApi = "https://unions-watts-essentials-gnu.trycloudflare.com";
+    const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?t=${Date.now()}`;
+
+    // Remove o atributo crossorigin (pode causar problemas com Cloudflare)
+    manifestLink.removeAttribute('crossorigin');
+
+    // Testa se a API está acessível antes de trocar o manifest
+    fetch(`${baseApi}/health`, {
+      method: 'GET',
+      headers: { 'ngrok-skip-browser-warning': 'true' }
+    })
+      .then(res => {
+        if (res.ok) {
           manifestLink.href = newManifestHref;
-          console.log('📡 [PWA] Manifest via VPS:', newManifestHref);
+          console.log('✅ [PWA] Manifest dinâmico carregado:', newManifestHref);
+        } else {
+          console.warn('⚠️ [PWA] API indisponível, usando manifest estático');
         }
-      }
-    }
+      })
+      .catch(err => {
+        console.warn('⚠️ [PWA] Falha ao conectar API, usando manifest estático:', err);
+      });
+
 
     // --- 3. LÓGICA DE AUTENTICAÇÃO (SUPABASE) ---
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -315,19 +330,19 @@ const AppContent: React.FC = () => {
         if (allowRedirect && !hasRedirected.current) {
           if (profile.barbershop_id) {
             setView('admin');
-            
+
             // NOVO: Verifica se está acessando a própria barbearia ou outra
             const pathSlug = window.location.pathname.split('/')[1];
             if (pathSlug && pathSlug !== myBarbershopSlug) {
               console.log(`⚠️ [App] Admin acessando barbearia diferente: ${pathSlug}`);
               console.log('🔄 [App] Recarregando para carregar dados corretos...');
-              
+
               // Pequeno delay e depois recarrega
               setTimeout(() => {
                 window.location.reload();
               }, 200);
             }
-            
+
             if (myBarbershopSlug && normalizedCurrentPath !== myBarbershopSlug) {
               window.history.pushState({}, '', `/${myBarbershopSlug}`);
               setUrlSlug(myBarbershopSlug);
@@ -382,7 +397,7 @@ const AppContent: React.FC = () => {
       setUserName('');
       setSession(null);
       setBarbershopSlug(null); // NOVO: Limpa o slug da barbearia
-      
+
       if (urlSlug) setView('client'); else setView('profile');
       if (urlSlug && window.location.pathname !== `/${urlSlug}`) {
         window.history.pushState({}, '', `/${urlSlug}`);
@@ -400,7 +415,7 @@ const AppContent: React.FC = () => {
     // 3. Garante que a tela suba para o topo
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-  
+
   if (loading) {
     return (
       <div className="min-h-screen bg-black flex flex-col items-center justify-center gap-4">
