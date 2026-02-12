@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, X, Share2, PlusSquare, Home, Info } from 'lucide-react';
+import { Download, X, Share, Share2, PlusSquare, Home, Info } from 'lucide-react';
 
 export function InstallBanner() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -92,7 +92,7 @@ export function InstallBanner() {
       setShowIOSHelp(false);
     };
 
-       // Adiciona os event listeners
+    // Adiciona os event listeners
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
@@ -132,29 +132,9 @@ export function InstallBanner() {
   };
 
   const goToInstallForCurrentSlug = () => {
-    // 1. Tenta pegar da URL atual
-    const slug = window.location.pathname.split('/').filter(Boolean)[0];
-
-    const reserved = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'install', ''];
-
-    // 2. Se não for slug válido, tenta do localStorage
-    if (!slug || reserved.includes(slug)) {
-      const saved = localStorage.getItem('last_visited_slug');
-      if (saved && !reserved.includes(saved)) {
-        window.location.href = `/install/${saved}`;
-        return;
-      }
-    } else {
-      // 3. URL é uma slug válida - vai para instalação
-      window.location.href = `/install/${slug}`;
-      return;
-    }
-
-    // 4. Fallback: mostra instruções
     setShowIOSHelp(true);
     setIsVisible(false);
   };
-
   const handleCloseIOSHelp = () => {
     setShowIOSHelp(false);
     localStorage.setItem('pwa_banner_dismissed', Date.now().toString());
@@ -331,7 +311,7 @@ export function InstallBanner() {
                     <div className="bg-zinc-900/80 p-4 rounded-xl border border-zinc-800">
                       <div className="flex items-center gap-3">
                         <div className="bg-blue-500/30 p-3 rounded-lg">
-                          <Share2 size={20} className="text-blue-400" />
+                          <Share size={20} className="text-blue-400" />
                         </div>
                         <div>
                           <p className="text-white text-sm font-medium">Toque no ícone</p>
