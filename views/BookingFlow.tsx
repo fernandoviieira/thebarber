@@ -82,22 +82,22 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     return h * 60 + m;
   };
 
-const isRangeOccupied = (date: string, startTime: string, barberName: string, duration: number) => {
-  const startMin = timeToMinutes(startTime);
-  const endMin = startMin + duration;
+  const isRangeOccupied = (date: string, startTime: string, barberName: string, duration: number) => {
+    const startMin = timeToMinutes(startTime);
+    const endMin = startMin + duration;
 
-  return appointments.some(app => {
-    if (app.date !== date || app.barber !== barberName || app.status === 'cancelado') return false;
+    return appointments.some(app => {
+      if (app.date !== date || app.barber !== barberName || app.status === 'cancelado') return false;
 
-    const appStart = timeToMinutes(app.time);
-    const appDuration = typeof app.duration === 'string' ? parseInt(app.duration) : (app.duration || 30);
-    const appEnd = appStart + appDuration;
+      const appStart = timeToMinutes(app.time);
+      const appDuration = typeof app.duration === 'string' ? parseInt(app.duration) : (app.duration || 30);
+      const appEnd = appStart + appDuration;
 
-    // VERIFICAÇÃO DE COLISÃO
-    const hasCollision = (startMin < appEnd && endMin > appStart);
-    return hasCollision;
-  });
-};
+      // VERIFICAÇÃO DE COLISÃO
+      const hasCollision = (startMin < appEnd && endMin > appStart);
+      return hasCollision;
+    });
+  };
   const handleFinalizeBooking = async () => {
     if (!selectedBarber || !currentBarbershopId) return;
     const newBooking = {
@@ -190,26 +190,47 @@ const isRangeOccupied = (date: string, startTime: string, barberName: string, du
 
   const renderStep2 = () => (
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">Qual profissional?</h3>
+      <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">
+        Qual profissional?
+      </h3>
       <div className="grid grid-cols-2 gap-3 md:gap-4">
         {availableBarbers.map(barber => (
           <button
             key={barber.id}
             onClick={() => setSelectedBarber(barber)}
-            className={`flex flex-col items-center p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all ${selectedBarber?.id === barber.id ? 'bg-amber-500/10 border-amber-500 shadow-lg' : 'bg-zinc-900 border-zinc-800'}`}
+            className={`flex flex-col items-center p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all ${selectedBarber?.id === barber.id
+                ? 'bg-amber-500/10 border-amber-500 shadow-lg'
+                : 'bg-zinc-900 border-zinc-800'
+              }`}
           >
-            <img src={barber.photo} className="w-16 h-16 md:w-20 md:h-20 rounded-full mb-3 object-cover grayscale" alt={barber.name} />
-            <span className="font-black text-white italic uppercase text-[10px] md:text-xs text-center">{barber.name}</span>
+            {/* Ícone fixo de barbeiro (Tesoura) */}
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-full mb-3 bg-zinc-950 flex items-center justify-center border border-zinc-800 shadow-inner">
+              <Scissors size={48} className="text-amber-500 -rotate-45" />
+            </div>
+
+            <span className="font-black text-white italic uppercase text-[10px] md:text-xs text-center">
+              {barber.name}
+            </span>
           </button>
         ))}
       </div>
       <div className="flex gap-4">
-        <button onClick={() => setStep(1)} className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic text-xs">Voltar</button>
-        <button disabled={!selectedBarber} onClick={() => setStep(3)} className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs">Próximo</button>
+        <button
+          onClick={() => setStep(1)}
+          className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic text-xs"
+        >
+          Voltar
+        </button>
+        <button
+          disabled={!selectedBarber}
+          onClick={() => setStep(3)}
+          className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs"
+        >
+          Próximo
+        </button>
       </div>
     </div>
   );
-
   const renderStep3 = () => {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
