@@ -166,9 +166,7 @@ const AppContent: React.FC = () => {
     else if (path === 'registrar') {
       setView('create_barbershop');
     }
-
-    // ✅ MANIFEST DINÂMICO VIA BLOB (100% COMPATÍVEL COM iOS)
-    // ✅ NO APP.TSX
+    
     if (urlSlug) {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {

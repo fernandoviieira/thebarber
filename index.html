@@ -49,7 +49,6 @@
       // ✅ NO INDEX.HTML
       const manifestLink = document.querySelector('link[rel="manifest"]');
       if (manifestLink) {
-        const baseApi = "https://api.contafacilpro.com.br";
         if (path && !reserved.includes(path)) {
           manifestLink.href = `${baseApi}/api/manifest/${path}?t=${Date.now()}`;
         } else {

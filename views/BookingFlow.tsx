@@ -37,7 +37,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
-  const [barbershopPhone, setBarbershopPhone ] = useState('');
+  const [barbershopPhone, setBarbershopPhone] = useState('');
 
   // ✅ FUNÇÃO AUXILIAR: Obter data/hora atual de Brasília
   const getBrasiliaDateTime = () => {
@@ -69,7 +69,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
         const slug = window.location.pathname.split('/')[1];
         const { data: barbershop } = await supabase
           .from('barbershops')
-          .select('id, phone' )
+          .select('id, phone')
           .eq('slug', slug)
           .single();
 
@@ -153,7 +153,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
       try {
         const payload = {
-          number: customerPhone, 
+          number: customerPhone,
           shopNumber: barbershopPhone,
           message: `🔥 *AGENDAMENTO CONFIRMADO* 🔥\n\nOlá, ${customerName}!\n\n✂️ Serviço: ${newBooking.service}\n👨‍💼 Profissional: ${newBooking.barber}\n📅 Data: ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR')}\n🕐 Horário: ${selectedTime}\n💰 Valor: R$ ${totalPrice.toFixed(2)}`
         };
@@ -163,8 +163,6 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
         if (funcError) {
           console.error("❌ Erro detalhado da Function:", funcError);
-        } else {
-          console.log("✅ Resposta da Function:", data);
         }
 
       } catch (err) {
