@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api-manifest/:slug*",
+      "destination": "https://api.contafacilpro.com.br/api/manifest/:slug*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
