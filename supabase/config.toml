@@ -369,6 +369,9 @@ port = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"
 
+[functions.send-whatsapp]
+verify_jwt = false
+
 [functions.get-ai-insights]
 enabled = true
 verify_jwt = false

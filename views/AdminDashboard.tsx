@@ -315,6 +315,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     }
   };
 
+  const trialEnd = Math.max(0, Math.ceil((new Date(trialDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)));
+  
   if (loadingData) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#0f1115] text-amber-500">
@@ -331,41 +333,41 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
           <div className="flex justify-between items-start">
             <div className="space-y-3">
 
-             {trialDate && (
-  <div className="relative overflow-hidden group bg-slate-900/50 border border-white/5 p-4 rounded-2xl flex items-center gap-4 min-w-[240px] shadow-2xl">
-    {/* Efeito de brilho de fundo */}
-    <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-500/10 blur-3xl rounded-full" />
-    
-    <div className="relative w-12 h-12 flex-shrink-0">
-      {/* Círculo de progresso simplificado ou Ícone */}
-      <div className="absolute inset-0 border-2 border-amber-500/20 rounded-full" />
-      <div className="absolute inset-0 flex items-center justify-center">
-        <Clock size={18} className="text-amber-500 animate-pulse" />
-      </div>
-    </div>
+              {(trialDate && trialEnd !== 0)  && (
+                <div className="relative overflow-hidden group bg-slate-900/50 border border-white/5 p-4 rounded-2xl flex items-center gap-4 min-w-[240px] shadow-2xl">
+                  {/* Efeito de brilho de fundo */}
+                  <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-500/10 blur-3xl rounded-full" />
 
-    <div className="flex flex-col">
-      <div className="flex items-center gap-2">
-        <span className="text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] italic">
-          Free Trial Mode
-        </span>
-        <div className="w-1 h-1 rounded-full bg-amber-500 animate-ping" />
-      </div>
-      
-      <h5 className="text-white font-black text-sm uppercase tracking-tighter">
-        {Math.max(0, Math.ceil((new Date(trialDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} Dias Restantes
-      </h5>
-      
-      {/* Barra de progresso micro */}
-      <div className="w-full h-1 bg-white/5 rounded-full mt-2 overflow-hidden">
-        <div 
-          className="h-full bg-gradient-to-r from-amber-600 to-amber-400" 
-          style={{ width: '65%' }} // Aqui você calcularia a % baseada no total de 7 ou 15 dias
-        />
-      </div>
-    </div>
-  </div>
-)}
+                  <div className="relative w-12 h-12 flex-shrink-0">
+                    {/* Círculo de progresso simplificado ou Ícone */}
+                    <div className="absolute inset-0 border-2 border-amber-500/20 rounded-full" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Clock size={18} className="text-amber-500 animate-pulse" />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] italic">
+                        Free Trial Mode
+                      </span>
+                      <div className="w-1 h-1 rounded-full bg-amber-500 animate-ping" />
+                    </div>
+
+                    <h5 className="text-white font-black text-sm uppercase tracking-tighter">
+                      {Math.max(0, Math.ceil((new Date(trialDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} Dias Restantes
+                    </h5>
+
+                    {/* Barra de progresso micro */}
+                    <div className="w-full h-1 bg-white/5 rounded-full mt-2 overflow-hidden">
+                      <div
+                        className="h-full bg-gradient-to-r from-amber-600 to-amber-400"
+                        style={{ width: '65%' }} // Aqui você calcularia a % baseada no total de 7 ou 15 dias
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 w-fit px-4 py-1.5 rounded-full border border-amber-500/20">
                 <Activity size={12} className="animate-pulse" />

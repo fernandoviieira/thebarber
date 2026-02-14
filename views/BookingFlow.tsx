@@ -21,6 +21,9 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   const [availableBarbers, setAvailableBarbers] = useState<Barber[]>([]);
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
 
+
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+
   const [shopSettings, setShopSettings] = useState<{
     is_closed: boolean;
     opening_time: string;
@@ -34,6 +37,30 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [barbershopPhone, setBarbershopPhone ] = useState('');
+
+  // ✅ FUNÇÃO AUXILIAR: Obter data/hora atual de Brasília
+  const getBrasiliaDateTime = () => {
+    const now = new Date();
+
+    // Obter data no fuso de Brasília (formato YYYY-MM-DD)
+    const dateStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Sao_Paulo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(now);
+
+    // Obter hora e minuto no fuso de Brasília
+    const timeStr = new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(now);
+
+    return { dateStr, timeStr };
+  };
 
   useEffect(() => {
     async function loadBookingData() {
@@ -42,12 +69,13 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
         const slug = window.location.pathname.split('/')[1];
         const { data: barbershop } = await supabase
           .from('barbershops')
-          .select('id')
+          .select('id, phone' )
           .eq('slug', slug)
           .single();
 
         if (barbershop) {
           setCurrentBarbershopId(barbershop.id);
+          setBarbershopPhone(barbershop.phone);
           const [barbersRes, servicesRes, settingsRes] = await Promise.all([
             supabase.from('barbers').select('*').eq('barbershop_id', barbershop.id).order('name'),
             supabase.from('services').select('*').eq('barbershop_id', barbershop.id).order('name'),
@@ -93,13 +121,17 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       const appDuration = typeof app.duration === 'string' ? parseInt(app.duration) : (app.duration || 30);
       const appEnd = appStart + appDuration;
 
-      // VERIFICAÇÃO DE COLISÃO
       const hasCollision = (startMin < appEnd && endMin > appStart);
       return hasCollision;
     });
   };
+
   const handleFinalizeBooking = async () => {
-    if (!selectedBarber || !currentBarbershopId) return;
+    if (!selectedBarber || !currentBarbershopId) {
+      console.warn("⚠️ [Booking] Tentativa de finalizar sem barbeiro ou ID da barbearia.");
+      return;
+    }
+
     const newBooking = {
       customerName,
       customerPhone,
@@ -114,20 +146,39 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       duration: totalDuration,
       created_by_admin: false
     };
-
     const result = await addAppointment(newBooking as any);
 
     if (result.success) {
-      setStep(5);
+      setSendingWhatsApp(true);
+
+      try {
+        const payload = {
+          number: customerPhone, 
+          shopNumber: barbershopPhone,
+          message: `🔥 *AGENDAMENTO CONFIRMADO* 🔥\n\nOlá, ${customerName}!\n\n✂️ Serviço: ${newBooking.service}\n👨‍💼 Profissional: ${newBooking.barber}\n📅 Data: ${new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR')}\n🕐 Horário: ${selectedTime}\n💰 Valor: R$ ${totalPrice.toFixed(2)}`
+        };
+        const { data, error: funcError } = await supabase.functions.invoke('send-whatsapp', {
+          body: payload
+        });
+
+        if (funcError) {
+          console.error("❌ Erro detalhado da Function:", funcError);
+        } else {
+          console.log("✅ Resposta da Function:", data);
+        }
+
+      } catch (err) {
+        console.error('💥 Falha crítica ao chamar Edge Function:', err);
+      } finally {
+        setSendingWhatsApp(false);
+        setStep(5);
+      }
     } else {
-      // 🚨 Se cair aqui, a mensagem do Unique Index (23505) será exibida
+      console.error("❌ Erro ao salvar no banco (Constraint Unique ou Conexão):", result.error);
       alert(result.error);
-
-      // Agora o fetchAppointments vai funcionar porque você o importou no topo!
       await fetchAppointments(currentBarbershopId);
-
-      setSelectedTime(''); // Limpa a seleção inválida
-      setStep(3); // Volta para o grid de horários atualizado
+      setSelectedTime('');
+      setStep(3);
     }
   };
 
@@ -156,12 +207,9 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
           <button
             key={service.id}
             onClick={() => {
-              // ✅ Permite apenas UM serviço selecionado
-              // Se clicar no mesmo serviço, desmarca
               if (selectedServices[0]?.id === service.id) {
                 setSelectedServices([]);
               } else {
-                // ✅ Seleciona apenas este serviço
                 setSelectedServices([service]);
               }
             }}
@@ -199,11 +247,10 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
             key={barber.id}
             onClick={() => setSelectedBarber(barber)}
             className={`flex flex-col items-center p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all ${selectedBarber?.id === barber.id
-                ? 'bg-amber-500/10 border-amber-500 shadow-lg'
-                : 'bg-zinc-900 border-zinc-800'
+              ? 'bg-amber-500/10 border-amber-500 shadow-lg'
+              : 'bg-zinc-900 border-zinc-800'
               }`}
           >
-            {/* Ícone fixo de barbeiro (Tesoura) */}
             <div className="w-16 h-16 md:w-20 md:h-20 rounded-full mb-3 bg-zinc-950 flex items-center justify-center border border-zinc-800 shadow-inner">
               <Scissors size={48} className="text-amber-500 -rotate-45" />
             </div>
@@ -231,26 +278,44 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       </div>
     </div>
   );
+
   const renderStep3 = () => {
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    const currentTotalMinutes = now.getHours() * 60 + now.getMinutes();
+    // ✅ CORREÇÃO: Obter data e hora REAL de Brasília
+    const { dateStr: todayStr, timeStr: brasiliaTime } = getBrasiliaDateTime();
+
+    const [nowH, nowM] = brasiliaTime.split(':').map(Number);
+    const currentTotalMinutes = nowH * 60 + nowM;
 
     return (
       <div className="space-y-6 animate-in slide-in-from-right duration-300">
         <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">Escolha o Horário</h3>
 
+        {/* Grid de Datas */}
         <div className="flex gap-2 md:gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4">
           {Array.from({ length: 30 }, (_, i) => {
-            const d = new Date(); d.setDate(d.getDate() + i);
+            // ✅ CORREÇÃO: Criar data a partir da data de hoje em Brasília
+            const [year, month, day] = todayStr.split('-').map(Number);
+            const d = new Date(year, month - 1, day);
+            d.setDate(d.getDate() + i);
+
             const dateStr = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric' });
-            const value = d.toISOString().split('T')[0];
+
+            // ✅ Formatar corretamente para YYYY-MM-DD
+            const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
             const isWorkingDay = selectedBarber?.work_days?.[d.getDay().toString()]?.active;
+
             return (
               <button
-                key={i} disabled={!isWorkingDay}
+                key={i}
+                disabled={!isWorkingDay}
                 onClick={() => { setSelectedDate(value); setSelectedTime(''); }}
-                className={`flex-shrink-0 w-16 md:w-20 py-4 md:py-5 rounded-2xl border transition-all flex flex-col items-center justify-center ${selectedDate === value ? 'bg-amber-500 text-black border-amber-500 shadow-lg' : isWorkingDay ? 'bg-zinc-900 border-zinc-800' : 'opacity-10 grayscale cursor-not-allowed'}`}
+                className={`flex-shrink-0 w-16 md:w-20 py-4 md:py-5 rounded-2xl border transition-all flex flex-col items-center justify-center ${selectedDate === value
+                  ? 'bg-amber-500 text-black border-amber-500 shadow-lg'
+                  : isWorkingDay
+                    ? 'bg-zinc-900 border-zinc-800'
+                    : 'opacity-10 grayscale cursor-not-allowed'
+                  }`}
               >
                 <p className="text-[8px] md:text-[9px] uppercase font-black italic">{dateStr.split(' ')[0]}</p>
                 <p className="text-lg md:text-xl font-black italic">{dateStr.split(' ')[1]}</p>
@@ -260,13 +325,15 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
         </div>
 
         {selectedDate && (
-          <div className="grid grid-cols-3 md:grid-cols-4 gap-2"> {/* Aumentei para 4 colunas em telas maiores para caber melhor */}
+          <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
             {Array.from({ length: 24 * 4 }, (_, i) => {
               const hour = Math.floor(i / 4);
-              const min = (i % 4) * 15; // Muda de 30 para 15
+              const min = (i % 4) * 15;
               const timeStr = `${hour.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
 
-              const dayConfig = selectedBarber?.work_days?.[new Date(selectedDate + 'T12:00:00').getDay().toString()];
+              const selectedDateObj = new Date(selectedDate + 'T12:00:00');
+              const dayConfig = selectedBarber?.work_days?.[selectedDateObj.getDay().toString()];
+
               if (!dayConfig || !dayConfig.active) return null;
 
               const slotMin = timeToMinutes(timeStr);
@@ -275,14 +342,14 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
               const barberStart = timeToMinutes(dayConfig.start);
               const barberEnd = timeToMinutes(dayConfig.end);
 
-              // Verifica se o serviço cabe dentro do horário de trabalho
               const isOutsideShop = slotMin < shopOpenMin || (slotMin + totalDuration) > shopCloseMin;
               const isOutsideBarber = slotMin < barberStart || (slotMin + totalDuration) > barberEnd;
 
               const isOccupied = isRangeOccupied(selectedDate, timeStr, selectedBarber!.name, totalDuration);
+
+              // ✅ CORREÇÃO: Comparar com a data REAL de Brasília
               const isPastTime = selectedDate === todayStr && slotMin <= currentTotalMinutes;
 
-              // Filtra horários fora do expediente
               if (isOutsideShop || isOutsideBarber) return null;
 
               return (
@@ -291,7 +358,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
                   disabled={isOccupied || isPastTime}
                   onClick={() => setSelectedTime(timeStr)}
                   className={`py-3 rounded-xl border transition-all text-[11px] font-black italic 
-          ${selectedTime === timeStr
+                  ${selectedTime === timeStr
                       ? 'bg-amber-500 text-black border-amber-500 scale-105 shadow-lg shadow-amber-500/20'
                       : (isOccupied || isPastTime)
                         ? 'opacity-20 line-through cursor-not-allowed bg-zinc-950 border-zinc-900'

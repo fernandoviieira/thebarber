@@ -1,73 +1,85 @@
 import React, { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Store, Globe, CheckCircle, Loader2 } from 'lucide-react';
+import { Store, Globe, CheckCircle, Loader2, Phone } from 'lucide-react';
 
 const CreateBarbershop: React.FC = () => {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [address, setAddress] = useState('');
+  const [phone, setPhone] = useState('');
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-async function handleCreate() {
-  if (!name || !slug) return alert("Nome e URL são obrigatórios.");
-  setIsSubmitting(true);
 
-  try {
-    // 1. Obtemos a sessão atual para garantir que o ID do usuário está presente
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError || !user) {
-      throw new Error("Sessão inválida ou expirada. Por favor, faça login novamente.");
+  // ✅ Função para formatar telefone automaticamente
+  const formatPhone = (value: string) => {
+    if (!value) return "";
+    value = value.replace(/\D/g, "");
+    value = value.replace(/(\d{2})(\d)/, "($1) $2");
+    value = value.replace(/(\d{5})(\d)/, "$1-$2");
+    return value.substring(0, 15);
+  };
+
+  async function handleCreate() {
+    if (!name || !slug) return alert("Nome e URL são obrigatórios.");
+    setIsSubmitting(true);
+
+    try {
+      // 1. Obtemos a sessão atual para garantir que o ID do usuário está presente
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error("Sessão inválida ou expirada. Por favor, faça login novamente.");
+      }
+
+      // 2. CÁLCULO DO TRIAL (20 dias a partir de agora)
+      const trialDays = 20;
+      const trialEndsAt = new Date();
+      trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
+
+      // 3. INSERÇÃO DA BARBEARIA (incluindo telefone)
+      const { data: shop, error: shopError } = await supabase
+        .from('barbershops')
+        .insert([{
+          name,
+          slug,
+          address,
+          phone: phone || null, // ✅ Salva o telefone (ou null se vazio)
+          owner_id: user.id, 
+          subscription_status: 'trialing',
+          trial_ends_at: trialEndsAt.toISOString(),
+          expires_at: trialEndsAt.toISOString() 
+        }])
+        .select()
+        .single();
+
+      if (shopError) {
+        if (shopError.code === '23505') throw new Error("Esta URL (slug) já está em uso. Tente outro nome.");
+        throw shopError;
+      }
+
+      if (shop) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: user.id,
+            barbershop_id: shop.id,
+            role: 'admin',
+            full_name: user.user_metadata?.full_name || name 
+          }, { onConflict: 'id' });
+
+        if (profileError) throw profileError;
+
+        // Sucesso! Avança para a tela de confirmação
+        setStep(2);
+      }
+    } catch (err: any) {
+      // Tratamento de erro detalhado para o usuário
+      console.error("Erro completo:", err);
+      alert("Erro ao configurar unidade: " + (err.message || "Erro desconhecido"));
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // 2. CÁLCULO DO TRIAL (20 dias a partir de agora)
-    const trialDays = 20;
-    const trialEndsAt = new Date();
-    trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
-
-    // 3. INSERÇÃO DA BARBEARIA
-    const { data: shop, error: shopError } = await supabase
-      .from('barbershops')
-      .insert([{
-        name,
-        slug,
-        address,
-        owner_id: user.id, 
-        subscription_status: 'trialing',
-        trial_ends_at: trialEndsAt.toISOString(),
-        expires_at: trialEndsAt.toISOString() 
-      }])
-      .select()
-      .single();
-
-    if (shopError) {
-      if (shopError.code === '23505') throw new Error("Esta URL (slug) já está em uso. Tente outro nome.");
-      throw shopError;
-    }
-
-    if (shop) {
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          id: user.id,
-          barbershop_id: shop.id,
-          role: 'admin',
-          full_name: user.user_metadata?.full_name || name 
-        }, { onConflict: 'id' });
-
-      if (profileError) throw profileError;
-
-      // Sucesso! Avança para a tela de confirmação
-      setStep(2);
-    }
-  } catch (err: any) {
-    // Tratamento de erro detalhado para o usuário
-    console.error("Erro completo:", err);
-    alert("Erro ao configurar unidade: " + (err.message || "Erro desconhecido"));
-  } finally {
-    setIsSubmitting(false);
   }
-}
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-6 selection:bg-amber-500/30">
@@ -86,11 +98,13 @@ async function handleCreate() {
             </header>
 
             <div className="space-y-4">
+              {/* NOME COMERCIAL */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-2 block">Nome Comercial</label>
                 <input
                   type="text"
                   autoFocus
+                  value={name}
                   onChange={(e) => {
                     setName(e.target.value);
                     setSlug(e.target.value.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w-]+/g, ''));
@@ -100,6 +114,7 @@ async function handleCreate() {
                 />
               </div>
 
+              {/* SLUG (URL) */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-amber-500/50 uppercase tracking-widest ml-2 block italic">Link exclusivo (Slug)</label>
                 <div className="flex items-center bg-black border border-zinc-800 rounded-2xl p-4 focus-within:border-amber-500 transition-all">
@@ -107,22 +122,41 @@ async function handleCreate() {
                   <input
                     type="text"
                     value={slug}
-                    onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-'))}
+                    onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, ''))}
                     className="flex-1 bg-transparent outline-none text-amber-500 font-bold text-sm font-mono"
+                    placeholder="barbearia-luxo"
                   />
                 </div>
               </div>
 
+              {/* TELEFONE */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-2 block">Telefone / WhatsApp</label>
+                <div className="flex items-center bg-black border border-zinc-800 rounded-2xl p-4 focus-within:border-amber-500 transition-all">
+                  <Phone size={16} className="text-zinc-600 mr-2" />
+                  <input
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(formatPhone(e.target.value))}
+                    className="flex-1 bg-transparent outline-none text-white text-sm"
+                    placeholder="(11) 99999-9999"
+                  />
+                </div>
+              </div>
+
+              {/* CIDADE / LOCALIZAÇÃO */}
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-2">Cidade / Localização</label>
                 <input
                   type="text"
+                  value={address}
                   onChange={(e) => setAddress(e.target.value)}
                   className="w-full bg-black border border-zinc-800 rounded-2xl p-4 focus:border-amber-500 outline-none text-white transition-all placeholder:text-zinc-800"
                   placeholder="Ex: São Paulo, SP"
                 />
               </div>
 
+              {/* BOTÃO CRIAR */}
               <button
                 onClick={handleCreate}
                 disabled={!name || !slug || isSubmitting}
@@ -142,7 +176,7 @@ async function handleCreate() {
               <p className="text-zinc-400 text-sm mt-2">Sua unidade <span className="text-amber-500 font-bold">{name}</span> está online.</p>
             </div>
 
-            {/* REDIRECIONAMENTO COM SLUG AQUI */}
+            {/* REDIRECIONAMENTO COM SLUG */}
             <button
               onClick={() => {
                 window.location.href = `/${slug}`;

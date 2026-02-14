@@ -265,7 +265,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
       // ✅ Pegar user_id do usuário autenticado
       const { data: userData } = await supabase.auth.getUser();
-
       // ✅ Inserir no banco
       const { error: insertError } = await supabase
         .from('appointments')

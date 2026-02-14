@@ -107,13 +107,7 @@ const AppContent: React.FC = () => {
     // Se é admin e está em uma slug diferente da sua barbearia
     if (isAdmin && barbershopSlug && pathSlug && !reservedRoutes.includes(pathSlug)) {
       if (pathSlug !== barbershopSlug) {
-        console.log(`🔄 [App] Admin acessando barbearia diferente: ${pathSlug} (sua barbearia: ${barbershopSlug})`);
-        console.log('📱 [App] Recarregando página automaticamente...');
-
-        // Salva a slug atual como última visitada
         localStorage.setItem('last_visited_slug', pathSlug);
-
-        // Recarrega a página após um pequeno delay
         setTimeout(() => {
           window.location.reload();
         }, 100);
@@ -130,9 +124,6 @@ const AppContent: React.FC = () => {
       if (isAdmin && barbershopSlug && pathSlug && !reservedRoutes.includes(pathSlug)) {
         if (pathSlug !== barbershopSlug && previousSlug.current !== pathSlug) {
           previousSlug.current = pathSlug;
-          console.log(`🔄 [App] Navegação detectada para slug: ${pathSlug}`);
-
-          // Pequeno delay para garantir que tudo foi processado
           setTimeout(() => {
             window.location.reload();
           }, 150);
@@ -163,14 +154,12 @@ const AppContent: React.FC = () => {
 
     // Se o usuário está em uma slug de barbearia, salva no localStorage e atualiza o estado
     if (path && !reservedRoutes.includes(path)) {
-      console.log('🔧 [App] Detectada slug de barbearia:', path);
       localStorage.setItem('last_visited_slug', path);
       if (urlSlug !== path) setUrlSlug(path);
     }
     // Se está na home vazia, tenta redirecionar para a última barbearia visitada
     else if (path === '' && localStorage.getItem('last_visited_slug')) {
       const savedSlug = localStorage.getItem('last_visited_slug');
-      console.log('🔧 [App] Redirecionando para última slug visitada:', savedSlug);
       window.location.replace(`/${savedSlug}`);
       return;
     }
@@ -190,7 +179,6 @@ const AppContent: React.FC = () => {
         if (manifestLink.href !== newManifestHref) {
           manifestLink.setAttribute('crossorigin', 'anonymous');
           manifestLink.href = newManifestHref;
-          console.log('📡 [PWA] Manifest via VPS atualizado:', newManifestHref);
         }
       }
     }
@@ -223,7 +211,7 @@ const AppContent: React.FC = () => {
         role, 
         full_name, 
         barbershop_id, 
-        barbershops:barbershop_id(name, slug, subscription_status, trial_ends_at, expires_at)
+        barbershops:barbershop_id(name, slug, subscription_status, trial_ends_at, expires_at, current_plan)
       `)
         .eq('id', currentSession.user.id)
         .maybeSingle();
@@ -238,7 +226,6 @@ const AppContent: React.FC = () => {
       if (profile) {
         // CASO A: Usuário no /registrar que o Google criou como client
         if (isRegistrarRoute && profile.role !== 'admin') {
-          console.log("🛠️ Promovendo usuário para ADMIN (Rota de Registro)...");
           await supabase
             .from('profiles')
             .update({ role: 'admin' })
@@ -248,11 +235,9 @@ const AppContent: React.FC = () => {
         }
         // CASO B: Usuário em uma barbearia específica sem vínculo
         else if (!profile.barbershop_id && normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath)) {
-          console.log("🛠️ Reparando vínculo com a barbearia...");
-
           const { data: bData } = await supabase
             .from('barbershops')
-            .select('id, name, slug, subscription_status, trial_ends_at, expires_at')
+            .select('id, name, slug, subscription_status, trial_ends_at, expires_at, current_plan')
             .eq('slug', normalizedCurrentPath)
             .maybeSingle();
 
@@ -265,7 +250,6 @@ const AppContent: React.FC = () => {
             profile.barbershop_id = bData.id;
             profile.role = 'client';
             (profile as any).barbershops = bData;
-            console.log("✅ Vínculo reparado como CLIENT com sucesso!");
           }
         }
       }
@@ -323,10 +307,6 @@ const AppContent: React.FC = () => {
             // NOVO: Verifica se está acessando a própria barbearia ou outra
             const pathSlug = window.location.pathname.split('/')[1];
             if (pathSlug && pathSlug !== myBarbershopSlug) {
-              console.log(`⚠️ [App] Admin acessando barbearia diferente: ${pathSlug}`);
-              console.log('🔄 [App] Recarregando para carregar dados corretos...');
-
-              // Pequeno delay e depois recarrega
               setTimeout(() => {
                 window.location.reload();
               }, 200);

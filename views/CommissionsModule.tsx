@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
     Users, ChevronDown, ChevronUp, Wallet, Save,
-    Loader2, Percent, Calendar as CalendarIcon, MinusCircle, Printer, Filter, Receipt, Scissors, Package, TrendingUp
+    Loader2, Percent, Calendar as CalendarIcon, MinusCircle, Printer, Filter, Receipt, Scissors, Package, TrendingUp, X, FileText
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
@@ -18,6 +18,9 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
     const [selectedBarberId, setSelectedBarberId] = useState<string | 'all'>('all');
     const [barbershopName, setBarbershopName] = useState('');
+    
+    // ✅ NOVO: Estado para controlar o tipo de impressão
+    const [printMode, setPrintMode] = useState<'simple' | 'complete' | null>(null);
 
     // Cache de serviços e produtos
     const [servicesCache, setServicesCache] = useState<any[]>([]);
@@ -33,6 +36,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
             const startIso = startDate?.toISOString().split('T')[0];
             const endIso = endDate?.toISOString().split('T')[0];
 
+            // 1. Buscar nome da Barbearia
             const { data: shopData } = await supabase
                 .from('barbershops')
                 .select('name')
@@ -41,7 +45,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
             if (shopData) setBarbershopName(shopData.name);
 
-            // Buscar serviços e produtos
+            // 2. Buscar serviços e produtos (Cache)
             const { data: servicesData } = await supabase
                 .from('services')
                 .select('*')
@@ -55,11 +59,13 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
             setServicesCache(servicesData || []);
             setInventoryCache(inventoryData || []);
 
+            // 3. Buscar Barbeiros
             const { data: barbersData } = await supabase
                 .from('barbers')
                 .select('*')
                 .eq('barbershop_id', barbershopId);
 
+            // 4. Buscar Vendas (Appointments) finalizadas no período
             const { data: salesData } = await supabase
                 .from('appointments')
                 .select('*')
@@ -69,14 +75,27 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 .lte('date', endIso)
                 .order('date', { ascending: false });
 
+            // 5. Buscar Vales/Adiantamentos DO PERÍODO
+            const { data: advancesData } = await supabase
+                .from('barber_advances')
+                .select('*')
+                .eq('barbershop_id', barbershopId)
+                .gte('date', startIso)
+                .lte('date', endIso);
+
             if (barbersData && salesData) {
                 setReportData(barbersData.map(barber => {
+                    // Filtra vendas do barbeiro específico
                     const mySales = salesData.filter(sale =>
                         sale.barber_id === barber.id ||
                         (!sale.barber_id && sale.barber === barber.name)
                     );
 
-                    // ✅ NOVA LÓGICA DE DETALHAMENTO IGUAL AO HISTÓRICO
+                    // Filtra e soma os vales do período
+                    const myAdvances = advancesData?.filter(adv => adv.barber_id === barber.id) || [];
+                    const totalAdvancesPeriod = myAdvances.reduce((acc, curr) => acc + Number(curr.amount), 0);
+
+                    // Detalha os itens de cada venda (Serviços + Produtos + Gorjetas)
                     const salesWithDetailedItems = mySales.map(sale => {
                         const rawServiceStr = sale.service || 'Serviço';
                         const parts = rawServiceStr.split(' + ').map(p => p.trim());
@@ -101,7 +120,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                             else {
                                 const foundService = servicesData?.find(s => s.name.trim() === part);
                                 itemPrice = foundService ? Number(foundService.price) : 0;
-                                // Usa a taxa específica do barbeiro para serviços
                                 return { name: part, price: itemPrice, commission: itemPrice * (barber.commission_rate / 100), isProduct: false, isGorjeta: false };
                             }
                         });
@@ -120,7 +138,8 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                         atendimentos: salesWithDetailedItems.length,
                         totalBruto: salesWithDetailedItems.reduce((acc, curr) => acc + Number(curr.price), 0),
                         currentRate: barber.commission_rate || 0,
-                        expenses: barber.expenses || 0,
+                        expenses: totalAdvancesPeriod,
+                        advancesList: myAdvances,
                         totalComissaoCalculada: salesWithDetailedItems.reduce((acc, sale) => acc + sale.comissaoTotalVenda, 0),
                         totalGorjetas: salesWithDetailedItems.reduce((acc, sale) => acc + (Number(sale.tip_amount) || 0), 0),
                         detalhes: salesWithDetailedItems
@@ -128,25 +147,43 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 }));
             }
         } catch (e) {
-            console.error(e);
+            console.error("❌ Erro ao buscar comissões:", e);
         } finally {
             setLoading(false);
         }
     };
 
+    const handleAddAdvance = async (barberId: string, description: string, amount: number, date: string) => {
+        try {
+            const { error } = await supabase
+                .from('barber_advances')
+                .insert([{
+                    barbershop_id: barbershopId,
+                    barber_id: barberId,
+                    description: description,
+                    amount: amount,
+                    date: date
+                }]);
+
+            if (error) throw error;
+
+            fetchCommissions();
+        } catch (e) {
+            console.error(e);
+            alert("❌ Erro ao lançar vale.");
+        }
+    };
+
     const calculateSaleCommission = (venda: any, barberRate: number) => {
-        // 1. Se for APENAS gorjeta na venda inteira, comissão de serviço é 0
         if (venda.service === "Caixinha / Gorjeta") return 0;
 
         const serviceText = venda.service || '';
         let comissaoVenda = 0;
 
-        // 2. Se for venda composta, processamos cada item separadamente
         if (serviceText.includes('+') || serviceText.includes('(Produto)')) {
             const parts = serviceText.split('+').map(p => p.trim());
 
             parts.forEach(part => {
-                // IGNORA se for gorjeta (ela será somada à parte pelo tip_amount)
                 if (part.toLowerCase().includes('gorjeta')) return;
 
                 if (part.includes('(Produto)')) {
@@ -162,7 +199,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
             return comissaoVenda;
         }
 
-        // 3. Venda simples de serviço (garantindo que não é gorjeta)
         return Number(venda.price) * (barberRate / 100);
     };
 
@@ -194,9 +230,38 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
         }
     };
 
-    const handlePrint = () => {
+    const handleDeleteAdvance = async (advanceId: string) => {
+        if (!confirm("Deseja realmente remover este vale? Ele não será mais descontado.")) return;
+
+        try {
+            const { error } = await supabase
+                .from('barber_advances')
+                .delete()
+                .eq('id', advanceId);
+
+            if (error) throw error;
+
+            fetchCommissions();
+        } catch (e) {
+            console.error(e);
+            alert("Erro ao remover vale.");
+        }
+    };
+
+    // ✅ NOVO: Funções de impressão separadas
+    const handlePrintSimple = () => {
+        setPrintMode('simple');
         setTimeout(() => {
             window.print();
+            setPrintMode(null);
+        }, 150);
+    };
+
+    const handlePrintComplete = () => {
+        setPrintMode('complete');
+        setTimeout(() => {
+            window.print();
+            setPrintMode(null);
         }, 150);
     };
 
@@ -326,6 +391,62 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                     <div className="bg-black/60 border-x border-b border-white/10 rounded-b-2xl md:rounded-b-[3rem] overflow-hidden animate-in slide-in-from-top-4 duration-300 p-4 md:p-8 space-y-6 md:space-y-8">
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-8 bg-white/[0.02] p-4 md:p-8 rounded-2xl md:rounded-[2rem] border border-white/5">
                                             <div className="space-y-3">
+                                                <div className="bg-red-500/5 border border-red-500/20 rounded-2xl p-4 mt-4">
+                                                    <h5 className="text-[10px] font-black text-red-500 uppercase mb-3 flex items-center gap-2">
+                                                        <MinusCircle size={14} /> Novo Vale / Adiantamento
+                                                    </h5>
+                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Descrição (ex: Vale Almoço)"
+                                                            id={`desc-${barber.id}`}
+                                                            className="bg-slate-900 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-red-500"
+                                                        />
+                                                        <input
+                                                            type="number"
+                                                            placeholder="Valor R$"
+                                                            id={`val-${barber.id}`}
+                                                            className="bg-slate-900 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-red-500"
+                                                        />
+                                                        <button
+                                                            onClick={() => {
+                                                                const d = (document.getElementById(`desc-${barber.id}`) as HTMLInputElement).value;
+                                                                const v = (document.getElementById(`val-${barber.id}`) as HTMLInputElement).value;
+                                                                if (d && v) handleAddAdvance(barber.id, d, Number(v), new Date().toISOString().split('T')[0]);
+                                                            }}
+                                                            className="bg-red-500 text-white font-black text-[10px] uppercase rounded-lg p-2 hover:bg-red-600 transition-colors"
+                                                        >
+                                                            Lançar Vale
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2 mt-6">
+                                                    <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
+                                                        Detalhamento de Vales (Neste Período)
+                                                    </h5>
+                                                    {barber.advancesList && barber.advancesList.length > 0 ? (
+                                                        barber.advancesList.map((adv: any) => (
+                                                            <div key={adv.id} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
+                                                                <div>
+                                                                    <p className="text-white font-bold text-xs">{adv.description}</p>
+                                                                    <p className="text-[9px] text-slate-500">{new Date(adv.date).toLocaleDateString('pt-BR')}</p>
+                                                                </div>
+                                                                <div className="flex items-center gap-4">
+                                                                    <span className="text-red-500 font-black text-sm">- R$ {Number(adv.amount).toFixed(2)}</span>
+                                                                    <button
+                                                                        onClick={() => handleDeleteAdvance(adv.id)}
+                                                                        className="text-slate-600 hover:text-red-500 transition-colors"
+                                                                    >
+                                                                        <X size={14} />
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <p className="text-[10px] text-slate-600 italic">Nenhum vale encontrado para este período.</p>
+                                                    )}
+                                                </div>
                                                 <div className="flex items-center gap-2 text-amber-500">
                                                     <Percent size={14} />
                                                     <span className="text-[10px] font-black uppercase italic">Comissão Serviços (%)</span>
@@ -385,15 +506,8 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                 </thead>
                                                 <tbody className="divide-y divide-white/5">
                                                     {barber.detalhes.map((venda: any) => {
-                                                        const isTipOnly = venda.service === "Caixinha / Gorjeta";
-
-                                                        // Calcular comissão usando a nova função
                                                         const comissaoExibida = calculateSaleCommission(venda, barber.currentRate);
-
-                                                        // Valor exibido
                                                         const valorExibido = Number(venda.original_price || venda.price);
-
-                                                        // Gorjeta
                                                         const gorjetaVenda = Number(venda.tip_amount) || 0;
                                                         const comissaoTotal = comissaoExibida + gorjetaVenda;
 
@@ -445,6 +559,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 )}
             </div>
 
+            {/* ✅ NOVO: Dois Botões de Impressão */}
             {!loading && filteredReportData.length > 0 && (
                 <div className="bg-amber-500 rounded-2xl md:rounded-[4rem] p-6 md:p-12 flex flex-col xl:flex-row justify-between items-center shadow-2xl mt-8 md:mt-12 print:hidden gap-8">
                     <div className="flex flex-col md:flex-row items-center gap-4 md:gap-10 text-center md:text-left">
@@ -463,16 +578,26 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                             </h3>
                         </div>
                     </div>
-                    <button
-                        onClick={handlePrint}
-                        className="w-full md:w-auto bg-black text-amber-500 px-8 md:px-14 py-5 md:py-7 rounded-xl md:rounded-[2.5rem] font-black uppercase text-xs md:text-sm tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all"
-                    >
-                        <Printer size={20} /> Imprimir Recibos
-                    </button>
+                    
+                    {/* ✅ DOIS BOTÕES LADO A LADO */}
+                    <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
+                        <button
+                            onClick={handlePrintSimple}
+                            className="w-full md:w-auto bg-black text-amber-500 px-6 md:px-10 py-5 md:py-7 rounded-xl md:rounded-[2.5rem] font-black uppercase text-xs md:text-sm tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all border-2 border-amber-500/20"
+                        >
+                            <FileText size={20} /> Recibo Simplificado
+                        </button>
+                        <button
+                            onClick={handlePrintComplete}
+                            className="w-full md:w-auto bg-black text-amber-500 px-6 md:px-10 py-5 md:py-7 rounded-xl md:rounded-[2.5rem] font-black uppercase text-xs md:text-sm tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all"
+                        >
+                            <Printer size={20} /> Recibo Completo
+                        </button>
+                    </div>
                 </div>
             )}
 
-            {/* ÁREA DE IMPRESSÃO - CORRIGIDA */}
+            {/* ✅ ÁREA DE IMPRESSÃO - COM RENDERIZAÇÃO CONDICIONAL */}
             <div className="hidden print:block">
                 {filteredReportData.map((barber, index) => {
                     const isLast = index === filteredReportData.length - 1;
@@ -496,7 +621,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                         {barbershopName || 'Barber Pro'}
                                     </h1>
                                     <p style={{ fontSize: '8px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px', margin: '5px 0 0 0' }}>
-                                        Recibo de Repasse de Comissões
+                                        Recibo de Repasse de Comissões {printMode === 'simple' ? '(SIMPLIFICADO)' : '(COMPLETO)'}
                                     </p>
                                 </div>
                                 <div style={{ textAlign: 'right', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }}>
@@ -563,62 +688,109 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                 </div>
                             </div>
 
-                            {/* Tabela de Detalhamento - CORRIGIDA COM DETALHAMENTO */}
-                            <div style={{ marginBottom: '50px' }}>
-                                <h3 style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', borderBottom: '1px solid black', paddingBottom: '10px', marginBottom: '20px', fontStyle: 'italic' }}>
-                                    Detalhamento das Vendas
-                                </h3>
-                                <table style={{ width: '100%', fontSize: '9px', borderCollapse: 'collapse' }}>
-                                    <thead>
-                                        <tr style={{ borderBottom: '1px solid #d1d5db' }}>
-                                            <th style={{ padding: '10px 0', textAlign: 'left', fontWeight: '900' }}>Data</th>
-                                            <th style={{ padding: '10px 0', textAlign: 'left', fontWeight: '900' }}>Descrição</th>
-                                            <th style={{ padding: '10px 0', textAlign: 'right', fontWeight: '900' }}>Valor</th>
-                                            <th style={{ padding: '10px 0', textAlign: 'right', fontWeight: '900' }}>Comissão</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {barber.detalhes.map((venda: any) => {
-                                            const gorjetaVenda = Number(venda.tip_amount) || 0;
-                                            const comVal = calculateSaleCommission(venda, barber.currentRate);
-                                            const comissaoTotal = comVal + gorjetaVenda;
-                                            const valorExibido = Number(venda.original_price || venda.price);
+                            {/* ✅ CONDICIONAL: Só mostra detalhes no modo COMPLETO */}
+                            {printMode === 'complete' && (
+                                <>
+                                    {/* Detalhamento de Vales */}
+                                    {barber.advancesList && barber.advancesList.length > 0 && (
+                                        <div style={{ marginBottom: '25px' }}>
+                                            <h3 style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '15px', fontStyle: 'italic', color: '#dc2626' }}>
+                                                ⚠️ Detalhamento de Vales / Adiantamentos
+                                            </h3>
+                                            <table style={{ width: '100%', fontSize: '9px', borderCollapse: 'collapse' }}>
+                                                <thead>
+                                                    <tr style={{ borderBottom: '1px solid #d1d5db', backgroundColor: '#f9fafb' }}>
+                                                        <th style={{ padding: '8px', textAlign: 'left', fontWeight: '900' }}>Data</th>
+                                                        <th style={{ padding: '8px', textAlign: 'left', fontWeight: '900' }}>Descrição</th>
+                                                        <th style={{ padding: '8px', textAlign: 'right', fontWeight: '900', color: '#dc2626' }}>Valor Descontado</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {barber.advancesList.map((adv: any) => (
+                                                        <tr key={adv.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                            <td style={{ padding: '8px' }}>
+                                                                {new Date(adv.date).toLocaleDateString('pt-BR')}
+                                                            </td>
+                                                            <td style={{ padding: '8px', fontWeight: 'bold' }}>
+                                                                {adv.description}
+                                                            </td>
+                                                            <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#dc2626' }}>
+                                                                - R$ {Number(adv.amount).toFixed(2)}
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                                <tfoot>
+                                                    <tr style={{ borderTop: '2px solid #d1d5db' }}>
+                                                        <td colSpan={2} style={{ padding: '10px', fontWeight: '900', textTransform: 'uppercase', fontSize: '8px' }}>
+                                                            Total de Vales Descontados:
+                                                        </td>
+                                                        <td style={{ padding: '10px', textAlign: 'right', fontWeight: '900', color: '#dc2626', fontSize: '11px' }}>
+                                                            - R$ {barber.advancesList.reduce((acc: number, adv: any) => acc + Number(adv.amount), 0).toFixed(2)}
+                                                        </td>
+                                                    </tr>
+                                                </tfoot>
+                                            </table>
+                                        </div>
+                                    )}
 
-                                            return (
-                                                <tr key={venda.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                                    <td style={{ padding: '10px 0', verticalAlign: 'top' }}>
-                                                        {new Date(venda.date + 'T00:00:00').toLocaleDateString('pt-BR')}
-                                                    </td>
-                                                    <td style={{ padding: '10px 0', fontWeight: 'bold', textTransform: 'uppercase', verticalAlign: 'top' }}>
-                                                        <div>
-                                                            {/* ✅ DETALHAMENTO COMPLETO NA IMPRESSÃO */}
-                                                            {(venda.detailedItems || []).map((item: any, i: number) => (
-                                                                <div key={i} style={{ marginBottom: '4px', fontSize: '8px' }}>
-                                                                    {item.isProduct ? '📦' : '✂️'} {item.name}
-                                                                    <span style={{ color: '#f59e0b', marginLeft: '10px' }}>
-                                                                        (Com: R$ {Number(item.commission || 0).toFixed(2)})
-                                                                    </span>
-                                                                </div>
-                                                            ))}
-                                                            {gorjetaVenda > 0 && (
-                                                                <div style={{ color: '#10b981', fontSize: '8px', marginTop: '5px' }}>
-                                                                    💰 + GORJETA: R$ {gorjetaVenda.toFixed(2)}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                    <td style={{ padding: '10px 0', textAlign: 'right', color: '#9ca3af', verticalAlign: 'top' }}>
-                                                        R$ {valorExibido.toFixed(2)}
-                                                    </td>
-                                                    <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 'bold', verticalAlign: 'top' }}>
-                                                        R$ {comissaoTotal.toFixed(2)}
-                                                    </td>
+                                    {/* Tabela de Detalhamento de Vendas */}
+                                    <div style={{ marginBottom: '50px' }}>
+                                        <h3 style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', borderBottom: '1px solid black', paddingBottom: '10px', marginBottom: '20px', fontStyle: 'italic' }}>
+                                            Detalhamento das Vendas
+                                        </h3>
+                                        <table style={{ width: '100%', fontSize: '9px', borderCollapse: 'collapse' }}>
+                                            <thead>
+                                                <tr style={{ borderBottom: '1px solid #d1d5db' }}>
+                                                    <th style={{ padding: '10px 0', textAlign: 'left', fontWeight: '900' }}>Data</th>
+                                                    <th style={{ padding: '10px 0', textAlign: 'left', fontWeight: '900' }}>Descrição</th>
+                                                    <th style={{ padding: '10px 0', textAlign: 'right', fontWeight: '900' }}>Valor</th>
+                                                    <th style={{ padding: '10px 0', textAlign: 'right', fontWeight: '900' }}>Comissão</th>
                                                 </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </div>
+                                            </thead>
+                                            <tbody>
+                                                {barber.detalhes.map((venda: any) => {
+                                                    const gorjetaVenda = Number(venda.tip_amount) || 0;
+                                                    const comVal = calculateSaleCommission(venda, barber.currentRate);
+                                                    const comissaoTotal = comVal + gorjetaVenda;
+                                                    const valorExibido = Number(venda.original_price || venda.price);
+
+                                                    return (
+                                                        <tr key={venda.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                                            <td style={{ padding: '10px 0', verticalAlign: 'top' }}>
+                                                                {new Date(venda.date + 'T00:00:00').toLocaleDateString('pt-BR')}
+                                                            </td>
+                                                            <td style={{ padding: '10px 0', fontWeight: 'bold', textTransform: 'uppercase', verticalAlign: 'top' }}>
+                                                                <div>
+                                                                    {(venda.detailedItems || []).map((item: any, i: number) => (
+                                                                        <div key={i} style={{ marginBottom: '4px', fontSize: '8px' }}>
+                                                                            {item.isProduct ? '📦' : '✂️'} {item.name}
+                                                                            <span style={{ color: '#f59e0b', marginLeft: '10px' }}>
+                                                                                (Com: R$ {Number(item.commission || 0).toFixed(2)})
+                                                                            </span>
+                                                                        </div>
+                                                                    ))}
+                                                                    {gorjetaVenda > 0 && (
+                                                                        <div style={{ color: '#10b981', fontSize: '8px', marginTop: '5px' }}>
+                                                                            💰 + GORJETA: R$ {gorjetaVenda.toFixed(2)}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                            <td style={{ padding: '10px 0', textAlign: 'right', color: '#9ca3af', verticalAlign: 'top' }}>
+                                                                R$ {valorExibido.toFixed(2)}
+                                                            </td>
+                                                            <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 'bold', verticalAlign: 'top' }}>
+                                                                R$ {comissaoTotal.toFixed(2)}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </>
+                            )}
 
                             {/* Assinatura */}
                             <div style={{ marginTop: '50px', paddingTop: '30px', borderTop: '1px solid black', width: '250px', margin: '50px auto 0', textAlign: 'center' }}>
