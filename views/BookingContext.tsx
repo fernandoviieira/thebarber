@@ -224,7 +224,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
           })
           .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
-              console.log('✅ Realtime conectado');
             } else if (status === 'CHANNEL_ERROR') {
               console.error('❌ Erro no canal realtime');
             }
@@ -289,7 +288,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         };
       }
 
-      console.log('✅ Agendamento criado com sucesso:', result.id);
       return { success: true };
 
     } catch (err: any) {
