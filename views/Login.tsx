@@ -62,7 +62,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
         if (bData) barbershopId = bData.id;
       }
-      
+
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -133,7 +133,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
               setIsRegister(false);
             }
           } else {
-            alert('Cadastro realizado com sucesso! Agora você pode entrar.');
+            alert('Cadastro realizado com sucesso! Confirme seu email.');
             setIsRegister(false);
           }
         }
@@ -144,6 +144,26 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       }
     } catch (err: any) {
       setError(err.message || 'Erro na operação.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('Digite seu e-mail para recuperar a senha.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      alert('Link de recuperação enviado para seu e-mail!');
+    } catch (err: any) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -194,6 +214,19 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                   className="w-full bg-white/5 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-white focus:border-amber-500 outline-none transition-all placeholder:text-zinc-600"
                   placeholder="Sua Senha" />
               </div>
+
+              {/* LINK DE ESQUECEU A SENHA AQUI */}
+              {!isRegister && (
+                <div className="flex justify-end px-2">
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-[10px] uppercase tracking-widest text-zinc-500 hover:text-amber-500 transition-colors font-black"
+                  >
+                    Esqueceu a senha?
+                  </button>
+                </div>
+              )}
             </div>
 
             {error && <div className="text-red-400 text-xs text-center animate-pulse py-2 font-bold">{error}</div>}

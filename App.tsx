@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import ClientHome from './views/ClientHome';
 import BookingFlow from './views/BookingFlow';
-import { BookingProvider, useBooking } from './views/BookingContext'; // Importado useBooking
+import { BookingProvider, useBooking } from './views/BookingContext';
 import AdminDashboard from './views/AdminDashboard';
 import AdminSettings from './views/AdminSettings';
 import CreateBarbershop from './views/CreateBarbershop';
@@ -17,13 +17,14 @@ import CashFlowModule from './views/CashFlowModule';
 import CheckoutModule from './views/CheckoutModule';
 import SalesHistoryModule from './views/SalesHistoryModule';
 import ExpensesModule from './views/ExpensesModule';
+import ResetPassword from './views/ResetPassword';
 import Sidebar from './views/Sidebar';
 import Login from './views/Login';
 import { MOCK_USER } from './constants';
 import { supabase } from '@/lib/supabase';
 import { Calendar, Settings, Plus, ShieldCheck, LogOut, LayoutDashboard } from 'lucide-react';
 
-type ViewState = 'client' | 'admin' | 'booking' | 'profile' | 'my_appointments' | 'settings' | 'create_barbershop' | 'subscription_plans';
+type ViewState = 'client' | 'admin' | 'booking' | 'profile' | 'my_appointments' | 'settings' | 'create_barbershop' | 'subscription_plans' | 'reset_password';
 
 type AdminTab =
   | 'dashboard'
@@ -61,15 +62,26 @@ const AppContent: React.FC = () => {
   const [services, setServices] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
-  const [barbershopSlug, setBarbershopSlug] = useState<string | null>(null); // NOVO: Slug da barbearia do admin
+  const [barbershopSlug, setBarbershopSlug] = useState<string | null>(null);
 
   const hasRedirected = useRef(false);
-  const previousSlug = useRef<string | null>(null); // NOVO: Para detectar mudança de slug
+  const previousSlug = useRef<string | null>(null);
+  const isResetPasswordRoute = useRef(false);
+
+  // VERIFICAÇÃO INICIAL DA ROTA DE RESET
+  useEffect(() => {
+    const path = window.location.pathname;
+    if (path.includes('reset-password')) {
+      isResetPasswordRoute.current = true;
+      setView('reset_password');
+      setLoading(false);
+    }
+  }, []);
 
   // Busca de dados globais quando o barbershopId for definido
   useEffect(() => {
     const fetchAllAdminData = async () => {
-      if (!barbershopId || !isAdmin) return;
+      if (!barbershopId || !isAdmin || isResetPasswordRoute.current) return;
 
       try {
         if (fetchAppointments) await fetchAppointments(barbershopId);
@@ -89,7 +101,7 @@ const AppContent: React.FC = () => {
         if (inventoryRes.data) setInventory(inventoryRes.data);
         if (customersRes.data) setCustomers(customersRes.data);
         if (shopRes.data) {
-          setBarbershopSlug(shopRes.data.slug); // NOVO: Salva o slug da barbearia do admin
+          setBarbershopSlug(shopRes.data.slug);
         }
       } catch (err) {
         console.error("Erro ao carregar dados administrativos:", err);
@@ -99,12 +111,13 @@ const AppContent: React.FC = () => {
     fetchAllAdminData();
   }, [barbershopId, isAdmin]);
 
-  // NOVO: Efeito para detectar mudança de slug e forçar recarregamento
+  // Efeito para detectar mudança de slug e forçar recarregamento
   useEffect(() => {
+    if (isResetPasswordRoute.current) return;
+    
     const pathSlug = window.location.pathname.split('/')[1];
-    const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
+    const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
 
-    // Se é admin e está em uma slug diferente da sua barbearia
     if (isAdmin && barbershopSlug && pathSlug && !reservedRoutes.includes(pathSlug)) {
       if (pathSlug !== barbershopSlug) {
         localStorage.setItem('last_visited_slug', pathSlug);
@@ -113,13 +126,15 @@ const AppContent: React.FC = () => {
         }, 100);
       }
     }
-  }, [isAdmin, barbershopSlug, window.location.pathname]);
+  }, [isAdmin, barbershopSlug]);
 
-  // NOVO: Efeito para detectar mudança de URL via navegação
+  // Efeito para detectar mudança de URL via navegação
   useEffect(() => {
+    if (isResetPasswordRoute.current) return;
+    
     const handleLocationChange = () => {
       const pathSlug = window.location.pathname.split('/')[1];
-      const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
+      const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
 
       if (isAdmin && barbershopSlug && pathSlug && !reservedRoutes.includes(pathSlug)) {
         if (pathSlug !== barbershopSlug && previousSlug.current !== pathSlug) {
@@ -131,10 +146,8 @@ const AppContent: React.FC = () => {
       }
     };
 
-    // Monitora mudanças no histórico
     window.addEventListener('popstate', handleLocationChange);
 
-    // Monkey patch no pushState para detectar navegação SPA
     const originalPushState = window.history.pushState;
     window.history.pushState = function (...args) {
       originalPushState.apply(this, args);
@@ -148,9 +161,14 @@ const AppContent: React.FC = () => {
   }, [isAdmin, barbershopSlug]);
 
   useEffect(() => {
+    // SE FOR ROTA DE RESET, NÃO EXECUTA NADA
+    if (isResetPasswordRoute.current) {
+      return;
+    }
+
     // --- 1. LÓGICA DE ROTEAMENTO E SLUG ---
     const path = window.location.pathname.split('/')[1];
-    const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
+    const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
 
     // Se o usuário está em uma slug de barbearia, salva no localStorage e atualiza o estado
     if (path && !reservedRoutes.includes(path)) {
@@ -166,14 +184,13 @@ const AppContent: React.FC = () => {
     else if (path === 'registrar') {
       setView('create_barbershop');
     }
-    
+
     if (urlSlug) {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
         const baseApi = "https://api.contafacilpro.com.br";
         const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
-        // ✅ IMPORTANTE: Não use Blob. Aponte diretamente para a API.
         if (manifestLink.href !== newManifestHref) {
           manifestLink.setAttribute('crossorigin', 'anonymous');
           manifestLink.href = newManifestHref;
@@ -184,6 +201,13 @@ const AppContent: React.FC = () => {
     // --- 3. LÓGICA DE AUTENTICAÇÃO (SUPABASE) ---
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
+
+      // 🛡️ Se está na rota de reset, mantém a view de reset
+      if (isResetPasswordRoute.current || window.location.pathname.includes('reset-password')) {
+        setView('reset_password');
+        setLoading(false);
+        return;
+      }
 
       if (session) {
         const isNewSession = event === 'SIGNED_IN' || event === 'INITIAL_SESSION';
@@ -198,10 +222,17 @@ const AppContent: React.FC = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, [urlSlug, barbershopName]); // Dependências corretas
+  }, [urlSlug, barbershopName]);
 
   const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
+      // 🛡️ Se for rota de reset, não busca perfil
+      if (isResetPasswordRoute.current || window.location.pathname.includes('reset-password')) {
+        setView('reset_password');
+        setLoading(false);
+        return;
+      }
+
       // 1. Busca inicial do perfil
       let { data: profile, error } = await supabase
         .from('profiles')
@@ -217,7 +248,7 @@ const AppContent: React.FC = () => {
       if (error) throw error;
 
       const normalizedCurrentPath = (currentPath || '').trim().toLowerCase();
-      const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', ''];
+      const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
       const isRegistrarRoute = normalizedCurrentPath === 'registrar';
 
       // --- INÍCIO DA LÓGICA DE REPARAÇÃO AVANÇADA ---
@@ -278,7 +309,7 @@ const AppContent: React.FC = () => {
       setUserName(profile.full_name || currentSession.user.email.split('@')[0]);
       setBarbershopId(profile.barbershop_id);
       setBarbershopName(shopName);
-      setBarbershopSlug(myBarbershopSlug); // NOVO: Salva o slug da barbearia do admin
+      setBarbershopSlug(myBarbershopSlug);
 
       if (barbershopData) {
         setDbSubscriptionStatus(barbershopData.subscription_status);
@@ -302,7 +333,6 @@ const AppContent: React.FC = () => {
           if (profile.barbershop_id) {
             setView('admin');
 
-            // NOVO: Verifica se está acessando a própria barbearia ou outra
             const pathSlug = window.location.pathname.split('/')[1];
             if (pathSlug && pathSlug !== myBarbershopSlug) {
               setTimeout(() => {
@@ -358,12 +388,13 @@ const AppContent: React.FC = () => {
   const handleLogout = async () => {
     if (window.confirm("Deseja realmente sair?")) {
       hasRedirected.current = false;
+      isResetPasswordRoute.current = false;
       await supabase.auth.signOut();
       setBarbershopId(null);
       setIsAdmin(false);
       setUserName('');
       setSession(null);
-      setBarbershopSlug(null); // NOVO: Limpa o slug da barbearia
+      setBarbershopSlug(null);
 
       if (urlSlug) setView('client'); else setView('profile');
       if (urlSlug && window.location.pathname !== `/${urlSlug}`) {
@@ -373,13 +404,8 @@ const AppContent: React.FC = () => {
   };
 
   const handleFinalizeFromCalendar = (appointment: any) => {
-    // 1. Armazena os dados do agendamento para o checkout
     setPendingCheckoutApp(appointment);
-
-    // 2. Muda a aba para 'lancamento' (o nome correto do estado é adminActiveTab)
     setAdminActiveTab('lancamento');
-
-    // 3. Garante que a tela suba para o topo
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -394,7 +420,7 @@ const AppContent: React.FC = () => {
     );
   }
 
-  if (!session) {
+  if (!session && !isResetPasswordRoute.current) {
     return (
       <Login onLoginSuccess={() => { hasRedirected.current = false; setLoading(true); }} />
     );
@@ -404,7 +430,7 @@ const AppContent: React.FC = () => {
     <div className="min-h-screen flex flex-col bg-black text-white font-sans selection:bg-amber-500/30">
       <InstallBanner />
 
-      {view !== 'create_barbershop' && (
+      {view !== 'create_barbershop' && view !== 'reset_password' && (
         <Header
           view={isAdmin ? 'admin' : 'client'}
           setView={(v) => navigateTo(v as ViewState)}
@@ -416,13 +442,24 @@ const AppContent: React.FC = () => {
       )}
 
       <main className="flex-1">
+        {view === 'reset_password' && (
+          <ResetPassword onBack={() => {
+            isResetPasswordRoute.current = false;
+            if (session) {
+              setView('profile');
+            } else {
+              window.location.href = '/';
+            }
+          }} />
+        )}
+
         {view === 'subscription_plans' && (
           <SubscriptionPage
             barbershopId={barbershopId!}
             userEmail={session?.user?.email}
-            subscriptionStatus={dbSubscriptionStatus} // Estado novo
-            expiresAt={expiresAt}                     // Estado novo
-            currentPlan={currentPlan}                 // Estado novo
+            subscriptionStatus={dbSubscriptionStatus}
+            expiresAt={expiresAt}
+            currentPlan={currentPlan}
           />
         )}
 
@@ -460,9 +497,9 @@ const AppContent: React.FC = () => {
                 <CheckoutModule
                   barbershopId={barbershopId}
                   barbers={barbers}
-                  services={services} // Use 'services' que é seu estado centralizado
+                  services={services}
                   inventory={inventory}
-                  customers={customers} // Use 'customers' que já tem os pacotes inclusos
+                  customers={customers}
                   initialAppointment={pendingCheckoutApp}
                   onSuccess={() => {
                     setAdminActiveTab('dashboard');
@@ -524,7 +561,7 @@ const AppContent: React.FC = () => {
               </div>
               <div className="space-y-2">
                 <h2 className="text-4xl font-black uppercase tracking-tighter italic">{userName}</h2>
-                <p className="text-zinc-500 font-mono text-xs tracking-widest">{session.user.email}</p>
+                <p className="text-zinc-500 font-mono text-xs tracking-widest">{session?.user?.email}</p>
               </div>
             </div>
 
@@ -568,7 +605,6 @@ const AppContent: React.FC = () => {
   );
 };
 
-// O componente App principal apenas envolve o AppContent com o BookingProvider
 const App: React.FC = () => {
   return (
     <BookingProvider>
