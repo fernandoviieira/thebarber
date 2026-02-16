@@ -31,6 +31,8 @@ interface BookingContextType {
   updateStatus: (id: string, updates: any) => Promise<{ success: boolean; error?: string }>;
   deleteAppointment: (id: string) => Promise<{ success: boolean; error?: string }>;
   fetchAppointments: (barbershopId?: string) => Promise<void>;
+  checkSlotAvailability: (barberId: string, date: string, time: string) => Promise<boolean>;
+  reservingSlots: Set<string>;
   loading: boolean;
 }
 
@@ -56,21 +58,6 @@ const formatAppointment = (app: any): Appointment => ({
   tip_amount: app.tip_amount || 0
 });
 
-const timeToMinutes = (t: string): number | null => {
-  if (!t || typeof t !== 'string') return null;
-
-  const parts = t.split(':');
-  if (parts.length !== 2) return null;
-
-  const [h, m] = parts.map(Number);
-
-  if (isNaN(h) || isNaN(m) || h < 0 || h > 23 || m < 0 || m > 59) {
-    return null;
-  }
-
-  return h * 60 + m;
-};
-
 // ==================== CONTEXT ====================
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
@@ -78,6 +65,7 @@ const BookingContext = createContext<BookingContextType | undefined>(undefined);
 export const BookingProvider = ({ children }: { children: ReactNode }) => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [reservingSlots, setReservingSlots] = useState<Set<string>>(new Set());
 
   const mountedRef = useRef(true);
   const channelRef = useRef<RealtimeChannel | null>(null);
@@ -110,6 +98,35 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       if (mountedRef.current) {
         setLoading(false);
       }
+    }
+  }, []);
+
+  // ==================== CHECK SLOT AVAILABILITY ====================
+
+  const checkSlotAvailability = useCallback(async (
+    barberId: string,
+    date: string,
+    time: string
+  ): Promise<boolean> => {
+    try {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('barber_id', barberId)
+        .eq('date', date)
+        .eq('time', time)
+        .in('status', ['pendente', 'confirmado'])
+        .maybeSingle();
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('❌ Erro ao verificar disponibilidade:', error);
+        return false;
+      }
+
+      return !data; // true se disponível (sem dados), false se ocupado
+    } catch (err) {
+      console.error('❌ Erro ao verificar slot:', err);
+      return false;
     }
   }, []);
 
@@ -167,6 +184,19 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
                   return;
                 }
 
+                // 🔒 Marcar slot como "reservando" temporariamente
+                const slotKey = `${newApp.barber_id}-${newApp.date}-${newApp.time}`;
+                setReservingSlots(prev => new Set(prev).add(slotKey));
+                
+                // Remover marcação após 2 segundos
+                setTimeout(() => {
+                  setReservingSlots(prev => {
+                    const next = new Set(prev);
+                    next.delete(slotKey);
+                    return next;
+                  });
+                }, 2000);
+
                 setAppointments(prev => {
                   const exists = prev.some(app => app.id === newApp.id);
                   if (exists) return prev;
@@ -194,6 +224,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
           })
           .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
+              console.log('✅ Realtime conectado');
             } else if (status === 'CHANNEL_ERROR') {
               console.error('❌ Erro no canal realtime');
             }
@@ -215,93 +246,63 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         channelRef.current = null;
       }
     };
-  }, []);
+  }, [fetchAppointments]);
 
   // ==================== ADD APPOINTMENT ====================
 
   const addAppointment = async (data: Omit<Appointment, 'id'>): Promise<{ success: boolean; error?: string }> => {
     try {
-      // ✅ Validações de horário
-      if (data.status !== 'confirmado' && !data.created_by_admin) {
-        const { data: barberData } = await supabase
-          .from('barbers')
-          .select('work_days')
-          .eq('name', data.barber)
-          .eq('barbershop_id', data.barbershop_id)
-          .single();
-
-        if (barberData?.work_days) {
-          const [year, month, day] = data.date.split('-').map(Number);
-          const dateObj = new Date(year, month - 1, day);
-          const dayOfWeek = dateObj.getDay().toString();
-          const dayConfig = barberData.work_days[dayOfWeek];
-
-          if (!dayConfig || !dayConfig.active) {
-            return {
-              success: false,
-              error: `O barbeiro ${data.barber} não atende neste dia.`
-            };
-          }
-
-          const currentMin = timeToMinutes(data.time);
-          const startMin = timeToMinutes(dayConfig.start);
-          const endMin = timeToMinutes(dayConfig.end);
-
-          if (currentMin === null || startMin === null || endMin === null) {
-            return {
-              success: false,
-              error: 'Horário inválido.'
-            };
-          }
-
-          if (currentMin < startMin || currentMin >= endMin) {
-            return {
-              success: false,
-              error: `Fora da jornada: ${data.barber} atende das ${dayConfig.start} às ${dayConfig.end}.`
-            };
-          }
-        }
-      }
-
       // ✅ Pegar user_id do usuário autenticado
       const { data: userData } = await supabase.auth.getUser();
-      // ✅ Inserir no banco
-      const { error: insertError } = await supabase
-        .from('appointments')
-        .insert([{
-          customer_name: data.customerName,
-          customer_phone: data.customerPhone || 'Balcão',
-          service: data.service,
-          barber: data.barber,
-          date: data.date,
-          time: data.time,
-          barber_id: data.barber_id,
-          price: data.price,
-          original_price: data.original_price || data.price,
-          status: data.status,
-          barbershop_id: data.barbershop_id,
-          user_id: userData.user?.id,
-          duration: data.duration,
-          created_by_admin: data.created_by_admin ?? false,
-          tip_amount: data.tip_amount || 0,
-          payment_method: data.payment_method,
-          venda_id: data.venda_id
-        }]);
 
-      if (insertError) {
-        if (insertError.code === '23505') {
-          return {
-            success: false,
-            error: `Ops! O horário das ${data.time} com ${data.barber} acabou de ser preenchido. Por favor, escolha outro horário.`
-          };
-        }
-        throw insertError;
+      // 🔒 CHAMAR A FUNÇÃO SEGURA (com lock atômico)
+      const { data: result, error } = await supabase.rpc('create_appointment_safe', {
+        p_customer_name: data.customerName,
+        p_customer_phone: data.customerPhone || 'Balcão',
+        p_service: data.service,
+        p_barber: data.barber,
+        p_barber_id: data.barber_id,
+        p_date: data.date,
+        p_time: data.time,
+        p_price: data.price,
+        p_original_price: data.original_price || data.price,
+        p_status: data.status,
+        p_barbershop_id: data.barbershop_id,
+        p_user_id: userData.user?.id || null,
+        p_duration: data.duration || null,
+        p_created_by_admin: data.created_by_admin ?? false,
+        p_tip_amount: data.tip_amount || 0,
+        p_payment_method: data.payment_method || null,
+        p_venda_id: data.venda_id || null
+      });
+
+      if (error) {
+        console.error('❌ Erro ao chamar função RPC:', error);
+        throw error;
       }
 
+      // ✅ Processar resposta da função
+      if (!result || !result.success) {
+        return {
+          success: false,
+          error: result?.error || 'Erro desconhecido ao criar agendamento.'
+        };
+      }
+
+      console.log('✅ Agendamento criado com sucesso:', result.id);
       return { success: true };
 
     } catch (err: any) {
       console.error("❌ Erro ao adicionar agendamento:", err);
+      
+      // Tratamento específico de erros
+      if (err.code === '23505' || err.message?.includes('unique')) {
+        return {
+          success: false,
+          error: 'Ops! Este horário acabou de ser reservado. Por favor, escolha outro horário.'
+        };
+      }
+
       return {
         success: false,
         error: err.message || 'Erro ao criar agendamento.'
@@ -373,6 +374,8 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         updateStatus,
         deleteAppointment,
         fetchAppointments,
+        checkSlotAvailability,
+        reservingSlots,
         loading
       }}
     >

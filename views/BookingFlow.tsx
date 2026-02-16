@@ -13,14 +13,13 @@ interface BookingFlowProps {
 }
 
 const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
-  const { addAppointment, appointments, fetchAppointments } = useBooking();
+  const { addAppointment, appointments, fetchAppointments, checkSlotAvailability, reservingSlots } = useBooking();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
 
   const [currentBarbershopId, setCurrentBarbershopId] = useState<string | null>(null);
   const [availableBarbers, setAvailableBarbers] = useState<Barber[]>([]);
   const [availableServices, setAvailableServices] = useState<Service[]>([]);
-
 
   const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
 
@@ -126,9 +125,30 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     });
   };
 
+  // 🔒 VERIFICAR se horário está sendo reservado neste momento (via realtime)
+  const isSlotReserving = (barberId: string, date: string, time: string) => {
+    const slotKey = `${barberId}-${date}-${time}`;
+    return reservingSlots.has(slotKey);
+  };
+
   const handleFinalizeBooking = async () => {
     if (!selectedBarber || !currentBarbershopId) {
       console.warn("⚠️ [Booking] Tentativa de finalizar sem barbeiro ou ID da barbearia.");
+      return;
+    }
+
+    // 🔒 RE-VERIFICAR disponibilidade antes de enviar
+    const isAvailable = await checkSlotAvailability(
+      selectedBarber.id,
+      selectedDate,
+      selectedTime
+    );
+
+    if (!isAvailable) {
+      alert('⚠️ Ops! Este horário acabou de ser reservado por outro cliente. Por favor, escolha outro horário.');
+      await fetchAppointments(currentBarbershopId);
+      setSelectedTime('');
+      setStep(3);
       return;
     }
 
@@ -146,6 +166,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       duration: totalDuration,
       created_by_admin: false
     };
+
     const result = await addAppointment(newBooking as any);
 
     if (result.success) {
@@ -172,8 +193,8 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
         setStep(5);
       }
     } else {
-      console.error("❌ Erro ao salvar no banco (Constraint Unique ou Conexão):", result.error);
-      alert(result.error);
+      console.error("❌ Erro ao salvar agendamento:", result.error);
+      alert(result.error || 'Erro ao criar agendamento. Tente novamente.');
       await fetchAppointments(currentBarbershopId);
       setSelectedTime('');
       setStep(3);
@@ -227,7 +248,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       <button
         disabled={selectedServices.length === 0}
         onClick={() => setStep(2)}
-        className="w-full bg-amber-500 text-black font-black py-4 md:py-5 rounded-2xl uppercase italic text-sm shadow-lg shadow-amber-500/20"
+        className="w-full bg-amber-500 text-black font-black py-4 md:py-5 rounded-2xl uppercase italic text-sm shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         Continuar
       </button>
@@ -269,7 +290,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
         <button
           disabled={!selectedBarber}
           onClick={() => setStep(3)}
-          className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs"
+          className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Próximo
         </button>
@@ -348,22 +369,28 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
               // ✅ CORREÇÃO: Comparar com a data REAL de Brasília
               const isPastTime = selectedDate === todayStr && slotMin <= currentTotalMinutes;
 
+              // 🔒 NOVO: Verificar se está sendo reservado neste momento
+              const isReserving = isSlotReserving(selectedBarber!.id, selectedDate, timeStr);
+
               if (isOutsideShop || isOutsideBarber) return null;
 
               return (
                 <button
                   key={i}
-                  disabled={isOccupied || isPastTime}
+                  disabled={isOccupied || isPastTime || isReserving}
                   onClick={() => setSelectedTime(timeStr)}
                   className={`py-3 rounded-xl border transition-all text-[11px] font-black italic 
                   ${selectedTime === timeStr
                       ? 'bg-amber-500 text-black border-amber-500 scale-105 shadow-lg shadow-amber-500/20'
                       : (isOccupied || isPastTime)
                         ? 'opacity-20 line-through cursor-not-allowed bg-zinc-950 border-zinc-900'
-                        : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-amber-500/50'
+                        : isReserving
+                          ? 'opacity-50 cursor-not-allowed bg-zinc-900 border-amber-500/50 animate-pulse'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-amber-500/50'
                     }`}
                 >
                   {timeStr}
+                  {isReserving && <span className="ml-1">⏳</span>}
                 </button>
               );
             })}
@@ -372,7 +399,13 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
         <div className="flex gap-4">
           <button onClick={() => setStep(2)} className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic text-xs">Voltar</button>
-          <button disabled={!selectedDate || !selectedTime} onClick={() => setStep(4)} className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs">Próximo</button>
+          <button 
+            disabled={!selectedDate || !selectedTime} 
+            onClick={() => setStep(4)} 
+            className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Próximo
+          </button>
         </div>
       </div>
     );
@@ -382,12 +415,42 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
       <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">Seus dados</h3>
       <div className="space-y-4">
-        <input type="text" placeholder="Nome Completo" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 text-sm" />
-        <input type="tel" placeholder="WhatsApp" value={customerPhone} onChange={(e) => setCustomerPhone(formatPhone(e.target.value))} className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 text-sm" />
+        <input 
+          type="text" 
+          placeholder="Nome Completo" 
+          value={customerName} 
+          onChange={(e) => setCustomerName(e.target.value)} 
+          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 text-sm" 
+        />
+        <input 
+          type="tel" 
+          placeholder="WhatsApp" 
+          value={customerPhone} 
+          onChange={(e) => setCustomerPhone(formatPhone(e.target.value))} 
+          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 text-sm" 
+        />
       </div>
       <div className="flex gap-4">
-        <button onClick={() => setStep(3)} className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic text-xs">Voltar</button>
-        <button disabled={customerName.length < 3 || customerPhone.length < 14} onClick={handleFinalizeBooking} className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs">Finalizar</button>
+        <button 
+          onClick={() => setStep(3)} 
+          className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic text-xs"
+        >
+          Voltar
+        </button>
+        <button 
+          disabled={customerName.length < 3 || customerPhone.length < 14 || sendingWhatsApp} 
+          onClick={handleFinalizeBooking} 
+          className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        >
+          {sendingWhatsApp ? (
+            <>
+              <Loader2 className="animate-spin" size={16} />
+              Finalizando...
+            </>
+          ) : (
+            'Finalizar'
+          )}
+        </button>
       </div>
     </div>
   );
@@ -397,12 +460,33 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       <CheckCircle2 size={64} className="text-amber-500 mx-auto" />
       <h3 className="text-2xl md:text-3xl font-black text-white uppercase italic tracking-tighter">Agendado!</h3>
       <div className="bg-zinc-900/50 p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border border-zinc-800 text-left space-y-4 shadow-2xl">
-        <div className="flex justify-between items-center"><span className="text-[10px] font-black text-zinc-500 uppercase">Profissional</span><span className="font-black italic text-sm">{selectedBarber?.name}</span></div>
-        <div className="flex justify-between items-center"><span className="text-[10px] font-black text-zinc-500 uppercase">Data</span><span className="font-black italic text-sm">{new Date(selectedDate + 'T12:00:00').toLocaleDateString()}</span></div>
-        <div className="flex justify-between items-center"><span className="text-[10px] font-black text-zinc-500 uppercase">Horário</span><span className="font-black italic text-sm">{selectedTime}</span></div>
-        <div className="pt-4 border-t border-zinc-800 flex justify-between items-center"><span className="text-[10px] font-black text-zinc-500 uppercase">Total</span><span className="text-lg md:text-xl font-black text-amber-500 italic">R$ {totalPrice.toFixed(2)}</span></div>
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] font-black text-zinc-500 uppercase">Serviço</span>
+          <span className="font-black italic text-sm">{selectedServices.map(s => s.name).join(', ')}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] font-black text-zinc-500 uppercase">Profissional</span>
+          <span className="font-black italic text-sm">{selectedBarber?.name}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] font-black text-zinc-500 uppercase">Data</span>
+          <span className="font-black italic text-sm">{new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-BR')}</span>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] font-black text-zinc-500 uppercase">Horário</span>
+          <span className="font-black italic text-sm">{selectedTime}</span>
+        </div>
+        <div className="pt-4 border-t border-zinc-800 flex justify-between items-center">
+          <span className="text-[10px] font-black text-zinc-500 uppercase">Total</span>
+          <span className="text-lg md:text-xl font-black text-amber-500 italic">R$ {totalPrice.toFixed(2)}</span>
+        </div>
       </div>
-      <button onClick={onComplete} className="w-full bg-zinc-800 text-white font-black py-4 md:py-5 rounded-2xl uppercase italic text-sm">Concluir</button>
+      <button 
+        onClick={onComplete} 
+        className="w-full bg-zinc-800 text-white font-black py-4 md:py-5 rounded-2xl uppercase italic text-sm"
+      >
+        Concluir
+      </button>
     </div>
   );
 
