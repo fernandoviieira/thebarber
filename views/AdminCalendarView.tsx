@@ -140,6 +140,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
   const [newBooking, setNewBooking] = useState({
     customerName: '',
     customerPhone: '',
+    barber_id: '',
     barber: '',
     time: '',
     service: '',
@@ -550,12 +551,13 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
   };
 
   const handleSlotClick = (slot: string, date: string, barber: string, isOccupied: boolean) => {
+    const selectedBarberObj = barbers.find(b => b.name === barber);
     if (isOccupied) {
       const nextTime = findNextAvailableTime(date, barber, slot, 30);
       if (nextTime) {
         if (window.confirm(`⚠️ ${slot} está ocupado.\n\n✅ Próximo horário disponível: ${nextTime}\n\nDeseja agendar para este horário?`)) {
           setCustomTimeInput(nextTime);
-          setNewBooking(prev => ({ ...prev, time: nextTime, date, barber }));
+          setNewBooking(prev => ({ ...prev, time: nextTime, date, barber, barber_id }));
           setTimeValidationMessage('✅ Horário disponível!');
           setIsModalOpen(true);
         }
@@ -564,7 +566,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
     }
 
     setCustomTimeInput(slot);
-    setNewBooking(prev => ({ ...prev, time: slot, date, barber }));
+    setNewBooking(prev => ({ ...prev, time: slot, date, barber, barber_id: selectedBarberObj?.id }));
     setTimeValidationMessage('');
     setIsModalOpen(true);
   };

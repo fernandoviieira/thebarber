@@ -254,8 +254,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       // ✅ Pegar user_id do usuário autenticado
       const { data: userData } = await supabase.auth.getUser();
 
-      // 🔒 CHAMAR A FUNÇÃO SEGURA (com lock atômico)
-      const { data: result, error } = await supabase.rpc('create_appointment_safe', {
+     const rpcParams = {
         p_customer_name: data.customerName,
         p_customer_phone: data.customerPhone || 'Balcão',
         p_service: data.service,
@@ -273,7 +272,11 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         p_tip_amount: data.tip_amount || 0,
         p_payment_method: data.payment_method || null,
         p_venda_id: data.venda_id || null
-      });
+      };
+
+      console.log("🚀 Enviando para RPC 'create_appointment_safe':", rpcParams);
+
+      const { data: result, error } = await supabase.rpc('create_appointment_safe', rpcParams);
 
       if (error) {
         console.error('❌ Erro ao chamar função RPC:', error);
