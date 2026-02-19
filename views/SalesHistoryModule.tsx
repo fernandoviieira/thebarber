@@ -15,13 +15,14 @@ interface SalesHistoryProps {
   barbershopId: string | null;
   servicesList: any[]; 
   productsList: any[]; 
+  barbersData: any[];
 }
 
 type PaymentFilter = 'todos' | 'dinheiro' | 'pix' | 'debito' | 'credito' | 'pacote';
 type DateFilter = 'hoje' | 'ontem' | '7dias' | '30dias' | 'personalizado' | 'tudo';
 
 
-const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelete, barbershopId, servicesList, productsList }) => {
+const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelete, barbershopId, servicesList, productsList, barbersData }) => {
   const [barberFilter, setBarberFilter] = useState<string>('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('todos');
@@ -132,6 +133,7 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
         const isGorjeta = part.toLowerCase().includes('gorjeta');
         const isProduct = part.toLowerCase().includes('(produto)');
 
+        const currentBarberData = barbersData.find(b => b.name === current.barber);
         if (isGorjeta) {
           const match = part.match(/\d+\.?\d*/);
           itemPrice = match ? parseFloat(match[0]) : 0;

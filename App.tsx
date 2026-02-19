@@ -114,7 +114,7 @@ const AppContent: React.FC = () => {
   // Efeito para detectar mudança de slug e forçar recarregamento
   useEffect(() => {
     if (isResetPasswordRoute.current) return;
-    
+
     const pathSlug = window.location.pathname.split('/')[1];
     const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
 
@@ -131,7 +131,7 @@ const AppContent: React.FC = () => {
   // Efeito para detectar mudança de URL via navegação
   useEffect(() => {
     if (isResetPasswordRoute.current) return;
-    
+
     const handleLocationChange = () => {
       const pathSlug = window.location.pathname.split('/')[1];
       const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
@@ -518,6 +518,7 @@ const AppContent: React.FC = () => {
                   appointments={appointments}
                   servicesList={services}
                   productsList={inventory}
+                  barbers={barbers}
                   onDelete={async (id: string) => {
                     if (confirm('Deseja estornar esta venda?')) {
                       await deleteAppointment(id);

@@ -274,8 +274,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         p_venda_id: data.venda_id || null
       };
 
-      console.log("🚀 Enviando para RPC 'create_appointment_safe':", rpcParams);
-
       const { data: result, error } = await supabase.rpc('create_appointment_safe', rpcParams);
 
       if (error) {

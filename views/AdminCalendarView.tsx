@@ -557,7 +557,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
       if (nextTime) {
         if (window.confirm(`⚠️ ${slot} está ocupado.\n\n✅ Próximo horário disponível: ${nextTime}\n\nDeseja agendar para este horário?`)) {
           setCustomTimeInput(nextTime);
-          setNewBooking(prev => ({ ...prev, time: nextTime, date, barber, barber_id }));
+          setNewBooking(prev => ({ ...prev, time: nextTime, date, barber, barber_id: selectedBarberObj?.id }));
           setTimeValidationMessage('✅ Horário disponível!');
           setIsModalOpen(true);
         }
