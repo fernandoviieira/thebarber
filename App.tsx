@@ -56,8 +56,6 @@ const AppContent: React.FC = () => {
   const [barbershopName, setBarbershopName] = useState('');
   const [isBlocked, setIsBlocked] = useState(false);
   const [pendingCheckoutApp, setPendingCheckoutApp] = useState<any | null>(null);
-
-  // Estados de Dados Centralizados
   const [barbers, setBarbers] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
@@ -68,7 +66,6 @@ const AppContent: React.FC = () => {
   const previousSlug = useRef<string | null>(null);
   const isResetPasswordRoute = useRef(false);
 
-  // VERIFICAÇÃO INICIAL DA ROTA DE RESET
   useEffect(() => {
     const path = window.location.pathname;
     if (path.includes('reset-password')) {
@@ -78,15 +75,12 @@ const AppContent: React.FC = () => {
     }
   }, []);
 
-  // Busca de dados globais quando o barbershopId for definido
 useEffect(() => {
   const fetchAllAdminData = async () => {
     if (!barbershopId || !isAdmin || isResetPasswordRoute.current) return;
 
     try {
-      // 🔥 IMPORTANTE: Verificar se barbershopId é válido antes de chamar
       if (barbershopId && fetchAppointments) {
-        console.log('📥 Buscando appointments para barbearia:', barbershopId);
         await fetchAppointments(barbershopId);
       }
 
@@ -113,9 +107,8 @@ useEffect(() => {
   };
 
   fetchAllAdminData();
-}, [barbershopId, isAdmin, fetchAppointments]); // Adicionar fetchAppointments como dependência
+}, [barbershopId, isAdmin, fetchAppointments]); 
 
-  // Efeito para detectar mudança de slug e forçar recarregamento
   useEffect(() => {
     if (isResetPasswordRoute.current) return;
 
@@ -132,7 +125,6 @@ useEffect(() => {
     }
   }, [isAdmin, barbershopSlug]);
 
-  // Efeito para detectar mudança de URL via navegação
   useEffect(() => {
     if (isResetPasswordRoute.current) return;
 
@@ -165,21 +157,17 @@ useEffect(() => {
   }, [isAdmin, barbershopSlug]);
 
   useEffect(() => {
-    // SE FOR ROTA DE RESET, NÃO EXECUTA NADA
     if (isResetPasswordRoute.current) {
       return;
     }
 
-    // --- 1. LÓGICA DE ROTEAMENTO E SLUG ---
     const path = window.location.pathname.split('/')[1];
     const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
 
-    // Se o usuário está em uma slug de barbearia, salva no localStorage e atualiza o estado
     if (path && !reservedRoutes.includes(path)) {
       localStorage.setItem('last_visited_slug', path);
       if (urlSlug !== path) setUrlSlug(path);
     }
-    // Se está na home vazia, tenta redirecionar para a última barbearia visitada
     else if (path === '' && localStorage.getItem('last_visited_slug')) {
       const savedSlug = localStorage.getItem('last_visited_slug');
       window.location.replace(`/${savedSlug}`);
@@ -202,11 +190,9 @@ useEffect(() => {
       }
     }
 
-    // --- 3. LÓGICA DE AUTENTICAÇÃO (SUPABASE) ---
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
 
-      // 🛡️ Se está na rota de reset, mantém a view de reset
       if (isResetPasswordRoute.current || window.location.pathname.includes('reset-password')) {
         setView('reset_password');
         setLoading(false);
@@ -230,14 +216,12 @@ useEffect(() => {
 
   const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
-      // 🛡️ Se for rota de reset, não busca perfil
       if (isResetPasswordRoute.current || window.location.pathname.includes('reset-password')) {
         setView('reset_password');
         setLoading(false);
         return;
       }
 
-      // 1. Busca inicial do perfil
       let { data: profile, error } = await supabase
         .from('profiles')
         .select(`
@@ -307,7 +291,6 @@ useEffect(() => {
 
           profile.role = 'admin';
         }
-        // CASO B: Usuário em uma barbearia específica sem vínculo (APENAS SE NÃO TIVER BARBEARIA)
         else if (normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath)) {
           const { data: bData } = await supabase
             .from('barbershops')
@@ -327,8 +310,6 @@ useEffect(() => {
           }
         }
       }
-      // ========== FIM DA NOVA LÓGICA ==========
-
       if (!profile) {
         await new Promise(resolve => setTimeout(resolve, 2000));
         const { data: retryProfile } = await supabase
