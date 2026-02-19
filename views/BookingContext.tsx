@@ -67,32 +67,48 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const currentBarbershopIdRef = useRef<string | undefined>(undefined);
 
+  // ==================== FETCH APPOINTMENTS ====================
+
   const fetchAppointments = useCallback(async (barbershopId?: string) => {
     try {
       setLoading(true);
 
+      // CORREÇÃO: Se não tem barbershopId, não busca nada
       if (!barbershopId) {
+        console.log('⚠️ fetchAppointments chamado sem barbershopId');
         setAppointments([]);
         setLoading(false);
         return;
       }
-      let query = supabase
+
+      console.log(`📥 Buscando appointments para barbearia: ${barbershopId}`);
+
+      // 🔥 IMPORTANTE: Usar .select() completo e com tratamento de erro
+      const { data, error } = await supabase
         .from('appointments')
         .select('*')
-        .eq('barbershop_id', barbershopId);
-
-      const { data, error } = await query
+        .eq('barbershop_id', barbershopId)
         .order('date', { ascending: true })
         .order('time', { ascending: true });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Erro do Supabase:', error);
+        throw error;
+      }
 
       if (!mountedRef.current) return;
+
+      console.log(`✅ Encontrados ${data?.length || 0} appointments`);
       setAppointments(data?.map(formatAppointment) || []);
       currentBarbershopIdRef.current = barbershopId;
 
-    } catch (err) {
-      console.error("❌ Erro ao carregar agendamentos:", err);
+    } catch (err: any) {
+      console.error("❌ Erro ao carregar agendamentos:", {
+        message: err.message,
+        details: err.details,
+        hint: err.hint,
+        code: err.code
+      });
       setAppointments([]);
     } finally {
       if (mountedRef.current) {
@@ -121,7 +137,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         return false;
       }
 
-      return !data; 
+      return !data;
     } catch (err) {
       console.error('❌ Erro ao verificar slot:', err);
       return false;
@@ -182,59 +198,84 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
+  // ==================== REALTIME SUBSCRIPTION ====================
+
   useEffect(() => {
     mountedRef.current = true;
 
     const setupRealtime = async () => {
       try {
+        // ✅ Buscar barbershopId do usuário autenticado
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
+          console.log('⚠️ Usuário não autenticado, pulando realtime');
           return;
         }
 
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
           .from('profiles')
           .select('barbershop_id')
           .eq('id', user.id)
           .maybeSingle();
 
+        if (profileError) {
+          console.error('❌ Erro ao buscar perfil:', profileError);
+          return;
+        }
+
         const barbershopId = profile?.barbershop_id;
 
         if (!barbershopId) {
+          console.log('⚠️ Usuário sem barbershop_id, pulando realtime');
           setAppointments([]);
           setLoading(false);
           return;
         }
 
+        // Carregar appointments iniciais com o barbershopId
         await fetchAppointments(barbershopId);
 
+        // ✅ Limpar canal anterior se existir
         if (channelRef.current) {
           await supabase.removeChannel(channelRef.current);
           channelRef.current = null;
         }
 
+        // ✅ Configurar filtro de realtime
         const channelConfig: any = {
           event: '*',
           schema: 'public',
           table: 'appointments',
-          filter: `barbershop_id=eq.${barbershopId}` 
+          filter: `barbershop_id=eq.${barbershopId}`
         };
 
+        console.log('📡 Configurando canal realtime para barbearia:', barbershopId);
+
+        // ✅ Criar canal de realtime
         const channel: RealtimeChannel = supabase
           .channel('appointments-changes')
           .on('postgres_changes', channelConfig, (payload) => {
             if (!mountedRef.current) return;
+
+            console.log('📡 Evento realtime recebido:', payload.eventType, payload.new?.id);
+
             try {
               if (payload.eventType === 'INSERT') {
                 const newApp = formatAppointment(payload.new);
 
+                // Verificação extra de segurança
                 if (newApp.barbershop_id !== barbershopId) {
+                  console.log('⏭️ Ignorando insert de outra barbearia');
                   return;
                 }
 
+                console.log('➕ Novo appointment via realtime:', newApp);
+
+                // 🔒 Marcar slot como "reservando" temporariamente
                 const slotKey = `${newApp.barber_id}-${newApp.date}-${newApp.time}`;
                 setReservingSlots(prev => new Set(prev).add(slotKey));
 
+                // Remover marcação após 2 segundos
                 setTimeout(() => {
                   setReservingSlots(prev => {
                     const next = new Set(prev);
@@ -245,15 +286,14 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
                 setAppointments(prev => {
                   const exists = prev.some(app => app.id === newApp.id);
-                  if (exists) {
-                    return prev;
-                  }
+                  if (exists) return prev;
 
                   const newList = [...prev, newApp].sort((a, b) => {
                     if (a.date !== b.date) return a.date.localeCompare(b.date);
                     return a.time.localeCompare(b.time);
                   });
 
+                  console.log(`📊 Total de appointments após inserção: ${newList.length}`);
                   return newList;
                 });
               }
@@ -262,15 +302,18 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
                 const updatedApp = formatAppointment(payload.new);
 
                 if (updatedApp.barbershop_id !== barbershopId) {
+                  console.log('⏭️ Ignorando update de outra barbearia');
                   return;
                 }
 
+                console.log('🔄 Appointment atualizado via realtime:', updatedApp.id);
                 setAppointments(prev =>
                   prev.map(app => app.id === updatedApp.id ? updatedApp : app)
                 );
               }
 
               if (payload.eventType === 'DELETE') {
+                console.log('🗑️ Appointment deletado via realtime:', payload.old.id);
                 setAppointments(prev => prev.filter(app => app.id !== payload.old.id));
               }
             } catch (err) {
@@ -279,8 +322,13 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
           })
           .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
+              console.log('✅ Inscrito no canal realtime com sucesso');
             } else if (status === 'CHANNEL_ERROR') {
               console.error('❌ Erro no canal realtime');
+            } else if (status === 'TIMED_OUT') {
+              console.error('⏰ Timeout no canal realtime');
+            } else if (status === 'CLOSED') {
+              console.log('🔒 Canal realtime fechado');
             }
           });
 
@@ -295,6 +343,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     setupRealtime();
 
     return () => {
+      console.log('🧹 Limpando subscription realtime');
       mountedRef.current = false;
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);

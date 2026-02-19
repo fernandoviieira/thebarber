@@ -79,37 +79,41 @@ const AppContent: React.FC = () => {
   }, []);
 
   // Busca de dados globais quando o barbershopId for definido
-  useEffect(() => {
-    const fetchAllAdminData = async () => {
-      if (!barbershopId || !isAdmin || isResetPasswordRoute.current) return;
+useEffect(() => {
+  const fetchAllAdminData = async () => {
+    if (!barbershopId || !isAdmin || isResetPasswordRoute.current) return;
 
-      try {
-        if (fetchAppointments) await fetchAppointments(barbershopId);
-
-        const [barbersRes, servicesRes, inventoryRes, customersRes, settingsRes, shopRes, expensesRes] = await Promise.all([
-          supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
-          supabase.from('services').select('*').eq('barbershop_id', barbershopId),
-          supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
-          supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name'),
-          supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
-          supabase.from('barbershops').select('name, subscription_status, expires_at, trial_ends_at, current_plan, slug').eq('id', barbershopId).single(),
-          supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
-        ]);
-
-        if (barbersRes.data) setBarbers(barbersRes.data);
-        if (servicesRes.data) setServices(servicesRes.data);
-        if (inventoryRes.data) setInventory(inventoryRes.data);
-        if (customersRes.data) setCustomers(customersRes.data);
-        if (shopRes.data) {
-          setBarbershopSlug(shopRes.data.slug);
-        }
-      } catch (err) {
-        console.error("Erro ao carregar dados administrativos:", err);
+    try {
+      // 🔥 IMPORTANTE: Verificar se barbershopId é válido antes de chamar
+      if (barbershopId && fetchAppointments) {
+        console.log('📥 Buscando appointments para barbearia:', barbershopId);
+        await fetchAppointments(barbershopId);
       }
-    };
 
-    fetchAllAdminData();
-  }, [barbershopId, isAdmin]);
+      const [barbersRes, servicesRes, inventoryRes, customersRes, settingsRes, shopRes, expensesRes] = await Promise.all([
+        supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
+        supabase.from('services').select('*').eq('barbershop_id', barbershopId),
+        supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
+        supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name'),
+        supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
+        supabase.from('barbershops').select('name, subscription_status, expires_at, trial_ends_at, current_plan, slug').eq('id', barbershopId).single(),
+        supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
+      ]);
+
+      if (barbersRes.data) setBarbers(barbersRes.data);
+      if (servicesRes.data) setServices(servicesRes.data);
+      if (inventoryRes.data) setInventory(inventoryRes.data);
+      if (customersRes.data) setCustomers(customersRes.data);
+      if (shopRes.data) {
+        setBarbershopSlug(shopRes.data.slug);
+      }
+    } catch (err) {
+      console.error("Erro ao carregar dados administrativos:", err);
+    }
+  };
+
+  fetchAllAdminData();
+}, [barbershopId, isAdmin, fetchAppointments]); // Adicionar fetchAppointments como dependência
 
   // Efeito para detectar mudança de slug e forçar recarregamento
   useEffect(() => {
