@@ -20,7 +20,6 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
   const [tempCredits, setTempCredits] = useState<number>(0);
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: '', birth_date: '', hasPackage: false, packageName: '', total_credits: '4', price_paid: '' });
 
-  // Estado para editar cliente
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState<any | null>(null);
 
@@ -28,7 +27,6 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
     const initialize = async () => {
       if (barbershopId) {
         fetchCustomers();
-        // Busca o slug da barbearia
         const { data } = await supabase
           .from('barbershops')
           .select('slug')
@@ -156,7 +154,6 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
     fetchCustomers();
   };
 
-  // Função para verificar se é aniversário hoje
   const isBirthdayToday = (birthDate: string | null) => {
     if (!birthDate) return false;
     const today = new Date();
@@ -168,26 +165,22 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
     const cleanPhone = phone.replace(/\D/g, '');
     const bookingLink = `https://thebarber-delta.vercel.app/${barbershopSlug}`;
 
-    // 1. Criamos a mensagem limpa em uma variável comum
     const text = `🎉🎂 *Feliz Aniversário, ${customerName}!* 🎂🎉
                   Que este dia seja repleto de alegrias, saúde e muitas realizações! 
                   Para comemorar, que tal dar aquele trato no visual?
                   Agende aqui: ${bookingLink}
                   Um grande abraço da equipe! 💈✨`;
 
-    // 2. Usamos o URLSearchParams, que é a forma mais moderna e segura de tratar caracteres especiais em URLs
     const params = new URLSearchParams({
       phone: `55${cleanPhone}`,
       text: text
     });
 
-    // 3. Abrimos a URL do WhatsApp
     window.open(`https://api.whatsapp.com/send?${params.toString()}`, '_blank');
   };
 
   const filtered = customers.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()));
 
-  // Filtrar aniversariantes do dia
   const birthdayCustomers = customers.filter(c => isBirthdayToday(c.birth_date));
 
   return (

@@ -18,11 +18,9 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
     const [selectedBarberId, setSelectedBarberId] = useState<string | 'all'>('all');
     const [barbershopName, setBarbershopName] = useState('');
-    
-    // ✅ NOVO: Estado para controlar o tipo de impressão
+
     const [printMode, setPrintMode] = useState<'simple' | 'complete' | null>(null);
 
-    // Cache de serviços e produtos
     const [servicesCache, setServicesCache] = useState<any[]>([]);
     const [inventoryCache, setInventoryCache] = useState<any[]>([]);
 
@@ -36,7 +34,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
             const startIso = startDate?.toISOString().split('T')[0];
             const endIso = endDate?.toISOString().split('T')[0];
 
-            // 1. Buscar nome da Barbearia
             const { data: shopData } = await supabase
                 .from('barbershops')
                 .select('name')
@@ -45,7 +42,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
             if (shopData) setBarbershopName(shopData.name);
 
-            // 2. Buscar serviços e produtos (Cache)
             const { data: servicesData } = await supabase
                 .from('services')
                 .select('*')
@@ -59,13 +55,11 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
             setServicesCache(servicesData || []);
             setInventoryCache(inventoryData || []);
 
-            // 3. Buscar Barbeiros
             const { data: barbersData } = await supabase
                 .from('barbers')
                 .select('*')
                 .eq('barbershop_id', barbershopId);
 
-            // 4. Buscar Vendas (Appointments) finalizadas no período
             const { data: salesData } = await supabase
                 .from('appointments')
                 .select('*')
@@ -75,7 +69,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 .lte('date', endIso)
                 .order('date', { ascending: false });
 
-            // 5. Buscar Vales/Adiantamentos DO PERÍODO
             const { data: advancesData } = await supabase
                 .from('barber_advances')
                 .select('*')
@@ -85,17 +78,14 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
             if (barbersData && salesData) {
                 setReportData(barbersData.map(barber => {
-                    // Filtra vendas do barbeiro específico
                     const mySales = salesData.filter(sale =>
                         sale.barber_id === barber.id ||
                         (!sale.barber_id && sale.barber === barber.name)
                     );
 
-                    // Filtra e soma os vales do período
                     const myAdvances = advancesData?.filter(adv => adv.barber_id === barber.id) || [];
                     const totalAdvancesPeriod = myAdvances.reduce((acc, curr) => acc + Number(curr.amount), 0);
 
-                    // Detalha os itens de cada venda (Serviços + Produtos + Gorjetas)
                     const salesWithDetailedItems = mySales.map(sale => {
                         const rawServiceStr = sale.service || 'Serviço';
                         const parts = rawServiceStr.split(' + ').map(p => p.trim());
@@ -248,7 +238,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
         }
     };
 
-    // ✅ NOVO: Funções de impressão separadas
     const handlePrintSimple = () => {
         setPrintMode('simple');
         setTimeout(() => {
@@ -578,7 +567,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                             </h3>
                         </div>
                     </div>
-                    
+
                     {/* ✅ DOIS BOTÕES LADO A LADO */}
                     <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
                         <button

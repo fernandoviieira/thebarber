@@ -2,8 +2,6 @@ import React, { createContext, useContext, useState, ReactNode, useEffect, useCa
 import { supabase } from '../lib/supabase';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
-// ==================== INTERFACES ====================
-
 export interface Appointment {
   id: string;
   customerName: string;
@@ -32,11 +30,11 @@ interface BookingContextType {
   deleteAppointment: (id: string) => Promise<{ success: boolean; error?: string }>;
   fetchAppointments: (barbershopId?: string) => Promise<void>;
   checkSlotAvailability: (barberId: string, date: string, time: string) => Promise<boolean>;
+  sendCancellationNotification: (appointment: Appointment, barbershopPhone: string) => Promise<{ success: boolean; error?: string }>;
   reservingSlots: Set<string>;
   loading: boolean;
 }
 
-// ==================== FUNÇÕES AUXILIARES ====================
 const formatAppointment = (app: any): Appointment => ({
   id: app.id,
   customerName: app.customer_name,
@@ -58,8 +56,6 @@ const formatAppointment = (app: any): Appointment => ({
   tip_amount: app.tip_amount || 0
 });
 
-// ==================== CONTEXT ====================
-
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
 
 export const BookingProvider = ({ children }: { children: ReactNode }) => {
@@ -71,17 +67,19 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
   const channelRef = useRef<RealtimeChannel | null>(null);
   const currentBarbershopIdRef = useRef<string | undefined>(undefined);
 
-  // ==================== FETCH APPOINTMENTS ====================
-
   const fetchAppointments = useCallback(async (barbershopId?: string) => {
     try {
       setLoading(true);
-      let query = supabase.from('appointments').select('*');
 
-      if (barbershopId) {
-        query = query.eq('barbershop_id', barbershopId);
-        currentBarbershopIdRef.current = barbershopId;
+      if (!barbershopId) {
+        setAppointments([]);
+        setLoading(false);
+        return;
       }
+      let query = supabase
+        .from('appointments')
+        .select('*')
+        .eq('barbershop_id', barbershopId);
 
       const { data, error } = await query
         .order('date', { ascending: true })
@@ -90,18 +88,18 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
 
       if (!mountedRef.current) return;
-
       setAppointments(data?.map(formatAppointment) || []);
+      currentBarbershopIdRef.current = barbershopId;
+
     } catch (err) {
       console.error("❌ Erro ao carregar agendamentos:", err);
+      setAppointments([]);
     } finally {
       if (mountedRef.current) {
         setLoading(false);
       }
     }
   }, []);
-
-  // ==================== CHECK SLOT AVAILABILITY ====================
 
   const checkSlotAvailability = useCallback(async (
     barberId: string,
@@ -123,23 +121,76 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         return false;
       }
 
-      return !data; // true se disponível (sem dados), false se ocupado
+      return !data; 
     } catch (err) {
       console.error('❌ Erro ao verificar slot:', err);
       return false;
     }
   }, []);
 
-  // ==================== REALTIME SUBSCRIPTION ====================
+  const sendCancellationNotification = useCallback(async (
+    appointment: Appointment,
+    barbershopPhone: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (!barbershopPhone || barbershopPhone.trim() === '') {
+        return {
+          success: false,
+          error: 'Telefone da barbearia não informado'
+        };
+      }
+
+      const formattedDate = new Date(appointment.date + 'T00:00:00').toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      });
+
+      const message = `🔔 *AGENDAMENTO CANCELADO* 🔔\n\n` +
+        `👤 *Cliente:* ${appointment.customerName}\n` +
+        `📞 *Telefone:* ${appointment.customerPhone}\n` +
+        `💈 *Serviço:* ${appointment.service}\n` +
+        `✂️ *Barbeiro:* ${appointment.barber}\n` +
+        `📅 *Data:* ${formattedDate}\n` +
+        `⏰ *Horário:* ${appointment.time}\n\n` +
+        `❌ _O cliente cancelou este agendamento._`;
+
+      const { data, error } = await supabase.functions.invoke('send-whatsapp', {
+        body: {
+          number: appointment.customerPhone,
+          shopNumber: barbershopPhone,
+          message: message
+        }
+      });
+
+      if (error) {
+        console.error('❌ Erro da Edge Function:', error);
+        return {
+          success: false,
+          error: error.message || 'Erro ao enviar notificação'
+        };
+      }
+
+      return { success: true };
+
+    } catch (err: any) {
+      console.error('❌ Erro ao enviar notificação de cancelamento:', err);
+      return {
+        success: false,
+        error: err.message || 'Erro ao enviar notificação'
+      };
+    }
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
 
     const setupRealtime = async () => {
       try {
-        // ✅ Buscar barbershopId do usuário autenticado
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        if (!user) {
+          return;
+        }
 
         const { data: profile } = await supabase
           .from('profiles')
@@ -149,46 +200,41 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
         const barbershopId = profile?.barbershop_id;
 
-        // Carregar appointments iniciais
+        if (!barbershopId) {
+          setAppointments([]);
+          setLoading(false);
+          return;
+        }
+
         await fetchAppointments(barbershopId);
 
-        // ✅ Limpar canal anterior se existir
         if (channelRef.current) {
           await supabase.removeChannel(channelRef.current);
           channelRef.current = null;
         }
 
-        // ✅ Configurar filtro de realtime
         const channelConfig: any = {
           event: '*',
           schema: 'public',
-          table: 'appointments'
+          table: 'appointments',
+          filter: `barbershop_id=eq.${barbershopId}` 
         };
 
-        if (barbershopId) {
-          channelConfig.filter = `barbershop_id=eq.${barbershopId}`;
-        }
-
-        // ✅ Criar canal de realtime
         const channel: RealtimeChannel = supabase
           .channel('appointments-changes')
           .on('postgres_changes', channelConfig, (payload) => {
             if (!mountedRef.current) return;
-
             try {
               if (payload.eventType === 'INSERT') {
                 const newApp = formatAppointment(payload.new);
 
-                // Verificar barbershopId
-                if (barbershopId && newApp.barbershop_id !== barbershopId) {
+                if (newApp.barbershop_id !== barbershopId) {
                   return;
                 }
 
-                // 🔒 Marcar slot como "reservando" temporariamente
                 const slotKey = `${newApp.barber_id}-${newApp.date}-${newApp.time}`;
                 setReservingSlots(prev => new Set(prev).add(slotKey));
-                
-                // Remover marcação após 2 segundos
+
                 setTimeout(() => {
                   setReservingSlots(prev => {
                     const next = new Set(prev);
@@ -199,17 +245,26 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
                 setAppointments(prev => {
                   const exists = prev.some(app => app.id === newApp.id);
-                  if (exists) return prev;
+                  if (exists) {
+                    return prev;
+                  }
 
-                  return [...prev, newApp].sort((a, b) => {
+                  const newList = [...prev, newApp].sort((a, b) => {
                     if (a.date !== b.date) return a.date.localeCompare(b.date);
                     return a.time.localeCompare(b.time);
                   });
+
+                  return newList;
                 });
               }
 
               if (payload.eventType === 'UPDATE') {
                 const updatedApp = formatAppointment(payload.new);
+
+                if (updatedApp.barbershop_id !== barbershopId) {
+                  return;
+                }
+
                 setAppointments(prev =>
                   prev.map(app => app.id === updatedApp.id ? updatedApp : app)
                 );
@@ -233,6 +288,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
       } catch (err) {
         console.error('❌ Erro ao configurar realtime:', err);
+        setLoading(false);
       }
     };
 
@@ -247,14 +303,10 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [fetchAppointments]);
 
-  // ==================== ADD APPOINTMENT ====================
-
   const addAppointment = async (data: Omit<Appointment, 'id'>): Promise<{ success: boolean; error?: string }> => {
     try {
-      // ✅ Pegar user_id do usuário autenticado
       const { data: userData } = await supabase.auth.getUser();
-
-     const rpcParams = {
+      const rpcParams = {
         p_customer_name: data.customerName,
         p_customer_phone: data.customerPhone || 'Balcão',
         p_service: data.service,
@@ -274,8 +326,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         p_venda_id: data.venda_id || null
       };
 
-      console.log("🚀 Enviando para RPC 'create_appointment_safe':", rpcParams);
-
       const { data: result, error } = await supabase.rpc('create_appointment_safe', rpcParams);
 
       if (error) {
@@ -283,7 +333,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         throw error;
       }
 
-      // ✅ Processar resposta da função
       if (!result || !result.success) {
         return {
           success: false,
@@ -291,12 +340,31 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         };
       }
 
+      if (result.appointment_id) {
+        const { data: newAppointment } = await supabase
+          .from('appointments')
+          .select('*')
+          .eq('id', result.appointment_id)
+          .single();
+
+        if (newAppointment) {
+          const formatted = formatAppointment(newAppointment);
+          setAppointments(prev => {
+            const exists = prev.some(a => a.id === formatted.id);
+            if (exists) return prev;
+            return [...prev, formatted].sort((a, b) => {
+              if (a.date !== b.date) return a.date.localeCompare(b.date);
+              return a.time.localeCompare(b.time);
+            });
+          });
+        }
+      }
+
       return { success: true };
 
     } catch (err: any) {
       console.error("❌ Erro ao adicionar agendamento:", err);
-      
-      // Tratamento específico de erros
+
       if (err.code === '23505' || err.message?.includes('unique')) {
         return {
           success: false,
@@ -311,8 +379,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ==================== UPDATE STATUS ====================
-
   const updateStatus = async (id: string, updates: any): Promise<{ success: boolean; error?: string }> => {
     try {
       const payload = typeof updates === 'string' ? { status: updates } : updates;
@@ -324,7 +390,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
 
-      // Update otimista local
       setAppointments(prev => prev.map(app =>
         app.id === id ? { ...app, ...payload } : app
       ));
@@ -340,8 +405,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ==================== DELETE APPOINTMENT ====================
-
   const deleteAppointment = async (id: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const { error } = await supabase
@@ -351,7 +414,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
       if (error) throw error;
 
-      // Remoção otimista local
       setAppointments(prev => prev.filter(app => app.id !== id));
 
       return { success: true };
@@ -365,8 +427,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  // ==================== PROVIDER ====================
-
   return (
     <BookingContext.Provider
       value={{
@@ -376,6 +436,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         deleteAppointment,
         fetchAppointments,
         checkSlotAvailability,
+        sendCancellationNotification,
         reservingSlots,
         loading
       }}
@@ -384,8 +445,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     </BookingContext.Provider>
   );
 };
-
-// ==================== HOOK ====================
 
 export const useBooking = () => {
   const context = useContext(BookingContext);

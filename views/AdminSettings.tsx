@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
-  Plus, Trash2, Clock, X, UserPlus, 
-  DollarSign, Tag, Briefcase, Edit3, 
+  Plus, Trash2, Clock, X, UserPlus,
+  DollarSign, Tag, Briefcase, Edit3,
   Power, AlertTriangle, Save, Loader2,
   ChevronDown, Menu
 } from 'lucide-react';
@@ -18,13 +18,10 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-
   const [isAddingBarber, setIsAddingBarber] = useState(false);
   const [isAddingService, setIsAddingService] = useState(false);
   const [editingBarber, setEditingBarber] = useState<any>(null);
   const [editingService, setEditingService] = useState<any>(null);
-
-  // Mobile states
   const [isMobile, setIsMobile] = useState(false);
   const [expandedBarber, setExpandedBarber] = useState<string | null>(null);
   const [expandedService, setExpandedService] = useState<string | null>(null);
@@ -63,13 +60,13 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
 
     if (barbersRes.data) setBarbers(barbersRes.data);
     if (servicesRes.data) setServices(servicesRes.data);
-    
+
     if (settingsRes.data) {
       setSettings(settingsRes.data);
     } else {
-      setSettings({ 
-        is_closed: false, 
-        opening_time: '08:00', 
+      setSettings({
+        is_closed: false,
+        opening_time: '08:00',
         closing_time: '20:00',
         fee_dinheiro: 0,
         fee_pix: 0,
@@ -84,8 +81,8 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
     setIsSaving(true);
     const { error } = await supabase
       .from('barbershop_settings')
-      .upsert({ 
-        barbershop_id: barbershopId, 
+      .upsert({
+        barbershop_id: barbershopId,
         is_closed: settings.is_closed,
         opening_time: settings.opening_time,
         closing_time: settings.closing_time,
@@ -94,7 +91,7 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
         fee_debito: parseFloat(settings.fee_debito) || 0,
         fee_credito: parseFloat(settings.fee_credito) || 0
       });
-    
+
     if (!error) alert("Configurações da unidade e taxas atualizadas!");
     setIsSaving(false);
   }
@@ -128,10 +125,10 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
   }
 
   async function handleUpdateService() {
-    const payload = { 
-      name: editingService.name, 
-      price: parseFloat(editingService.price), 
-      duration: editingService.duration.toString().includes('min') ? editingService.duration : `${editingService.duration} min` 
+    const payload = {
+      name: editingService.name,
+      price: parseFloat(editingService.price),
+      duration: editingService.duration.toString().includes('min') ? editingService.duration : `${editingService.duration} min`
     };
     await supabase.from('services').update(payload).eq('id', editingService.id);
     setEditingService(null);
@@ -151,12 +148,12 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
   return (
     <div className="min-h-screen bg-[#08080a] text-zinc-400 pb-20 relative overflow-hidden">
       <div className="max-w-5xl mx-auto px-3 md:px-4 py-4 md:py-8">
-        
+
         {/* TABS - Mobile: Dropdown, Desktop: Buttons */}
         {isMobile ? (
           <div className="mb-6">
-            <select 
-              value={activeTab} 
+            <select
+              value={activeTab}
               onChange={(e) => setActiveTab(e.target.value as any)}
               className="w-full bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-3 text-white font-black uppercase text-xs outline-none"
             >
@@ -176,21 +173,20 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
         {/* EQUIPE */}
         {activeTab === 'equipe' && (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <HeaderSection 
-              title="Gestão de Equipe" 
-              subtitle="Membros e Comissões" 
-              actionLabel={isMobile ? "Novo" : "Novo Barbeiro"} 
-              onAction={() => setIsAddingBarber(true)} 
-              icon={<UserPlus size={isMobile ? 16 : 18}/>} 
+            <HeaderSection
+              title="Gestão de Equipe"
+              subtitle="Membros e Comissões"
+              actionLabel={isMobile ? "Novo" : "Novo Barbeiro"}
+              onAction={() => setIsAddingBarber(true)}
+              icon={<UserPlus size={isMobile ? 16 : 18} />}
               isMobile={isMobile}
             />
 
             {isMobile ? (
-              // MOBILE: Cards
               <div className="space-y-3">
                 {barbers.map(b => (
                   <div key={b.id} className="bg-zinc-900/40 border border-zinc-800 rounded-2xl overflow-hidden">
-                    <button 
+                    <button
                       onClick={() => setExpandedBarber(expandedBarber === b.id ? null : b.id)}
                       className="w-full p-4 flex items-center justify-between text-left"
                     >
@@ -198,25 +194,25 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
                         <h4 className="text-white font-black uppercase text-sm italic">{b.name}</h4>
                         <p className="text-amber-500 text-xs font-bold mt-1">Comissão: {b.commission_rate}%</p>
                       </div>
-                      <ChevronDown 
-                        size={18} 
+                      <ChevronDown
+                        size={18}
                         className={`text-zinc-500 transition-transform ${expandedBarber === b.id ? 'rotate-180' : ''}`}
                       />
                     </button>
 
                     {expandedBarber === b.id && (
                       <div className="px-4 pb-4 pt-2 border-t border-zinc-800 space-y-2">
-                        <button 
+                        <button
                           onClick={() => setEditingBarber(b)}
                           className="w-full bg-amber-500/10 text-amber-500 py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2"
                         >
-                          <Edit3 size={14}/> Editar
+                          <Edit3 size={14} /> Editar
                         </button>
-                        <button 
+                        <button
                           onClick={() => deleteBarber(b.id)}
                           className="w-full bg-red-500/10 text-red-500 py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2"
                         >
-                          <Trash2 size={14}/> Remover
+                          <Trash2 size={14} /> Remover
                         </button>
                       </div>
                     )}
@@ -224,7 +220,6 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
                 ))}
               </div>
             ) : (
-              // DESKTOP: Table
               <div className="bg-zinc-900/40 border border-zinc-800 rounded-[2.5rem] overflow-hidden">
                 <table className="w-full text-left text-xs uppercase font-black tracking-widest">
                   <thead className="bg-zinc-950/50 text-zinc-600">
@@ -237,8 +232,8 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
                         <td className="p-6 text-center text-amber-500">{b.commission_rate}%</td>
                         <td className="p-6 text-right">
                           <div className="flex justify-end gap-4">
-                            <button onClick={() => setEditingBarber(b)} className="hover:text-amber-500 transition-colors"><Edit3 size={18}/></button>
-                            <button onClick={() => deleteBarber(b.id)} className="hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                            <button onClick={() => setEditingBarber(b)} className="hover:text-amber-500 transition-colors"><Edit3 size={18} /></button>
+                            <button onClick={() => deleteBarber(b.id)} className="hover:text-red-500 transition-colors"><Trash2 size={18} /></button>
                           </div>
                         </td>
                       </tr>
@@ -253,21 +248,20 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
         {/* SERVIÇOS */}
         {activeTab === 'servicos' && (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <HeaderSection 
-              title="Catálogo de Serviços" 
-              subtitle="Menu e Valores" 
-              actionLabel={isMobile ? "Novo" : "Novo Serviço"} 
-              onAction={() => setIsAddingService(true)} 
-              icon={<Plus size={isMobile ? 16 : 18}/>}
+            <HeaderSection
+              title="Catálogo de Serviços"
+              subtitle="Menu e Valores"
+              actionLabel={isMobile ? "Novo" : "Novo Serviço"}
+              onAction={() => setIsAddingService(true)}
+              icon={<Plus size={isMobile ? 16 : 18} />}
               isMobile={isMobile}
             />
 
             {isMobile ? (
-              // MOBILE: Cards
               <div className="space-y-3">
                 {services.map(s => (
                   <div key={s.id} className="bg-zinc-900/40 border border-zinc-800 rounded-2xl overflow-hidden">
-                    <button 
+                    <button
                       onClick={() => setExpandedService(expandedService === s.id ? null : s.id)}
                       className="w-full p-4 flex items-center justify-between text-left"
                     >
@@ -279,25 +273,25 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
                           <span className="text-zinc-500 text-xs italic">{s.duration}</span>
                         </div>
                       </div>
-                      <ChevronDown 
-                        size={18} 
+                      <ChevronDown
+                        size={18}
                         className={`text-zinc-500 transition-transform ${expandedService === s.id ? 'rotate-180' : ''}`}
                       />
                     </button>
 
                     {expandedService === s.id && (
                       <div className="px-4 pb-4 pt-2 border-t border-zinc-800 space-y-2">
-                        <button 
+                        <button
                           onClick={() => setEditingService(s)}
                           className="w-full bg-amber-500/10 text-amber-500 py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2"
                         >
-                          <Edit3 size={14}/> Editar
+                          <Edit3 size={14} /> Editar
                         </button>
-                        <button 
+                        <button
                           onClick={() => deleteService(s.id)}
                           className="w-full bg-red-500/10 text-red-500 py-2 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-2"
                         >
-                          <Trash2 size={14}/> Remover
+                          <Trash2 size={14} /> Remover
                         </button>
                       </div>
                     )}
@@ -305,7 +299,6 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
                 ))}
               </div>
             ) : (
-              // DESKTOP: Table
               <div className="bg-zinc-900/40 border border-zinc-800 rounded-[2.5rem] overflow-hidden">
                 <table className="w-full text-left text-xs uppercase font-black tracking-widest">
                   <thead className="bg-zinc-950/50 text-zinc-600">
@@ -319,8 +312,8 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
                         <td className="p-6 text-emerald-500 italic">R$ {s.price?.toFixed(2)}</td>
                         <td className="p-6 text-right">
                           <div className="flex justify-end gap-4">
-                            <button onClick={() => setEditingService(s)} className="hover:text-amber-500 transition-colors"><Edit3 size={18}/></button>
-                            <button onClick={() => deleteService(s.id)} className="hover:text-red-500 transition-colors"><Trash2 size={18}/></button>
+                            <button onClick={() => setEditingService(s)} className="hover:text-amber-500 transition-colors"><Edit3 size={18} /></button>
+                            <button onClick={() => deleteService(s.id)} className="hover:text-red-500 transition-colors"><Trash2 size={18} /></button>
                           </div>
                         </td>
                       </tr>
@@ -335,88 +328,88 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
         {/* UNIDADE */}
         {activeTab === 'unidade' && settings && (
           <section className="animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-2xl mx-auto">
-              <div className="text-center mb-8 md:mb-12">
-                <h2 className="text-2xl md:text-4xl font-black text-white italic uppercase tracking-tighter">
-                  Configuração <span className="text-amber-500">Global</span>
-                </h2>
-                <p className="text-zinc-500 text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] mt-2 italic">
-                  Controle total do estabelecimento
-                </p>
+            <div className="text-center mb-8 md:mb-12">
+              <h2 className="text-2xl md:text-4xl font-black text-white italic uppercase tracking-tighter">
+                Configuração <span className="text-amber-500">Global</span>
+              </h2>
+              <p className="text-zinc-500 text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] mt-2 italic">
+                Controle total do estabelecimento
+              </p>
+            </div>
+
+            <div className="space-y-4 md:space-y-6">
+              {/* HORÁRIOS */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-[2.5rem] p-4 md:p-8">
+                <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-8 text-amber-500">
+                  <Clock size={isMobile ? 16 : 20} />
+                  <h4 className="text-[10px] md:text-[11px] font-black uppercase tracking-widest italic text-white">
+                    Horário de Funcionamento
+                  </h4>
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:gap-6">
+                  <TimeInput label="Abertura" value={settings.opening_time} onChange={val => setSettings({ ...settings, opening_time: val })} isMobile={isMobile} />
+                  <TimeInput label="Fechamento" value={settings.closing_time} onChange={val => setSettings({ ...settings, closing_time: val })} isMobile={isMobile} />
+                </div>
               </div>
 
-              <div className="space-y-4 md:space-y-6">
-                {/* HORÁRIOS */}
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-[2.5rem] p-4 md:p-8">
-                  <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-8 text-amber-500">
-                    <Clock size={isMobile ? 16 : 20} />
-                    <h4 className="text-[10px] md:text-[11px] font-black uppercase tracking-widest italic text-white">
-                      Horário de Funcionamento
-                    </h4>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 md:gap-6">
-                      <TimeInput label="Abertura" value={settings.opening_time} onChange={val => setSettings({...settings, opening_time: val})} isMobile={isMobile} />
-                      <TimeInput label="Fechamento" value={settings.closing_time} onChange={val => setSettings({...settings, closing_time: val})} isMobile={isMobile} />
-                  </div>
+              {/* TAXAS DE MÁQUINA */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-[2.5rem] p-4 md:p-8">
+                <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-8 text-amber-500">
+                  <DollarSign size={isMobile ? 16 : 20} />
+                  <h4 className="text-[10px] md:text-[11px] font-black uppercase tracking-widest italic text-white">
+                    Taxas Operacionais (%)
+                  </h4>
                 </div>
-
-                {/* TAXAS DE MÁQUINA */}
-                <div className="bg-zinc-900 border border-zinc-800 rounded-2xl md:rounded-[2.5rem] p-4 md:p-8">
-                  <div className="flex items-center gap-2 md:gap-3 mb-4 md:mb-8 text-amber-500">
-                    <DollarSign size={isMobile ? 16 : 20} />
-                    <h4 className="text-[10px] md:text-[11px] font-black uppercase tracking-widest italic text-white">
-                      Taxas Operacionais (%)
-                    </h4>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3 md:gap-4">
-                      <FeeInput label="Pix" value={settings.fee_pix} onChange={val => setSettings({...settings, fee_pix: val})} isMobile={isMobile} />
-                      <FeeInput label="Débito" value={settings.fee_debito} onChange={val => setSettings({...settings, fee_debito: val})} isMobile={isMobile} />
-                      <FeeInput label="Crédito" value={settings.fee_credito} onChange={val => setSettings({...settings, fee_credito: val})} isMobile={isMobile} />
-                      <FeeInput label="Dinheiro" value={settings.fee_dinheiro} onChange={val => setSettings({...settings, fee_dinheiro: val})} isMobile={isMobile} />
-                  </div>
+                <div className="grid grid-cols-2 gap-3 md:gap-4">
+                  <FeeInput label="Pix" value={settings.fee_pix} onChange={val => setSettings({ ...settings, fee_pix: val })} isMobile={isMobile} />
+                  <FeeInput label="Débito" value={settings.fee_debito} onChange={val => setSettings({ ...settings, fee_debito: val })} isMobile={isMobile} />
+                  <FeeInput label="Crédito" value={settings.fee_credito} onChange={val => setSettings({ ...settings, fee_credito: val })} isMobile={isMobile} />
+                  <FeeInput label="Dinheiro" value={settings.fee_dinheiro} onChange={val => setSettings({ ...settings, fee_dinheiro: val })} isMobile={isMobile} />
                 </div>
-
-                {/* FECHAMENTO DE EMERGÊNCIA */}
-                <div className={`p-4 md:p-8 rounded-2xl md:rounded-[2.5rem] border transition-all duration-500 ${settings.is_closed ? 'bg-red-500 border-red-400 shadow-[0_0_50px_rgba(239,68,68,0.2)]' : 'bg-zinc-900 border-zinc-800'}`}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 md:gap-4 flex-1">
-                      <div className={`p-3 md:p-4 rounded-xl md:rounded-2xl ${settings.is_closed ? 'bg-black/20 text-white' : 'bg-red-500/10 text-red-500'}`}>
-                        <Power size={isMobile ? 18 : 24} />
-                      </div>
-                      <div className="flex-1">
-                        <h4 className={`text-xs md:text-sm font-black uppercase italic tracking-tighter ${settings.is_closed ? 'text-white' : 'text-zinc-200'}`}>
-                          {settings.is_closed ? 'LOJA FECHADA' : 'EMERGÊNCIA'}
-                        </h4>
-                        <p className={`text-[8px] md:text-[9px] font-bold uppercase tracking-wider mt-1 ${settings.is_closed ? 'text-white/60' : 'text-zinc-500'} hidden md:block`}>
-                          Travar agendamentos online
-                        </p>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => setSettings({...settings, is_closed: !settings.is_closed})}
-                      className={`w-12 md:w-14 h-7 md:h-8 rounded-full relative transition-all flex-shrink-0 ${settings.is_closed ? 'bg-white' : 'bg-zinc-700'}`}
-                    >
-                      <div className={`absolute top-1 w-5 md:w-6 h-5 md:h-6 rounded-full transition-all ${settings.is_closed ? 'left-6 md:left-7 bg-red-500 shadow-lg' : 'left-1 bg-zinc-400'}`} />
-                    </button>
-                  </div>
-                  
-                  {settings.is_closed && (
-                    <div className="mt-4 md:mt-6 p-3 md:p-4 bg-black/20 rounded-xl md:rounded-2xl flex items-center gap-2 md:gap-3 text-white border border-white/10 animate-pulse">
-                       <AlertTriangle size={isMobile ? 14 : 18} />
-                       <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest italic">
-                         Agendamentos bloqueados
-                       </span>
-                    </div>
-                  )}
-                </div>
-
-                <button 
-                  onClick={saveGlobalSettings}
-                  disabled={isSaving}
-                  className="w-full bg-amber-500 text-black font-black py-4 md:py-6 rounded-2xl md:rounded-[2.5rem] mt-4 flex items-center justify-center gap-2 md:gap-3 shadow-xl shadow-amber-500/20 hover:scale-[1.02] active:scale-95 transition-all uppercase italic tracking-widest text-[10px] md:text-xs"
-                >
-                  {isSaving ? <Loader2 className="animate-spin" size={isMobile ? 16 : 20} /> : <><Save size={isMobile ? 16 : 20}/> Salvar Configurações</>}
-                </button>
               </div>
+
+              {/* FECHAMENTO DE EMERGÊNCIA */}
+              <div className={`p-4 md:p-8 rounded-2xl md:rounded-[2.5rem] border transition-all duration-500 ${settings.is_closed ? 'bg-red-500 border-red-400 shadow-[0_0_50px_rgba(239,68,68,0.2)]' : 'bg-zinc-900 border-zinc-800'}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 md:gap-4 flex-1">
+                    <div className={`p-3 md:p-4 rounded-xl md:rounded-2xl ${settings.is_closed ? 'bg-black/20 text-white' : 'bg-red-500/10 text-red-500'}`}>
+                      <Power size={isMobile ? 18 : 24} />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className={`text-xs md:text-sm font-black uppercase italic tracking-tighter ${settings.is_closed ? 'text-white' : 'text-zinc-200'}`}>
+                        {settings.is_closed ? 'LOJA FECHADA' : 'EMERGÊNCIA'}
+                      </h4>
+                      <p className={`text-[8px] md:text-[9px] font-bold uppercase tracking-wider mt-1 ${settings.is_closed ? 'text-white/60' : 'text-zinc-500'} hidden md:block`}>
+                        Travar agendamentos online
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setSettings({ ...settings, is_closed: !settings.is_closed })}
+                    className={`w-12 md:w-14 h-7 md:h-8 rounded-full relative transition-all flex-shrink-0 ${settings.is_closed ? 'bg-white' : 'bg-zinc-700'}`}
+                  >
+                    <div className={`absolute top-1 w-5 md:w-6 h-5 md:h-6 rounded-full transition-all ${settings.is_closed ? 'left-6 md:left-7 bg-red-500 shadow-lg' : 'left-1 bg-zinc-400'}`} />
+                  </button>
+                </div>
+
+                {settings.is_closed && (
+                  <div className="mt-4 md:mt-6 p-3 md:p-4 bg-black/20 rounded-xl md:rounded-2xl flex items-center gap-2 md:gap-3 text-white border border-white/10 animate-pulse">
+                    <AlertTriangle size={isMobile ? 14 : 18} />
+                    <span className="text-[8px] md:text-[9px] font-black uppercase tracking-widest italic">
+                      Agendamentos bloqueados
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <button
+                onClick={saveGlobalSettings}
+                disabled={isSaving}
+                className="w-full bg-amber-500 text-black font-black py-4 md:py-6 rounded-2xl md:rounded-[2.5rem] mt-4 flex items-center justify-center gap-2 md:gap-3 shadow-xl shadow-amber-500/20 hover:scale-[1.02] active:scale-95 transition-all uppercase italic tracking-widest text-[10px] md:text-xs"
+              >
+                {isSaving ? <Loader2 className="animate-spin" size={isMobile ? 16 : 20} /> : <><Save size={isMobile ? 16 : 20} /> Salvar Configurações</>}
+              </button>
+            </div>
           </section>
         )}
 
@@ -430,7 +423,6 @@ const AdminSettings: React.FC<AdminSettingsProps> = ({ barbershopId }) => {
   );
 };
 
-// COMPONENTES AUXILIARES
 const TabBtn = ({ active, label, onClick }: any) => (
   <button onClick={onClick} className={`px-6 md:px-10 py-3 md:py-4 rounded-xl font-black uppercase tracking-[0.2em] text-[9px] md:text-[10px] transition-all duration-300 ${active ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/30' : 'text-zinc-600 hover:text-white'}`}>
     {label}
@@ -453,8 +445,8 @@ const TimeInput = ({ label, value, onChange, isMobile }: any) => (
   <div className="space-y-2">
     <label className="text-[7px] md:text-[8px] font-black text-zinc-600 uppercase tracking-widest ml-2">{label}</label>
     <div className="bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 flex items-center gap-2 md:gap-3">
-        <Clock size={isMobile ? 14 : 16} className="text-amber-500" />
-        <input type="time" className="bg-transparent text-white text-xs md:text-sm font-black italic outline-none w-full" value={value} onChange={e => onChange(e.target.value)} />
+      <Clock size={isMobile ? 14 : 16} className="text-amber-500" />
+      <input type="time" className="bg-transparent text-white text-xs md:text-sm font-black italic outline-none w-full" value={value} onChange={e => onChange(e.target.value)} />
     </div>
   </div>
 );
@@ -463,8 +455,8 @@ const FeeInput = ({ label, value, onChange, isMobile }: any) => (
   <div className="space-y-2">
     <label className="text-[7px] md:text-[8px] font-black text-zinc-600 uppercase tracking-widest ml-2">{label}</label>
     <div className="bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-2 md:p-3 flex items-center gap-2">
-        <span className="text-amber-500 font-black text-[9px] md:text-[10px]">%</span>
-        <input type="number" step="0.01" className="bg-transparent text-white font-black italic outline-none w-full text-[10px] md:text-xs" value={value} onChange={e => onChange(e.target.value)} />
+      <span className="text-amber-500 font-black text-[9px] md:text-[10px]">%</span>
+      <input type="number" step="0.01" className="bg-transparent text-white font-black italic outline-none w-full text-[10px] md:text-xs" value={value} onChange={e => onChange(e.target.value)} />
     </div>
   </div>
 );
@@ -496,11 +488,11 @@ const BarberModal = ({ title, data, setData, onSave, onClose, isMobile }: any) =
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
             <div className="space-y-2">
               <label className="text-[9px] md:text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-2">Nome</label>
-              <input type="text" className="w-full bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 text-white text-sm outline-none focus:border-amber-500 font-bold italic" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
+              <input type="text" className="w-full bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 text-white text-sm outline-none focus:border-amber-500 font-bold italic" value={data.name} onChange={e => setData({ ...data, name: e.target.value })} />
             </div>
             <div className="space-y-2">
               <label className="text-[9px] md:text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-2">Comissão (%)</label>
-              <input type="number" className="w-full bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 text-amber-500 text-sm font-black outline-none focus:border-amber-500 italic" value={data.commission_rate} onChange={e => setData({...data, commission_rate: e.target.value})} />
+              <input type="number" className="w-full bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 text-amber-500 text-sm font-black outline-none focus:border-amber-500 italic" value={data.commission_rate} onChange={e => setData({ ...data, commission_rate: e.target.value })} />
             </div>
           </div>
           <div className="space-y-3 md:space-y-4">
@@ -555,16 +547,16 @@ const ServiceModal = ({ title, data, setData, onSave, onClose, isMobile }: any) 
       <div className="space-y-4 md:space-y-6">
         <div className="space-y-2">
           <label className="text-[9px] md:text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-2">Serviço</label>
-          <input type="text" className="w-full bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 text-white text-sm font-bold italic outline-none focus:border-amber-500" value={data.name} onChange={e => setData({...data, name: e.target.value})} />
+          <input type="text" className="w-full bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 text-white text-sm font-bold italic outline-none focus:border-amber-500" value={data.name} onChange={e => setData({ ...data, name: e.target.value })} />
         </div>
         <div className="grid grid-cols-2 gap-3 md:gap-4">
           <div className="space-y-2">
             <label className="text-[9px] md:text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-2">Valor</label>
-            <input type="number" className="w-full bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 text-emerald-500 text-sm font-black italic outline-none focus:border-amber-500" value={data.price} onChange={e => setData({...data, price: e.target.value})} />
+            <input type="number" className="w-full bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 text-emerald-500 text-sm font-black italic outline-none focus:border-amber-500" value={data.price} onChange={e => setData({ ...data, price: e.target.value })} />
           </div>
           <div className="space-y-2">
             <label className="text-[9px] md:text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-2">Minutos</label>
-            <input type="number" className="w-full bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 text-white text-sm font-bold italic outline-none focus:border-amber-500" value={data.duration?.toString().replace(/\D/g, '')} onChange={e => setData({...data, duration: e.target.value})} />
+            <input type="number" className="w-full bg-black border border-zinc-800 rounded-xl md:rounded-2xl p-3 md:p-4 text-white text-sm font-bold italic outline-none focus:border-amber-500" value={data.duration?.toString().replace(/\D/g, '')} onChange={e => setData({ ...data, duration: e.target.value })} />
           </div>
         </div>
         <button onClick={onSave} className="w-full bg-amber-500 text-black font-black py-4 md:py-5 rounded-2xl md:rounded-3xl mt-4 hover:bg-amber-400 transition-all uppercase italic tracking-widest text-[10px] md:text-xs">Salvar</button>

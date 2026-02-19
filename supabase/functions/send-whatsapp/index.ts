@@ -33,6 +33,7 @@ serve(async (req) => {
 
     const clientNumber = formatWhatsappNumber(number);
     
+    // Enviar para o cliente (sempre com a mensagem original)
     const clientResponse = await fetch(`${url}/message/sendText/${instance}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
@@ -44,15 +45,32 @@ serve(async (req) => {
     
     const clientResult = await clientResponse.json();
     let shopResult = null;
+    
+    // Enviar para a barbearia (se informado)
     if (shopNumber) {
-      const barbeshopNumber = formatWhatsappNumber(shopNumber);
-      const adminMessage = `🔔 *NOVO AGENDAMENTO RECEBIDO!* 🔔\n\n${message.split('Olá,')[1] || message}\n\n🚀 _Verifique seu painel para confirmar!_`;
+      const barbershopNumber = formatWhatsappNumber(shopNumber);
+      
+      // Verificar se é uma mensagem de cancelamento
+      const isCancellation = message.includes('AGENDAMENTO CANCELADO');
+      
+      let shopMessage;
+      
+      if (isCancellation) {
+        // Para cancelamento, enviar a mensagem original (já tem o formato correto)
+        shopMessage = message;
+      } else {
+        // Para novo agendamento, adicionar o cabeçalho e rodapé
+        shopMessage = `🔔 *NOVO AGENDAMENTO RECEBIDO!* 🔔\n\n${
+          message.split('Olá,')[1] || message
+        }\n\n🚀 _Verifique seu painel para confirmar!_`;
+      }
+      
       const shopResponse = await fetch(`${url}/message/sendText/${instance}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
         body: JSON.stringify({
-          number: barbeshopNumber,
-          text: adminMessage
+          number: barbershopNumber,
+          text: shopMessage
         })
       });
       shopResult = await shopResponse.json();
@@ -70,4 +88,4 @@ serve(async (req) => {
       status: 400,
     })
   }
-})
+});

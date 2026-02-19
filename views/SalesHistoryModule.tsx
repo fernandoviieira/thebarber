@@ -13,15 +13,16 @@ interface SalesHistoryProps {
   appointments: any[];
   onDelete: (id: string) => Promise<void>;
   barbershopId: string | null;
-  servicesList: any[]; 
-  productsList: any[]; 
+  servicesList: any[];
+  productsList: any[];
+  barbers: any[]
 }
 
 type PaymentFilter = 'todos' | 'dinheiro' | 'pix' | 'debito' | 'credito' | 'pacote';
 type DateFilter = 'hoje' | 'ontem' | '7dias' | '30dias' | 'personalizado' | 'tudo';
 
 
-const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelete, barbershopId, servicesList, productsList }) => {
+const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelete, barbershopId, servicesList, productsList, barbers }) => {
   const [barberFilter, setBarberFilter] = useState<string>('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('todos');
@@ -32,7 +33,6 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
   const [startDate, setStartDate] = useState<Date | null>(new Date());
   const [endDate, setEndDate] = useState<Date | null>(new Date());
 
-  // Toggle expansão de linha
   const toggleRowExpand = (id: string) => {
     const newSet = new Set(expandedRows);
     if (newSet.has(id)) {
@@ -43,7 +43,6 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
     setExpandedRows(newSet);
   };
 
-  // --- BUSCAR CONFIGURAÇÕES DE TAXAS ---
   useEffect(() => {
     const fetchSettings = async () => {
       if (!barbershopId) return;
@@ -53,7 +52,6 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
     fetchSettings();
   }, [barbershopId]);
 
-  // --- FUNÇÃO PARA CALCULAR VALOR LÍQUIDO (COM SUPORTE A MISTO) ---
   const calculateNetValue = (price: number, methodRaw: string) => {
     const method = methodRaw?.toLowerCase() || '';
 
@@ -123,7 +121,6 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
         return itemRawId && String(itemRawId).trim() === groupKey;
       });
 
-      // ✅ LÓGICA REFINADA: BUSCA DE PREÇOS REAIS NAS LISTAS DE REFERÊNCIA
       const rawServiceStr = current.service || 'Serviço';
       const parts = rawServiceStr.split(' + ').map(p => p.trim());
 
@@ -132,6 +129,7 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
         const isGorjeta = part.toLowerCase().includes('gorjeta');
         const isProduct = part.toLowerCase().includes('(produto)');
 
+        const currentBarberData = barbers.find(b => b.id === current.barber_id);
         if (isGorjeta) {
           const match = part.match(/\d+\.?\d*/);
           itemPrice = match ? parseFloat(match[0]) : 0;
@@ -158,7 +156,6 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
           };
         }
         else {
-          // SERVIÇOS
           const foundService = servicesList.find(s => s.name.trim() === part);
           itemPrice = foundService ? Number(foundService.price) : 0;
           return {
@@ -166,11 +163,11 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
             price: itemPrice,
             isGorjeta: false,
             isProduct: false,
-            commission: itemPrice * 0.5
+            commission: itemPrice * (currentBarberData.commission_rate / 100),
+            commission_rate: currentBarberData.commission_rate
           };
         }
       });
-      // ✅ AGORA GERENCIA O AGRUPAMENTO
       if (existingIndex !== -1 && rawId) {
         const group = acc[existingIndex];
         group.price += valorPagoDesteItem;
@@ -438,7 +435,7 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
                                       {!isGorjeta && (
                                         <div className="flex justify-between items-center pt-2 border-t border-white/5">
                                           <span className="text-[10px] text-green-400/80 font-bold uppercase">
-                                            {item.isProduct ? 'Comissão Produto:' : 'Comissão (50%):'}
+                                            {item.isProduct ? 'Comissão Produto:' : `Comissão (${item.commission_rate}%):`}
                                           </span>
                                           <span className="text-green-400 font-black text-sm tabular-nums">
                                             R$ {Number(item.commission).toFixed(2)}

@@ -114,7 +114,7 @@ const AppContent: React.FC = () => {
   // Efeito para detectar mudança de slug e forçar recarregamento
   useEffect(() => {
     if (isResetPasswordRoute.current) return;
-    
+
     const pathSlug = window.location.pathname.split('/')[1];
     const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
 
@@ -131,7 +131,7 @@ const AppContent: React.FC = () => {
   // Efeito para detectar mudança de URL via navegação
   useEffect(() => {
     if (isResetPasswordRoute.current) return;
-    
+
     const handleLocationChange = () => {
       const pathSlug = window.location.pathname.split('/')[1];
       const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
@@ -251,9 +251,50 @@ const AppContent: React.FC = () => {
       const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
       const isRegistrarRoute = normalizedCurrentPath === 'registrar';
 
-      // --- INÍCIO DA LÓGICA DE REPARAÇÃO AVANÇADA ---
-      if (profile) {
-        // CASO A: Usuário no /registrar que o Google criou como client
+
+      if (profile?.barbershop_id) {
+        const { data: barbershopData } = await supabase
+          .from('barbershops')
+          .select('name, slug, subscription_status, trial_ends_at, expires_at, current_plan')
+          .eq('id', profile.barbershop_id)
+          .single();
+
+        if (barbershopData) {
+          setBarbershopName(barbershopData.name || '');
+          setBarbershopSlug(barbershopData.slug);
+          setDbSubscriptionStatus(barbershopData.subscription_status);
+          setExpiresAt(barbershopData.expires_at);
+          setCurrentPlan(barbershopData.current_plan);
+
+          const now = new Date();
+          const isTrialActive = barbershopData.trial_ends_at ? new Date(barbershopData.trial_ends_at) > now : false;
+          const isSubscriptionActive =
+            barbershopData.subscription_status === 'active' &&
+            barbershopData.expires_at &&
+            new Date(barbershopData.expires_at) > now;
+          setIsBlocked(!isTrialActive && !isSubscriptionActive);
+
+          if (normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath) && normalizedCurrentPath !== barbershopData.slug) {            
+            window.history.pushState({}, '', `/${barbershopData.slug}`);
+            setUrlSlug(barbershopData.slug);
+            
+            if (profile.role === 'admin') {
+              setView('admin');
+            } else {
+              setView('client');
+            }
+            
+            setLoading(false);
+            return;
+          }
+          
+          if (!normalizedCurrentPath || reservedRoutes.includes(normalizedCurrentPath)) {
+            setUrlSlug(barbershopData.slug);
+          }
+        }
+      }
+
+      if (profile && !profile.barbershop_id) {
         if (isRegistrarRoute && profile.role !== 'admin') {
           await supabase
             .from('profiles')
@@ -262,8 +303,8 @@ const AppContent: React.FC = () => {
 
           profile.role = 'admin';
         }
-        // CASO B: Usuário em uma barbearia específica sem vínculo
-        else if (!profile.barbershop_id && normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath)) {
+        // CASO B: Usuário em uma barbearia específica sem vínculo (APENAS SE NÃO TIVER BARBEARIA)
+        else if (normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath)) {
           const { data: bData } = await supabase
             .from('barbershops')
             .select('id, name, slug, subscription_status, trial_ends_at, expires_at, current_plan')
@@ -282,7 +323,7 @@ const AppContent: React.FC = () => {
           }
         }
       }
-      // --- FIM DA LÓGICA DE REPARAÇÃO ---
+      // ========== FIM DA NOVA LÓGICA ==========
 
       if (!profile) {
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -518,6 +559,7 @@ const AppContent: React.FC = () => {
                   appointments={appointments}
                   servicesList={services}
                   productsList={inventory}
+                  barbers={barbers}
                   onDelete={async (id: string) => {
                     if (confirm('Deseja estornar esta venda?')) {
                       await deleteAppointment(id);
@@ -544,7 +586,14 @@ const AppContent: React.FC = () => {
         {view === 'settings' && isAdmin && barbershopId && <AdminSettings barbershopId={barbershopId} />}
         {view === 'booking' && <BookingFlow onComplete={() => navigateTo('client')} onCancel={() => navigateTo('client')} />}
         {view === 'my_appointments' && (
-          <MyAppointments onBack={() => setView('profile')} customerName={userName} customerPhone={session?.user?.phone || ""} userId={session?.user?.id || ""} isAdmin={isAdmin} />
+          <MyAppointments 
+            onBack={() => setView('profile')}
+            customerName={userName}
+            customerPhone={session?.user?.phone || ""}
+            userId={session?.user?.id || ""}
+            isAdmin={isAdmin}
+            barbershopId={barbershopId} 
+          />
         )}
 
         {view === 'profile' && (

@@ -38,11 +38,9 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [barbershopPhone, setBarbershopPhone] = useState('');
 
-  // ✅ FUNÇÃO AUXILIAR: Obter data/hora atual de Brasília
   const getBrasiliaDateTime = () => {
     const now = new Date();
 
-    // Obter data no fuso de Brasília (formato YYYY-MM-DD)
     const dateStr = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Sao_Paulo',
       year: 'numeric',
@@ -50,7 +48,6 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       day: '2-digit'
     }).format(now);
 
-    // Obter hora e minuto no fuso de Brasília
     const timeStr = new Intl.DateTimeFormat('pt-BR', {
       timeZone: 'America/Sao_Paulo',
       hour: '2-digit',
@@ -125,7 +122,6 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     });
   };
 
-  // 🔒 VERIFICAR se horário está sendo reservado neste momento (via realtime)
   const isSlotReserving = (barberId: string, date: string, time: string) => {
     const slotKey = `${barberId}-${date}-${time}`;
     return reservingSlots.has(slotKey);
@@ -137,7 +133,6 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       return;
     }
 
-    // 🔒 RE-VERIFICAR disponibilidade antes de enviar
     const isAvailable = await checkSlotAvailability(
       selectedBarber.id,
       selectedDate,
@@ -173,6 +168,8 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       setSendingWhatsApp(true);
 
       try {
+        await fetchAppointments(currentBarbershopId);
+
         const payload = {
           number: customerPhone,
           shopNumber: barbershopPhone,
@@ -299,9 +296,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   );
 
   const renderStep3 = () => {
-    // ✅ CORREÇÃO: Obter data e hora REAL de Brasília
     const { dateStr: todayStr, timeStr: brasiliaTime } = getBrasiliaDateTime();
-
     const [nowH, nowM] = brasiliaTime.split(':').map(Number);
     const currentTotalMinutes = nowH * 60 + nowM;
 
@@ -312,16 +307,11 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
         {/* Grid de Datas */}
         <div className="flex gap-2 md:gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4">
           {Array.from({ length: 30 }, (_, i) => {
-            // ✅ CORREÇÃO: Criar data a partir da data de hoje em Brasília
             const [year, month, day] = todayStr.split('-').map(Number);
             const d = new Date(year, month - 1, day);
             d.setDate(d.getDate() + i);
-
             const dateStr = d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric' });
-
-            // ✅ Formatar corretamente para YYYY-MM-DD
             const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
             const isWorkingDay = selectedBarber?.work_days?.[d.getDay().toString()]?.active;
 
             return (
@@ -360,16 +350,10 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
               const shopCloseMin = shopSettings ? timeToMinutes(shopSettings.closing_time) : 1440;
               const barberStart = timeToMinutes(dayConfig.start);
               const barberEnd = timeToMinutes(dayConfig.end);
-
               const isOutsideShop = slotMin < shopOpenMin || (slotMin + totalDuration) > shopCloseMin;
               const isOutsideBarber = slotMin < barberStart || (slotMin + totalDuration) > barberEnd;
-
               const isOccupied = isRangeOccupied(selectedDate, timeStr, selectedBarber!.name, totalDuration);
-
-              // ✅ CORREÇÃO: Comparar com a data REAL de Brasília
               const isPastTime = selectedDate === todayStr && slotMin <= currentTotalMinutes;
-
-              // 🔒 NOVO: Verificar se está sendo reservado neste momento
               const isReserving = isSlotReserving(selectedBarber!.id, selectedDate, timeStr);
 
               if (isOutsideShop || isOutsideBarber) return null;
@@ -399,9 +383,9 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
         <div className="flex gap-4">
           <button onClick={() => setStep(2)} className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic text-xs">Voltar</button>
-          <button 
-            disabled={!selectedDate || !selectedTime} 
-            onClick={() => setStep(4)} 
+          <button
+            disabled={!selectedDate || !selectedTime}
+            onClick={() => setStep(4)}
             className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Próximo
@@ -415,31 +399,31 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     <div className="space-y-6 animate-in slide-in-from-right duration-300">
       <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">Seus dados</h3>
       <div className="space-y-4">
-        <input 
-          type="text" 
-          placeholder="Nome Completo" 
-          value={customerName} 
-          onChange={(e) => setCustomerName(e.target.value)} 
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 text-sm" 
+        <input
+          type="text"
+          placeholder="Nome Completo"
+          value={customerName}
+          onChange={(e) => setCustomerName(e.target.value)}
+          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 text-sm"
         />
-        <input 
-          type="tel" 
-          placeholder="WhatsApp" 
-          value={customerPhone} 
-          onChange={(e) => setCustomerPhone(formatPhone(e.target.value))} 
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 text-sm" 
+        <input
+          type="tel"
+          placeholder="WhatsApp"
+          value={customerPhone}
+          onChange={(e) => setCustomerPhone(formatPhone(e.target.value))}
+          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 text-sm"
         />
       </div>
       <div className="flex gap-4">
-        <button 
-          onClick={() => setStep(3)} 
+        <button
+          onClick={() => setStep(3)}
           className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic text-xs"
         >
           Voltar
         </button>
-        <button 
-          disabled={customerName.length < 3 || customerPhone.length < 14 || sendingWhatsApp} 
-          onClick={handleFinalizeBooking} 
+        <button
+          disabled={customerName.length < 3 || customerPhone.length < 14 || sendingWhatsApp}
+          onClick={handleFinalizeBooking}
           className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
         >
           {sendingWhatsApp ? (
@@ -481,8 +465,8 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
           <span className="text-lg md:text-xl font-black text-amber-500 italic">R$ {totalPrice.toFixed(2)}</span>
         </div>
       </div>
-      <button 
-        onClick={onComplete} 
+      <button
+        onClick={onComplete}
         className="w-full bg-zinc-800 text-white font-black py-4 md:py-5 rounded-2xl uppercase italic text-sm"
       >
         Concluir

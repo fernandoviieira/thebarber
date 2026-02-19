@@ -18,25 +18,17 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onBack }) => {
   const [showExitWarning, setShowExitWarning] = useState(false);
 
   useEffect(() => {
-    // Recupera a última slug visitada do localStorage
     const savedSlug = localStorage.getItem('last_visited_slug');
     setLastSlug(savedSlug);
-
-    // Verifica se há uma sessão válida para reset de senha
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
-      // No fluxo de reset, o Supabase geralmente tem uma sessão temporária
-      // com o tipo de autenticação 'recovery'
-      const isRecoverySession = session?.user?.aud === 'authenticated' && 
-                                session?.user?.email_confirmed_at;
-      
+      const isRecoverySession = session?.user?.aud === 'authenticated' &&
+        session?.user?.email_confirmed_at;
+
       setHasValidSession(!!session || isRecoverySession);
     };
 
     checkSession();
-
-    // Escuta mudanças na URL para pegar parâmetros de erro
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const errorCode = hashParams.get('error_code');
     const errorDescription = hashParams.get('error_description');
@@ -56,7 +48,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onBack }) => {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (newPassword.length < 6) {
       setMessage({ type: 'error', text: 'A senha deve ter pelo menos 6 caracteres' });
       return;
@@ -77,17 +69,14 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onBack }) => {
 
       if (error) throw error;
 
-      setMessage({ 
-        type: 'success', 
-        text: '✅ Senha atualizada com sucesso! Redirecionando para o login...' 
+      setMessage({
+        type: 'success',
+        text: '✅ Senha atualizada com sucesso! Redirecionando para o login...'
       });
 
-      // Faz logout para garantir que vai para tela de login
       await supabase.auth.signOut();
 
-      // Aguarda 2 segundos e volta para o login
       setTimeout(() => {
-        // Se tinha uma slug salva, volta para a página da barbearia (que vai mostrar o login)
         if (lastSlug) {
           window.location.href = `/${lastSlug}`;
         } else {
@@ -96,9 +85,9 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onBack }) => {
       }, 2000);
 
     } catch (error: any) {
-      setMessage({ 
-        type: 'error', 
-        text: error.message || 'Erro ao atualizar senha' 
+      setMessage({
+        type: 'error',
+        text: error.message || 'Erro ao atualizar senha'
       });
     } finally {
       setLoading(false);
@@ -106,23 +95,17 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onBack }) => {
   };
 
   const handleBackToLogin = () => {
-    // Verifica se já preencheu algum campo de senha
     if (newPassword || confirmPassword) {
       setShowExitWarning(true);
     } else {
-      // Se não preencheu nada, faz logout e volta para o login
       executeBackToLogin();
     }
   };
 
   const executeBackToLogin = async () => {
-    // Faz logout para garantir que vai para tela de login
     await supabase.auth.signOut();
-    
-    // Limpa qualquer sessão residual
     localStorage.removeItem('supabase.auth.token');
-    
-    // Redireciona
+
     if (lastSlug) {
       window.location.href = `/${lastSlug}`;
     } else {
@@ -131,10 +114,9 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onBack }) => {
   };
 
   const handleResendReset = async () => {
-    // Pega o email da URL ou do hash
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const email = hashParams.get('email') || prompt('Digite seu email para receber um novo link:');
-    
+
     if (!email) return;
 
     setLoading(true);
@@ -283,13 +265,12 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onBack }) => {
           </div>
 
           {message && (
-            <div className={`p-5 rounded-2xl flex items-start gap-3 ${
-              message.type === 'success' 
-                ? 'bg-green-500/10 border border-green-500/20 text-green-500' 
+            <div className={`p-5 rounded-2xl flex items-start gap-3 ${message.type === 'success'
+                ? 'bg-green-500/10 border border-green-500/20 text-green-500'
                 : message.type === 'warning'
-                ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-500'
-                : 'bg-red-500/10 border border-red-500/20 text-red-500'
-            }`}>
+                  ? 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-500'
+                  : 'bg-red-500/10 border border-red-500/20 text-red-500'
+              }`}>
               {message.type === 'success' ? (
                 <CheckCircle size={20} className="flex-shrink-0 mt-0.5" />
               ) : message.type === 'warning' ? (
@@ -354,7 +335,7 @@ const ResetPassword: React.FC<ResetPasswordProps> = ({ onBack }) => {
                 >
                   CONTINUAR EDITANDO
                 </button>
-                
+
                 <button
                   onClick={executeBackToLogin}
                   className="w-full bg-zinc-800 text-white font-black py-4 px-6 rounded-2xl hover:bg-zinc-700 transition-all duration-300 flex items-center justify-center gap-2"

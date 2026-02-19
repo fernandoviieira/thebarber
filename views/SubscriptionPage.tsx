@@ -17,16 +17,16 @@ import { supabase } from '@/lib/supabase';
 interface SubscriptionPageProps {
   barbershopId: string;
   userEmail: string;
-  subscriptionStatus?: string; // 'trialing' | 'active' | 'canceled' | ...
-  expiresAt?: string | null;   // ISO string
-  currentPlan?: string | null; // Nome do plano salvo no banco
+  subscriptionStatus?: string; 
+  expiresAt?: string | null;  
+  currentPlan?: string | null; 
 }
 
 type Plan = {
   id: string;
   name: string;
   price: string;
-  period: string; // Ex: 'mês' | '6 meses' | 'ano'
+  period: string; 
   description: string;
   icon: React.ReactNode;
   popular?: boolean;
@@ -128,7 +128,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   const daysRemaining = useMemo(() => getDaysRemainingCalendar(expiresAt), [expiresAt]);
   const isUrgent = useMemo(() => {
     if (daysRemaining === null) return false;
-    return daysRemaining <= 5; // inclui expirado (<0) e até 5 dias
+    return daysRemaining <= 5; 
   }, [daysRemaining]);
 
   const isExpired = daysRemaining !== null && daysRemaining < 0;
@@ -172,17 +172,15 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
 
     setLoadingPlanId(priceId);
     try {
-      // ✅ MODIFICADO: Chamada com tratamento explícito de headers
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: {
-          barbershopId: barbershopId, // Verifique se não está undefined
-          userEmail: userEmail,       // Verifique se não está undefined
-          priceId: priceId            // O ID que vem do clique
+          barbershopId: barbershopId,
+          userEmail: userEmail,       
+          priceId: priceId            
         },
       });
 
       if (error) {
-        // Se o erro vier do invoke, ele detalha aqui
         console.error('Erro Invoke:', error);
         throw error;
       }
@@ -214,11 +212,6 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
       setIsBillingLoading(false);
     }
   };
-
-  /**
-   * UX: quando estiver urgente (inclui expirado), habilita o botão de billing
-   * mesmo se o status estiver inconsistente (ex.: status vazio mas expiresAt existe e expirou).
-   */
   const canOpenBillingPortal = isSubActiveByStatus || isUrgent;
 
   return (
@@ -271,10 +264,6 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
 
         <button
           onClick={handleManageBilling}
-          // Bloqueia se:
-          // 1. Estiver carregando OU
-          // 2. For um usuário em teste (trialing) - pois ainda não tem portal OU
-          // 3. Não tiver permissão de abertura (canOpenBillingPortal)
           disabled={isBillingLoading || subscriptionStatus === 'trialing' || !canOpenBillingPortal}
           className={`flex items-center gap-3 px-8 py-4 rounded-2xl transition-all group border font-black uppercase text-[10px] tracking-widest
                 ${statusTone === 'danger'
@@ -305,7 +294,6 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           const isSelected = selectedPlanId === plan.id;
           const isLoading = loadingPlanId === plan.id;
 
-          // Só bloqueia checkout quando está 100% ok (ativo operacionalmente e não urgente)
           const checkoutDisabled = (subscriptionStatus === 'active') && !isUrgent && !isExpired;
           return (
             <div

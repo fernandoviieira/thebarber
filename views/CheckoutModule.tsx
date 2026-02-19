@@ -22,10 +22,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 }) => {
   const [pdvItems, setPdvItems] = useState<any[]>([]);
   const [localInventory, setLocalInventory] = useState<any[]>(inventory);
-
-  // ✅ NOVO: clientes em estado local para refletir realtime sem F5
   const [localCustomers, setLocalCustomers] = useState<any[]>(customers);
-
   const [selectedBarber, setSelectedBarber] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<any | null>(null);
   const [isVipMode, setIsVipMode] = useState(false);
@@ -51,17 +48,14 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   const [checkingCash, setCheckingCash] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // ✅ Mantém localCustomers sincronizado com prop (primeiro load / mudanças externas)
   useEffect(() => {
     setLocalCustomers(customers || []);
   }, [customers]);
 
-  // ✅ Mantém localInventory sincronizado com prop (primeiro load / mudanças externas)
   useEffect(() => {
     setLocalInventory(inventory || []);
   }, [inventory]);
 
-  // ✅ NOVO: Função para recarregar dados do cliente selecionado (inclui pacotes)
   const reloadSelectedCustomer = useCallback(async () => {
     if (!selectedCustomer?.id) return;
 
@@ -76,8 +70,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
       if (data) {
         setSelectedCustomer(data);
-
-        // ✅ também atualiza na lista local para refletir mudanças (nome, telefone etc.)
         setLocalCustomers(prev => {
           const exists = prev.some(c => c.id === data.id);
           if (!exists) return [data, ...prev];
@@ -108,7 +100,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     }
   }, [barbershopId]);
 
-  // ✅ NOVO: buscar clientes do barbershop (caso queira garantir que o realtime sempre tenha base correta)
   const fetchCustomers = useCallback(async () => {
     if (!barbershopId) return;
     try {
@@ -203,7 +194,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     if (barbershopId) checkCash();
   }, [barbershopId]);
 
-  // ✅ Pacote ativo do cliente (primeiro pacote com créditos restantes)
   const activePkg = useMemo(() => {
     if (!selectedCustomer?.customer_packages) return null;
     const pkg = selectedCustomer.customer_packages.find(
@@ -217,9 +207,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     const pkgName = String(activePkg.package_name || activePkg.name || '').toLowerCase().trim();
     const serviceName = String(itemName || '').toLowerCase().trim();
 
-    // combos genéricos
     if (pkgName === 'combo' || pkgName === 'pacote' || pkgName === 'plano') return true;
-
     return pkgName.includes(serviceName) || serviceName.includes(pkgName);
   }, [activePkg]);
 
@@ -231,10 +219,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     const basePrice = Number(baseService?.price || baseProduct?.price_sell || fallbackPrice);
 
     if (item.type === 'produto') return basePrice;
-
-    // ✅ REGRA DO COMBO:
-    // 1º uso (used_credits == 0): cobra price_paid
-    // demais usos: isento (0)
     if (item.type === 'servico' && activePkg && isItemInActivePackage(item.name)) {
       const jaUsou = Number(activePkg.used_credits) || 0;
       if (jaUsou > 0) return 0;
@@ -252,14 +236,11 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
   const valorTotalAbsoluto = totalFinal + tip;
 
-  // ✅ CORREÇÃO DO BUG: totalPagoInput agora considera corretamente o modo misto
   const totalPagoInput = useMemo(() => {
-    // Se não está no modo misto, considera o valor total absoluto como pago
     if (!isMisto) {
       return valorTotalAbsoluto;
     }
-    
-    // Se está no modo misto, soma os valores inseridos manualmente
+
     return Object.values(splitValues).reduce((acc, curr) =>
       Number(acc) + Number(curr), 0
     ) as number;
@@ -271,10 +252,9 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     return bruto * (1 - feePercent / 100);
   }, [fees]);
 
-  // ✅ CORREÇÃO: descontoNominal agora só calcula se estiver no modo misto
   const descontoNominal = useMemo(() => {
-    if (!isMisto) return 0; // Sem desconto se não estiver no modo misto
-    
+    if (!isMisto) return 0;
+
     const recebido = totalPagoInput;
     const devido = valorTotalAbsoluto;
     return devido > recebido ? devido - recebido : 0;
@@ -354,13 +334,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     }
   }, [hasComboInCart, valorTotalAbsoluto, paymentMethod]);
 
-  // =========================================================
-  // ✅ REALTIME: INVENTORY + CUSTOMERS + CUSTOMER_PACKAGES
-  // =========================================================
   useEffect(() => {
     if (!barbershopId) return;
-
-    // base inicial (garante que o checkout já comece correto)
     fetchInventory();
     fetchCustomers();
 
@@ -393,7 +368,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       )
       .subscribe();
 
-    // ✅ NOVO: Realtime customers para aparecer cliente novo sem F5
     const customersChannel = supabase
       .channel(`rt_customers_${barbershopId}`)
       .on(
@@ -422,7 +396,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             }
 
             if (payload.eventType === 'DELETE') {
-              // se deletar o cliente que está selecionado, limpa seleção
               if (selectedCustomer?.id === payload.old.id) {
                 setSelectedCustomer(null);
                 setIsVipMode(false);
@@ -433,16 +406,12 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             return current;
           });
 
-          // Se o cliente selecionado foi alterado, recarrega completo (inclui pacotes)
           if (payload.eventType === 'UPDATE' && selectedCustomer?.id === payload.new.id) {
             reloadSelectedCustomer();
           }
         }
       )
       .subscribe();
-
-    // ✅ NOVO: Realtime customer_packages (INSERT/UPDATE/DELETE)
-    // Isso resolve "novo combo" sem F5 (ex: inseriu pacote para o cliente)
     const packagesChannel = supabase
       .channel(`rt_customer_packages_${barbershopId}`)
       .on(
@@ -454,7 +423,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           filter: `barbershop_id=eq.${barbershopId}`
         },
         (payload) => {
-          // Se afetar o cliente selecionado, recarrega para refletir combo/créditos na hora
           const affectedCustomerId =
             payload.eventType === 'DELETE' ? payload.old?.customer_id : payload.new?.customer_id;
 
@@ -472,8 +440,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     };
   }, [barbershopId, fetchInventory, fetchCustomers, selectedCustomer?.id, reloadSelectedCustomer]);
 
-  // ✅ Listener adicional: quando há cliente selecionado, escuta eventos dele (insert/update/delete)
-  // Isso ajuda mesmo que você não tenha barbershop_id no pacote (ou se o filtro do barbershop falhar)
   useEffect(() => {
     if (!selectedCustomer?.id) return;
 
@@ -528,7 +494,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       return alert("⚠️ Valor total inválido!");
     }
 
-    // ✅ CORREÇÃO: só valida desconto se estiver no modo misto
     if (isMisto && !hasComboInCart && valorTotalAbsoluto > 0 && valorFaltante > 0.01) {
       const confirmarDesconto = window.confirm(
         `⚠️ VALOR ABAIXO DO TOTAL!\n\n` +

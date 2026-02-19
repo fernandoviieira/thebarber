@@ -9,7 +9,6 @@ export function InstallBanner() {
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
-    // 1. Verifica se já está instalado
     const checkStandalone = () => {
       const standalone =
         window.matchMedia('(display-mode: standalone)').matches ||
@@ -27,7 +26,6 @@ export function InstallBanner() {
 
     if (checkStandalone()) return;
 
-    // 2. Detecta iOS de forma mais precisa
     const detectIOS = () => {
       const userAgent = window.navigator.userAgent.toLowerCase();
       const platform = navigator.platform.toLowerCase();
@@ -47,8 +45,6 @@ export function InstallBanner() {
     };
 
     const iOSDetected = detectIOS();
-
-    // 3. Verifica se já foi fechado recentemente
     const checkDismissed = () => {
       try {
         const lastDismissed = localStorage.getItem('pwa_banner_dismissed');
@@ -67,7 +63,6 @@ export function InstallBanner() {
 
     const wasDismissedRecently = checkDismissed();
 
-    // 4. Mostra o banner se não foi fechado recentemente
     if (!wasDismissedRecently) {
       if (iOSDetected) {
         setIsIOS(true);
@@ -75,7 +70,6 @@ export function InstallBanner() {
       }
     }
 
-    // 5. Handler para Android/Desktop (beforeinstallprompt)
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -86,17 +80,14 @@ export function InstallBanner() {
       }
     };
 
-    // 6. Handler para quando o app é instalado
     const handleAppInstalled = () => {
       setIsVisible(false);
       setShowIOSHelp(false);
     };
 
-    // Adiciona os event listeners
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     window.addEventListener('appinstalled', handleAppInstalled);
 
-    // Timer para mostrar banner após alguns segundos (fallback)
     const showTimer = setTimeout(() => {
       if (!isStandalone && !isVisible && !wasDismissedRecently) {
         setIsVisible(true);
@@ -108,7 +99,7 @@ export function InstallBanner() {
       window.removeEventListener('appinstalled', handleAppInstalled);
       clearTimeout(showTimer);
     };
-  }, []); // ✅ REMOVIDO 'slug' das dependências
+  }, []);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
@@ -140,12 +131,10 @@ export function InstallBanner() {
     localStorage.setItem('pwa_banner_dismissed', Date.now().toString());
   };
 
-  // Não mostra nada se já estiver instalado
   if (isStandalone) {
     return null;
   }
 
-  // Botão flutuante para iOS
   const showIOSFloatingButton = isIOS && !showIOSHelp && !isStandalone;
 
   return (

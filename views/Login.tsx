@@ -44,7 +44,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     setError('');
     setLoading(true);
 
-    // ✅ DEFINA AQUI NO TOPO
     const cleanTargetUrl = window.location.origin + window.location.pathname;
     const path = window.location.pathname.split('/').filter(Boolean)[0];
     const isRegistrarPath = window.location.pathname.includes('registrar');
@@ -52,7 +51,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     try {
       let barbershopId = currentBarbershop?.id;
 
-      // Se não tem ID e não é registro, tenta buscar pelo slug na URL
       if (!barbershopId && !isRegistrarPath && path) {
         const { data: bData } = await supabase
           .from('barbershops')
@@ -66,9 +64,9 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: cleanTargetUrl, // Agora a variável existe!
+          redirectTo: cleanTargetUrl,
           queryParams: {
-            prompt: 'select_account', // Força a escolha de e-mail para você testar Admin vs Cliente
+            prompt: 'select_account',
             access_type: 'offline',
           },
           data: {
@@ -94,9 +92,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
 
     try {
       if (isRegister) {
-        // 1. Criar o usuário no Supabase Auth
         const isRegistrarPath = window.location.pathname.includes('/registrar');
-
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
@@ -115,20 +111,12 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         if (newUser) {
           if (!currentBarbershop) {
             alert('Conta de Administrador criada! Vamos configurar sua unidade.');
-
-            // 🔴 PROBLEMA AQUI: Não chame onLoginSuccess no registro!
-            // O usuário ainda precisa confirmar email ou fazer login
-            // Deixe o App detectar quando o usuário realmente fizer login
-
-            // Em vez de chamar onLoginSuccess, faça login automaticamente
-            // após o registro bem-sucedido
             const { error: signInError } = await supabase.auth.signInWithPassword({
               email,
               password
             });
 
             if (signInError) {
-              // Se não conseguir login automático, volte para tela de login
               setError('Conta criada! Por favor, faça login.');
               setIsRegister(false);
             }
@@ -138,7 +126,6 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           }
         }
       } else {
-        // 2. Login simples
         const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
         if (signInError) throw signInError;
       }

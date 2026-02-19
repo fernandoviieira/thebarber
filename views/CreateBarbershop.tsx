@@ -10,7 +10,6 @@ const CreateBarbershop: React.FC = () => {
   const [step, setStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ✅ Função para formatar telefone automaticamente
   const formatPhone = (value: string) => {
     if (!value) return "";
     value = value.replace(/\D/g, "");
@@ -24,30 +23,27 @@ const CreateBarbershop: React.FC = () => {
     setIsSubmitting(true);
 
     try {
-      // 1. Obtemos a sessão atual para garantir que o ID do usuário está presente
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
+
       if (userError || !user) {
         throw new Error("Sessão inválida ou expirada. Por favor, faça login novamente.");
       }
 
-      // 2. CÁLCULO DO TRIAL (20 dias a partir de agora)
       const trialDays = 20;
       const trialEndsAt = new Date();
       trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
 
-      // 3. INSERÇÃO DA BARBEARIA (incluindo telefone)
       const { data: shop, error: shopError } = await supabase
         .from('barbershops')
         .insert([{
           name,
           slug,
           address,
-          phone: phone || null, // ✅ Salva o telefone (ou null se vazio)
-          owner_id: user.id, 
+          phone: phone || null,
+          owner_id: user.id,
           subscription_status: 'trialing',
           trial_ends_at: trialEndsAt.toISOString(),
-          expires_at: trialEndsAt.toISOString() 
+          expires_at: trialEndsAt.toISOString()
         }])
         .select()
         .single();
@@ -64,16 +60,14 @@ const CreateBarbershop: React.FC = () => {
             id: user.id,
             barbershop_id: shop.id,
             role: 'admin',
-            full_name: user.user_metadata?.full_name || name 
+            full_name: user.user_metadata?.full_name || name
           }, { onConflict: 'id' });
 
         if (profileError) throw profileError;
 
-        // Sucesso! Avança para a tela de confirmação
         setStep(2);
       }
     } catch (err: any) {
-      // Tratamento de erro detalhado para o usuário
       console.error("Erro completo:", err);
       alert("Erro ao configurar unidade: " + (err.message || "Erro desconhecido"));
     } finally {

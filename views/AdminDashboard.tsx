@@ -88,7 +88,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const [isSarahAnalyzing, setIsSarahAnalyzing] = useState(false);
   const [sarahMessage, setSarahMessage] = useState<string | null>(null);
   const [isAudioEnabled, setIsAudioEnabled] = useState(() => {
-    // Inicializa com o valor salvo no localStorage, padrão false caso não exista
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`audio_enabled_${barbershopId}`);
       return saved === 'true';
@@ -96,7 +95,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     return false;
   });
 
-  // Busca dados administrativos (sem appointments)
   const fetchData = useCallback(async () => {
     if (!barbershopId) return;
     setLoadingData(true);
@@ -127,14 +125,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     }
   }, [barbershopId]);
 
-  // Busca appointments separadamente
   useEffect(() => {
     if (barbershopId && fetchAppointments) {
       fetchAppointments(barbershopId);
     }
   }, [barbershopId]);
 
-  // Efeito principal: Realtime + Carga Inicial
   useEffect(() => {
     fetchData();
 
@@ -166,7 +162,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     };
   }, [barbershopId, fetchData, isAudioEnabled]);
 
-  // Timeout de segurança para loading
   useEffect(() => {
     const timeout = setTimeout(() => {
       if (loadingData) {
@@ -178,14 +173,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     return () => clearTimeout(timeout);
   }, [loadingData]);
 
-  // Salva a preferência sempre que o usuário alternar o botão
   useEffect(() => {
     if (barbershopId) {
       localStorage.setItem(`audio_enabled_${barbershopId}`, isAudioEnabled.toString());
     }
   }, [isAudioEnabled, barbershopId]);
 
-  // Cálculos Memoizados
   const pendingApps = useMemo(() => {
     return (appointments as Appointment[] || []).filter(
       app => app.status === 'pendente' && app.barbershop_id === barbershopId
@@ -195,17 +188,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const filteredApps = useMemo(() => {
     if (!startDate || !endDate || !appointments) return [];
 
-    // Criamos cópias para não afetar o estado do componente
     const start = new Date(startDate);
-    start.setHours(0, 0, 0, 0); // Usa hora local
-
+    start.setHours(0, 0, 0, 0);
     const end = new Date(endDate);
-    end.setHours(23, 59, 59, 999); // Usa hora local
+    end.setHours(23, 59, 59, 999);
 
     return (appointments as Appointment[]).filter(app => {
       if (app.barbershop_id !== barbershopId) return false;
-
-      // Converte a string "YYYY-MM-DD" para um objeto Date local
       const [year, month, day] = app.date.split('-').map(Number);
       const appDate = new Date(year, month - 1, day);
 
@@ -316,7 +305,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   };
 
   const trialEnd = Math.max(0, Math.ceil((new Date(trialDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)));
-  
+
   if (loadingData) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#0f1115] text-amber-500">
@@ -333,7 +322,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
           <div className="flex justify-between items-start">
             <div className="space-y-3">
 
-              {(trialDate && trialEnd !== 0)  && (
+              {(trialDate && trialEnd !== 0) && (
                 <div className="relative overflow-hidden group bg-slate-900/50 border border-white/5 p-4 rounded-2xl flex items-center gap-4 min-w-[240px] shadow-2xl">
                   {/* Efeito de brilho de fundo */}
                   <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-500/10 blur-3xl rounded-full" />
@@ -362,7 +351,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
                     <div className="w-full h-1 bg-white/5 rounded-full mt-2 overflow-hidden">
                       <div
                         className="h-full bg-gradient-to-r from-amber-600 to-amber-400"
-                        style={{ width: '65%' }} // Aqui você calcularia a % baseada no total de 7 ou 15 dias
+                        style={{ width: '65%' }}
                       />
                     </div>
                   </div>
