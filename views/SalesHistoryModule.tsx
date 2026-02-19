@@ -13,16 +13,26 @@ interface SalesHistoryProps {
   appointments: any[];
   onDelete: (id: string) => Promise<void>;
   barbershopId: string | null;
+<<<<<<< HEAD
   servicesList: any[];
   productsList: any[];
   barbers: any[]
+=======
+  servicesList: any[]; 
+  productsList: any[]; 
+  barbersData: any[];
+>>>>>>> bb373c6b72ad49ae17ef2cbc098d24826dc7a60f
 }
 
 type PaymentFilter = 'todos' | 'dinheiro' | 'pix' | 'debito' | 'credito' | 'pacote';
 type DateFilter = 'hoje' | 'ontem' | '7dias' | '30dias' | 'personalizado' | 'tudo';
 
 
+<<<<<<< HEAD
 const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelete, barbershopId, servicesList, productsList, barbers }) => {
+=======
+const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelete, barbershopId, servicesList, productsList, barbersData }) => {
+>>>>>>> bb373c6b72ad49ae17ef2cbc098d24826dc7a60f
   const [barberFilter, setBarberFilter] = useState<string>('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('todos');
