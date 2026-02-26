@@ -40,20 +40,19 @@
 <body class="bg-zinc-950 text-zinc-100">
   <div id="root"></div>
 
+  <!-- ✅ SERVICE WORKER REGISTRATION -->
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const path = window.location.pathname.split('/').filter(Boolean)[0];
       const reserved = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'install', ''];
 
+      // ✅ NO INDEX.HTML
       const manifestLink = document.querySelector('link[rel="manifest"]');
       if (manifestLink) {
-        // ✅ Adicionada a barra entre api e manifest para bater com o server.js
-        const apiBase = "https://api.contafacilpro.com.br/api/manifest";
-
         if (path && !reserved.includes(path)) {
-          manifestLink.href = `${apiBase}/${path}?t=${Date.now()}`;
+          manifestLink.href = `/api-manifest/${path}?t=${Date.now()}`;
         } else {
-          manifestLink.href = `${apiBase}/default?t=${Date.now()}`;
+          manifestLink.href = `/api-manifest/default?t=${Date.now()}`;
         }
       }
     });
