@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Service, Barber } from '../types';
 import {
   Check, ArrowLeft, Calendar as CalendarIcon, Clock,
-  CheckCircle2, User, Phone, Scissors, Loader2, AlertTriangle
+  CheckCircle2, User, Phone, Scissors, Loader2, AlertTriangle,
+  Sparkles, Clock3, DollarSign
 } from 'lucide-react';
 import { useBooking } from './BookingContext';
 import { supabase } from '@/lib/supabase';
@@ -16,6 +17,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   const { addAppointment, appointments, fetchAppointments, checkSlotAvailability, reservingSlots } = useBooking();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(true);
+  const servicesGridRef = useRef<HTMLDivElement>(null);
 
   const [currentBarbershopId, setCurrentBarbershopId] = useState<string | null>(null);
   const [availableBarbers, setAvailableBarbers] = useState<Barber[]>([]);
@@ -29,7 +31,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     closing_time: string;
   } | null>(null);
 
-  const [selectedServices, setSelectedServices] = useState<Service[]>([]);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [selectedBarber, setSelectedBarber] = useState<Barber | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
@@ -91,14 +93,14 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     loadBookingData();
   }, []);
 
-  const totalDuration = selectedServices.reduce((acc, s) => {
-    const d = typeof s.duration === 'string'
-      ? parseInt(s.duration.replace(/\D/g, ''))
-      : s.duration;
-    return acc + (Number(d) || 0);
-  }, 0);
+  const totalDuration = selectedService ? (() => {
+    const d = typeof selectedService.duration === 'string'
+      ? parseInt(selectedService.duration.replace(/\D/g, ''))
+      : selectedService.duration;
+    return Number(d) || 0;
+  })() : 0;
 
-  const totalPrice = selectedServices.reduce((acc, s) => acc + Number(s.price), 0);
+  const totalPrice = selectedService ? Number(selectedService.price) : 0;
 
   const timeToMinutes = (t: string) => {
     if (!t) return 0;
@@ -128,8 +130,8 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   };
 
   const handleFinalizeBooking = async () => {
-    if (!selectedBarber || !currentBarbershopId) {
-      console.warn("⚠️ [Booking] Tentativa de finalizar sem barbeiro ou ID da barbearia.");
+    if (!selectedBarber || !currentBarbershopId || !selectedService) {
+      console.warn("⚠️ [Booking] Tentativa de finalizar sem dados completos.");
       return;
     }
 
@@ -150,7 +152,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     const newBooking = {
       customerName,
       customerPhone,
-      service: selectedServices.map(s => s.name).join(', '),
+      service: selectedService.name,
       barber: selectedBarber.name,
       date: selectedDate,
       time: selectedTime,
@@ -206,6 +208,22 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     return value.substring(0, 15);
   };
 
+  // Scroll suave para o topo da grade quando selecionar um serviço
+  const handleServiceSelect = (service: Service) => {
+    setSelectedService(service);
+    
+    // Scroll suave para o topo da grade de serviços
+    setTimeout(() => {
+      if (servicesGridRef.current) {
+        servicesGridRef.current.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'start',
+          inline: 'nearest'
+        });
+      }
+    }, 100);
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
@@ -216,82 +234,205 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   }
 
   const renderStep1 = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">O que vamos fazer?</h3>
-      <div className="grid grid-cols-1 gap-3">
-        {availableServices.map(service => (
-          <button
-            key={service.id}
-            onClick={() => {
-              if (selectedServices[0]?.id === service.id) {
-                setSelectedServices([]);
-              } else {
-                setSelectedServices([service]);
-              }
-            }}
-            className={`w-full flex items-center justify-between p-4 md:p-5 rounded-2xl border transition-all ${selectedServices[0]?.id === service.id
-              ? 'bg-amber-500/10 border-amber-500'
-              : 'bg-zinc-900 border-zinc-800'
-              }`}
-          >
-            <div className="text-left">
-              <p className="font-black text-white italic uppercase text-sm md:text-base">{service.name}</p>
-              <p className="text-[9px] md:text-[10px] font-bold text-zinc-500 uppercase tracking-widest italic">{service.duration}</p>
-            </div>
-            <span className="font-black text-amber-500 italic text-sm md:text-base">R$ {Number(service.price).toFixed(2)}</span>
-          </button>
-        ))}
+    <div className="space-y-4 animate-in slide-in-from-right duration-300 pb-32 relative">
+      {/* Header fixo */}
+      <div className="sticky top-0 bg-black/95 backdrop-blur-sm z-20 py-4 -mt-4 mb-2 border-b border-zinc-800">
+        <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">
+          Escolha seu serviço
+        </h3>
       </div>
-      <button
-        disabled={selectedServices.length === 0}
-        onClick={() => setStep(2)}
-        className="w-full bg-amber-500 text-black font-black py-4 md:py-5 rounded-2xl uppercase italic text-sm shadow-lg shadow-amber-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+
+      {/* Grid de serviços - com altura limitada e scroll */}
+      <div 
+        ref={servicesGridRef}
+        className="grid grid-cols-2 gap-3 md:gap-4 max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-transparent"
       >
-        Continuar
-      </button>
+        {availableServices.map(service => {
+          const isSelected = selectedService?.id === service.id;
+          const durationText = typeof service.duration === 'string' 
+            ? service.duration 
+            : `${service.duration}min`;
+
+          return (
+            <button
+              key={service.id}
+              onClick={() => handleServiceSelect(service)}
+              className={`group relative overflow-hidden rounded-2xl border-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${
+                isSelected
+                  ? 'border-amber-500 bg-gradient-to-br from-amber-500/20 to-transparent shadow-lg shadow-amber-500/20'
+                  : 'border-zinc-800 bg-zinc-900/50 hover:border-zinc-700 hover:bg-zinc-900'
+              }`}
+            >
+              {/* Efeito de brilho no hover */}
+              <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transform-gpu" />
+              
+              <div className="relative p-4 flex flex-col items-center text-center gap-3">
+                {/* Ícone do serviço */}
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all ${
+                  isSelected ? 'bg-amber-500' : 'bg-zinc-800 group-hover:bg-zinc-700'
+                }`}>
+                  <Scissors className={`w-8 h-8 transition-all ${
+                    isSelected ? 'text-black rotate-12' : 'text-zinc-400'
+                  }`} />
+                </div>
+
+                {/* Informações do serviço */}
+                <div className="w-full">
+                  <h4 className={`font-black text-sm md:text-base transition-colors line-clamp-2 ${
+                    isSelected ? 'text-amber-500' : 'text-white'
+                  }`}>
+                    {service.name}
+                  </h4>
+                  
+                  <div className="flex flex-col items-center gap-1 mt-2">
+                    <span className="flex items-center gap-1 text-[10px] font-bold text-zinc-500">
+                      <Clock3 size={10} />
+                      {durationText}
+                    </span>
+                    <span className="flex items-center gap-1 text-xs font-black text-amber-500">
+                      <DollarSign size={12} />
+                      R$ {Number(service.price).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Indicador de seleção */}
+                {isSelected && (
+                  <div className="absolute top-2 right-2 w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center animate-in zoom-in duration-200">
+                    <Check size={14} className="text-black" />
+                  </div>
+                )}
+              </div>
+
+              {/* Barra decorativa superior para selecionado */}
+              {isSelected && (
+                <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500 animate-in slide-in-from-top duration-300" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Mensagem quando não há serviços */}
+      {availableServices.length === 0 && (
+        <div className="text-center py-12">
+          <p className="text-zinc-500 font-black uppercase italic text-sm">
+            Nenhum serviço disponível no momento
+          </p>
+        </div>
+      )}
+
+      {/* Botão Continuar Flutuante/Suspenso */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black via-black to-transparent pt-8 pb-4 px-4">
+        <div className="max-w-xl mx-auto">
+          {/* Mini resumo quando serviço selecionado */}
+          {selectedService && (
+            <div className="bg-zinc-900/95 backdrop-blur-sm border border-zinc-800 rounded-2xl p-3 mb-3 animate-in slide-in-from-bottom duration-300">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                    <Scissors size={16} className="text-amber-500" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                      Serviço selecionado
+                    </p>
+                    <p className="text-xs font-black text-white line-clamp-1">
+                      {selectedService.name}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="block font-black text-amber-500">
+                    R$ {totalPrice.toFixed(2)}
+                  </span>
+                  <span className="text-[8px] font-bold text-zinc-600">
+                    {totalDuration}min
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Botão Continuar */}
+          <button
+            disabled={!selectedService}
+            onClick={() => setStep(2)}
+            className="w-full bg-amber-500 text-black font-black py-5 rounded-2xl uppercase italic text-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-400 transition-all shadow-2xl shadow-amber-500/30 flex items-center justify-center gap-3"
+          >
+            {selectedService ? (
+              <>
+                Continuar
+              </>
+            ) : (
+              'Selecione um serviço'
+            )}
+          </button>
+
+          {/* Botão Cancelar */}
+          <button
+            onClick={onCancel}
+            className="w-full mt-2 text-zinc-600 font-black py-3 text-xs uppercase italic hover:text-zinc-400 transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+
+      {/* Espaçamento inferior para compensar o botão fixo */}
+      <div className="h-36" />
     </div>
   );
 
   const renderStep2 = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">
+    <div className="space-y-6 animate-in slide-in-from-right duration-300 pb-32 relative">
+      <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter sticky top-0 bg-black/95 backdrop-blur-sm z-10 py-4 -mt-4 border-b border-zinc-800">
         Qual profissional?
       </h3>
-      <div className="grid grid-cols-2 gap-3 md:gap-4">
+      
+      <div className="grid grid-cols-2 gap-3 md:gap-4 max-h-[60vh] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-zinc-800">
         {availableBarbers.map(barber => (
           <button
             key={barber.id}
             onClick={() => setSelectedBarber(barber)}
-            className={`flex flex-col items-center p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all ${selectedBarber?.id === barber.id
-              ? 'bg-amber-500/10 border-amber-500 shadow-lg'
-              : 'bg-zinc-900 border-zinc-800'
-              }`}
+            className={`flex flex-col items-center p-4 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all hover:scale-105 active:scale-95 ${
+              selectedBarber?.id === barber.id
+                ? 'bg-amber-500/10 border-amber-500 shadow-lg shadow-amber-500/20'
+                : 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
+            }`}
           >
-            <div className="w-16 h-16 md:w-20 md:h-20 rounded-full mb-3 bg-zinc-950 flex items-center justify-center border border-zinc-800 shadow-inner">
+            <div className="w-16 h-16 md:w-20 md:h-20 rounded-full mb-3 bg-zinc-950 flex items-center justify-center border-2 border-zinc-800 shadow-inner">
               <Scissors size={48} className="text-amber-500 -rotate-45" />
             </div>
-
             <span className="font-black text-white italic uppercase text-[10px] md:text-xs text-center">
               {barber.name}
             </span>
           </button>
         ))}
       </div>
-      <div className="flex gap-4">
-        <button
-          onClick={() => setStep(1)}
-          className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic text-xs"
-        >
-          Voltar
-        </button>
-        <button
-          disabled={!selectedBarber}
-          onClick={() => setStep(3)}
-          className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Próximo
-        </button>
+
+      {/* Botões fixos no rodapé */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black via-black to-transparent pt-8 pb-4 px-4">
+        <div className="max-w-xl mx-auto">
+          <div className="flex gap-4">
+            <button
+              onClick={() => setStep(1)}
+              className="flex-1 bg-zinc-800 font-black py-5 rounded-2xl text-white uppercase italic text-sm hover:bg-zinc-700 transition-all"
+            >
+              Voltar
+            </button>
+            <button
+              disabled={!selectedBarber}
+              onClick={() => setStep(3)}
+              className="flex-1 bg-amber-500 text-black font-black py-5 rounded-2xl uppercase italic text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-400 transition-all"
+            >
+              Próximo
+            </button>
+          </div>
+        </div>
       </div>
+      
+      <div className="h-24" />
     </div>
   );
 
@@ -301,8 +442,10 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
     const currentTotalMinutes = nowH * 60 + nowM;
 
     return (
-      <div className="space-y-6 animate-in slide-in-from-right duration-300">
-        <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">Escolha o Horário</h3>
+      <div className="space-y-6 animate-in slide-in-from-right duration-300 pb-32 relative">
+        <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter sticky top-0 bg-black/95 backdrop-blur-sm z-10 py-4 -mt-4 border-b border-zinc-800">
+          Escolha o Horário
+        </h3>
 
         {/* Grid de Datas */}
         <div className="flex gap-2 md:gap-3 overflow-x-auto pb-4 scrollbar-hide -mx-4 px-4">
@@ -319,12 +462,13 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
                 key={i}
                 disabled={!isWorkingDay}
                 onClick={() => { setSelectedDate(value); setSelectedTime(''); }}
-                className={`flex-shrink-0 w-16 md:w-20 py-4 md:py-5 rounded-2xl border transition-all flex flex-col items-center justify-center ${selectedDate === value
-                  ? 'bg-amber-500 text-black border-amber-500 shadow-lg'
-                  : isWorkingDay
-                    ? 'bg-zinc-900 border-zinc-800'
-                    : 'opacity-10 grayscale cursor-not-allowed'
-                  }`}
+                className={`flex-shrink-0 w-16 md:w-20 py-4 md:py-5 rounded-2xl border transition-all hover:scale-105 active:scale-95 flex flex-col items-center justify-center ${
+                  selectedDate === value
+                    ? 'bg-amber-500 text-black border-amber-500 shadow-lg'
+                    : isWorkingDay
+                      ? 'bg-zinc-900 border-zinc-800 hover:border-zinc-700'
+                      : 'opacity-10 grayscale cursor-not-allowed'
+                }`}
               >
                 <p className="text-[8px] md:text-[9px] uppercase font-black italic">{dateStr.split(' ')[0]}</p>
                 <p className="text-lg md:text-xl font-black italic">{dateStr.split(' ')[1]}</p>
@@ -334,7 +478,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
         </div>
 
         {selectedDate && (
-          <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 md:grid-cols-4 gap-2 max-h-[40vh] overflow-y-auto p-1 scrollbar-thin scrollbar-thumb-zinc-800">
             {Array.from({ length: 24 * 4 }, (_, i) => {
               const hour = Math.floor(i / 4);
               const min = (i % 4) * 15;
@@ -363,14 +507,14 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
                   key={i}
                   disabled={isOccupied || isPastTime || isReserving}
                   onClick={() => setSelectedTime(timeStr)}
-                  className={`py-3 rounded-xl border transition-all text-[11px] font-black italic 
+                  className={`py-3 rounded-xl border transition-all text-[11px] font-black italic hover:scale-105 active:scale-95
                   ${selectedTime === timeStr
                       ? 'bg-amber-500 text-black border-amber-500 scale-105 shadow-lg shadow-amber-500/20'
                       : (isOccupied || isPastTime)
                         ? 'opacity-20 line-through cursor-not-allowed bg-zinc-950 border-zinc-900'
                         : isReserving
                           ? 'opacity-50 cursor-not-allowed bg-zinc-900 border-amber-500/50 animate-pulse'
-                          : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-amber-500/50'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-amber-500/50 hover:text-white'
                     }`}
                 >
                   {timeStr}
@@ -381,61 +525,84 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
           </div>
         )}
 
-        <div className="flex gap-4">
-          <button onClick={() => setStep(2)} className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic text-xs">Voltar</button>
-          <button
-            disabled={!selectedDate || !selectedTime}
-            onClick={() => setStep(4)}
-            className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Próximo
-          </button>
+        {/* Botões fixos no rodapé */}
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black via-black to-transparent pt-8 pb-4 px-4">
+          <div className="max-w-xl mx-auto">
+            <div className="flex gap-4">
+              <button 
+                onClick={() => setStep(2)} 
+                className="flex-1 bg-zinc-800 font-black py-5 rounded-2xl text-white uppercase italic text-sm hover:bg-zinc-700 transition-all"
+              >
+                Voltar
+              </button>
+              <button
+                disabled={!selectedDate || !selectedTime}
+                onClick={() => setStep(4)}
+                className="flex-1 bg-amber-500 text-black font-black py-5 rounded-2xl uppercase italic text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-400 transition-all"
+              >
+                Próximo
+              </button>
+            </div>
+          </div>
         </div>
+        
+        <div className="h-24" />
       </div>
     );
   };
 
   const renderStep4 = () => (
-    <div className="space-y-6 animate-in slide-in-from-right duration-300">
-      <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter">Seus dados</h3>
+    <div className="space-y-6 animate-in slide-in-from-right duration-300 pb-32 relative">
+      <h3 className="text-xl md:text-2xl font-black text-amber-500 text-center uppercase italic tracking-tighter sticky top-0 bg-black/95 backdrop-blur-sm z-10 py-4 -mt-4 border-b border-zinc-800">
+        Seus dados
+      </h3>
+      
       <div className="space-y-4">
         <input
           type="text"
           placeholder="Nome Completo"
           value={customerName}
           onChange={(e) => setCustomerName(e.target.value)}
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 text-sm"
+          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 text-sm transition-all"
         />
         <input
           type="tel"
           placeholder="WhatsApp"
           value={customerPhone}
           onChange={(e) => setCustomerPhone(formatPhone(e.target.value))}
-          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 text-sm"
+          className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl p-4 md:p-5 text-white font-black italic outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500/50 text-sm transition-all"
         />
       </div>
-      <div className="flex gap-4">
-        <button
-          onClick={() => setStep(3)}
-          className="flex-1 bg-zinc-800 font-black py-4 rounded-2xl text-white uppercase italic text-xs"
-        >
-          Voltar
-        </button>
-        <button
-          disabled={customerName.length < 3 || customerPhone.length < 14 || sendingWhatsApp}
-          onClick={handleFinalizeBooking}
-          className="flex-1 bg-amber-500 text-black font-black py-4 rounded-2xl uppercase italic text-xs disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-        >
-          {sendingWhatsApp ? (
-            <>
-              <Loader2 className="animate-spin" size={16} />
-              Finalizando...
-            </>
-          ) : (
-            'Finalizar'
-          )}
-        </button>
+
+      {/* Botões fixos no rodapé */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-gradient-to-t from-black via-black to-transparent pt-8 pb-4 px-4">
+        <div className="max-w-xl mx-auto">
+          <div className="flex gap-4">
+            <button
+              onClick={() => setStep(3)}
+              className="flex-1 bg-zinc-800 font-black py-5 rounded-2xl text-white uppercase italic text-sm hover:bg-zinc-700 transition-all"
+            >
+              Voltar
+            </button>
+            <button
+              disabled={customerName.length < 3 || customerPhone.length < 14 || sendingWhatsApp}
+              onClick={handleFinalizeBooking}
+              className="flex-1 bg-amber-500 text-black font-black py-5 rounded-2xl uppercase italic text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-amber-400 transition-all flex items-center justify-center gap-2"
+            >
+              {sendingWhatsApp ? (
+                <>
+                  <Loader2 className="animate-spin" size={16} />
+                  Finalizando...
+                </>
+              ) : (
+                'Finalizar'
+              )}
+            </button>
+          </div>
+        </div>
       </div>
+      
+      <div className="h-24" />
     </div>
   );
 
@@ -446,7 +613,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       <div className="bg-zinc-900/50 p-6 md:p-10 rounded-[2rem] md:rounded-[3rem] border border-zinc-800 text-left space-y-4 shadow-2xl">
         <div className="flex justify-between items-center">
           <span className="text-[10px] font-black text-zinc-500 uppercase">Serviço</span>
-          <span className="font-black italic text-sm">{selectedServices.map(s => s.name).join(', ')}</span>
+          <span className="font-black italic text-sm">{selectedService?.name}</span>
         </div>
         <div className="flex justify-between items-center">
           <span className="text-[10px] font-black text-zinc-500 uppercase">Profissional</span>
@@ -467,7 +634,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
       </div>
       <button
         onClick={onComplete}
-        className="w-full bg-zinc-800 text-white font-black py-4 md:py-5 rounded-2xl uppercase italic text-sm"
+        className="w-full bg-zinc-800 text-white font-black py-4 md:py-5 rounded-2xl uppercase italic text-sm hover:bg-zinc-700 transition-all"
       >
         Concluir
       </button>
@@ -475,7 +642,7 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
   );
 
   return (
-    <div className="w-full max-w-xl mx-auto px-4 py-4 md:py-8 overflow-x-hidden">
+    <div className="w-full max-w-xl mx-auto px-4 py-4 md:py-8 overflow-x-hidden min-h-screen">
       {step === 1 && renderStep1()}
       {step === 2 && renderStep2()}
       {step === 3 && renderStep3()}
