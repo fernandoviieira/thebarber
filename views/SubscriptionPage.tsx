@@ -128,7 +128,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   const daysRemaining = useMemo(() => getDaysRemainingCalendar(expiresAt), [expiresAt]);
   const isUrgent = useMemo(() => {
     if (daysRemaining === null) return false;
-    return daysRemaining <= 5; 
+    return daysRemaining <= 10; 
   }, [daysRemaining]);
 
   const isExpired = daysRemaining !== null && daysRemaining < 0;
@@ -207,7 +207,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
       if (error) throw error;
       if (data?.url) window.location.href = data.url;
     } catch (err) {
-      alert('Erro ao acessar o portal financeiro.');
+      alert('Você ainda não possui uma assinatura ativa. Escolha um plano abaixo primeiro!');
     } finally {
       setIsBillingLoading(false);
     }
