@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import {
   ShoppingCart, Loader2, Plus, Minus, Crown,
   Search, User, Trash2, UserPlus, CheckCircle2, Banknote, QrCode,
-  CreditCard, AlertTriangle, Layers, Zap, Coins, Package
+  CreditCard, AlertTriangle, Layers, Zap, Coins, Package, Award
 } from 'lucide-react';
 
 interface CheckoutProps {
@@ -30,17 +30,17 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   const [paymentMethod, setPaymentMethod] =
     useState<'dinheiro' | 'pix' | 'debito' | 'credito' | 'pacote'>('pix');
 
+  const [isSubscriber, setIsSubscriber] = useState(false);
+  const [activeSubscription, setActiveSubscription] = useState<any | null>(null);
+  const [checkingSubscriber, setCheckingSubscriber] = useState(false);
   const [fees, setFees] = useState<any>({
     fee_dinheiro: 0, fee_pix: 0, fee_debito: 0, fee_credito: 0
   });
-
   const [splitValues, setSplitValues] = useState<Record<string, number>>({
     dinheiro: 0, pix: 0, debito: 0, credito: 0, pacote: 0
   });
-
   const [tip, setTip] = useState<number>(0);
   const [loadingData, setLoadingData] = useState(true);
-
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -55,6 +55,84 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   useEffect(() => {
     setLocalInventory(inventory || []);
   }, [inventory]);
+
+  const checkIfSubscriber = useCallback(async (customerId?: string, forcedPhone?: string) => {
+    if ((!customerId && !forcedPhone) || !barbershopId) return;
+    setCheckingSubscriber(true);
+
+    try {
+      let targetPhone = forcedPhone;
+      if (customerId && customerId !== 'temp-id' && !targetPhone) {
+        const { data: customerData } = await supabase
+          .from('customers')
+          .select('phone')
+          .eq('id', customerId)
+          .single();
+        targetPhone = customerData?.phone;
+      }
+
+      if (!targetPhone || targetPhone === 'Balcão') {
+        setIsSubscriber(false);
+        setCheckingSubscriber(false);
+        return;
+      }
+
+      const cleanPhone = targetPhone.replace(/\D/g, '');
+
+      const { data, error: subError } = await supabase
+        .from('club_subscriptions')
+        .select(`
+        id,
+        status,
+        plan:plan_id ( id, name, limit_services ),
+        profile:customer_id ( phone ) 
+      `)
+        .eq('status', 'active')
+        .eq('barbershop_id', barbershopId)
+        .filter('profile.phone', 'ilike', `%${cleanPhone}%`)
+        .maybeSingle();
+
+      if (subError) throw subError;
+
+      if (data) {
+        const { data: usageData, error: usageError } = await supabase
+          .from('club_usage_history')
+          .select('id, used_at')
+          .eq('subscription_id', data.id)
+          .gte('used_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString());
+
+        const usedCount = usageData?.length || 0;
+        const limit = data.plan?.limit_services || 999;
+
+        setIsSubscriber(true);
+        setActiveSubscription({
+          id: data.id,
+          planId: data.plan?.id,
+          planName: data.plan?.name || 'Plano',
+          limit: limit,
+          usedCount: usedCount,
+          remaining: Math.max(0, limit - usedCount)
+        });
+      } else {
+        setIsSubscriber(false);
+        setActiveSubscription(null);
+      }
+    } catch (error) {
+      console.error('❌ Erro na verificação:', error);
+      setIsSubscriber(false);
+    } finally {
+      setCheckingSubscriber(false);
+    }
+  }, [barbershopId]);
+
+  useEffect(() => {
+    if (selectedCustomer?.id) {
+      checkIfSubscriber(selectedCustomer.id);
+    } else {
+      setIsSubscriber(false);
+      setActiveSubscription(null);
+    }
+  }, [selectedCustomer, checkIfSubscriber]);
 
   const reloadSelectedCustomer = useCallback(async () => {
     if (!selectedCustomer?.id) return;
@@ -76,11 +154,12 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
           return prev.map(c => (c.id === data.id ? data : c));
         });
 
+        await checkIfSubscriber(data.id);
       }
     } catch (error) {
       console.error('❌ Erro ao recarregar cliente:', error);
     }
-  }, [selectedCustomer?.id]);
+  }, [selectedCustomer?.id, checkIfSubscriber]);
 
   const fetchInventory = useCallback(async () => {
     if (!barbershopId) return;
@@ -149,8 +228,16 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   useEffect(() => {
     if (initialAppointment && services.length > 0 && !isInitialized) {
       setPdvItems([]);
-
       if (initialAppointment.barber) setSelectedBarber(initialAppointment.barber);
+      if (initialAppointment.customerPhone && initialAppointment.customerPhone !== 'Balcão') {
+        checkIfSubscriber(undefined, initialAppointment.customerPhone);
+
+        setSelectedCustomer({
+          name: initialAppointment.customerName,
+          phone: initialAppointment.customerPhone,
+          id: 'temp-id'
+        });
+      }
 
       const serviceObj = services.find(s =>
         s.name.toLowerCase() === String(initialAppointment.service || '').toLowerCase()
@@ -218,7 +305,15 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     const fallbackPrice = item.price !== undefined ? item.price : 0;
     const basePrice = Number(baseService?.price || baseProduct?.price_sell || fallbackPrice);
 
+
     if (item.type === 'produto') return basePrice;
+
+    if (item.type === 'servico' && isSubscriber && activeSubscription) {
+      if (activeSubscription.remaining > 0) {
+        return 0;
+      }
+    }
+
     if (item.type === 'servico' && activePkg && isItemInActivePackage(item.name)) {
       const jaUsou = Number(activePkg.used_credits) || 0;
       if (jaUsou > 0) return 0;
@@ -226,7 +321,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     }
 
     return basePrice;
-  }, [activePkg, services, localInventory, isItemInActivePackage]);
+  }, [activePkg, services, localInventory, isItemInActivePackage, isSubscriber, activeSubscription]);
 
   const totalFinal = useMemo(() =>
     pdvItems.reduce((acc, item) =>
@@ -270,15 +365,56 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     });
   }, [pdvItems, activePkg, isItemInActivePackage]);
 
+  const hasSubscriberService = useMemo(() => {
+    if (!isSubscriber || !activeSubscription || pdvItems.length === 0) return false;
+
+    const hasService = pdvItems.some(item => item.type === 'servico');
+    const hasCredits = activeSubscription.remaining > 0;
+
+    return isSubscriber && hasService && hasCredits;
+  }, [isSubscriber, activeSubscription, pdvItems]);
+
   useEffect(() => {
     if (isInitialized && valorTotalAbsoluto >= 0 && !isMisto) {
-      const method = hasComboInCart ? 'pacote' : paymentMethod;
+      const method = hasSubscriberService ? 'pacote' : (hasComboInCart ? 'pacote' : paymentMethod);
+
       setSplitValues({
         dinheiro: 0, pix: 0, debito: 0, credito: 0, pacote: 0,
         [method]: valorTotalAbsoluto
       });
     }
-  }, [valorTotalAbsoluto, hasComboInCart, isMisto, isInitialized, paymentMethod]);
+  }, [valorTotalAbsoluto, hasComboInCart, hasSubscriberService, isMisto, isInitialized, paymentMethod]);
+
+  const checkSubscriptionByPhone = useCallback(async (phone: string) => {
+    if (!phone || phone === 'Balcão' || !barbershopId) return;
+    setCheckingSubscriber(true);
+
+    try {
+      const cleanPhone = phone.replace(/\D/g, '');
+
+      const { data, error } = await supabase
+        .from('club_subscriptions')
+        .select(`
+        id,
+        status,
+        plan:plan_id ( id, name, limit_services ),
+        profile:customer_id ( phone ) 
+      `)
+        .eq('status', 'active')
+        .eq('barbershop_id', barbershopId)
+        .filter('profile.phone', 'ilike', `%${cleanPhone}%`)
+        .maybeSingle();
+
+      if (data) {
+        setIsSubscriber(true);
+        setActiveSubscription({ /* ... dados da sub ... */ });
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCheckingSubscriber(false);
+    }
+  }, [barbershopId]);
 
   const { netValue, taxasCartao } = useMemo(() => {
     let liquidoTotal = 0;
@@ -294,7 +430,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         liquidoTotal += (value - valorTaxa);
       });
     } else {
-      const method = hasComboInCart ? 'pacote' : paymentMethod;
+      const method = hasSubscriberService ? 'pacote' : (hasComboInCart ? 'pacote' : paymentMethod);
       const feeKey = `fee_${method}`;
       const feePercent = fees[feeKey] || 0;
 
@@ -303,11 +439,11 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
     }
 
     return { netValue: liquidoTotal, taxasCartao: totalTaxas };
-  }, [splitValues, fees, isMisto, valorTotalAbsoluto, paymentMethod, hasComboInCart]);
+  }, [splitValues, fees, isMisto, valorTotalAbsoluto, paymentMethod, hasComboInCart, hasSubscriberService]);
 
   const handleMethodToggle = useCallback((method: string) => {
-    if (hasComboInCart && method !== 'pacote') return;
-    if (!hasComboInCart && method === 'pacote') return;
+    if ((hasComboInCart || hasSubscriberService) && method !== 'pacote') return;
+    if (!hasComboInCart && !hasSubscriberService && method === 'pacote') return;
 
     if (!isMisto) {
       setSplitValues({
@@ -320,19 +456,19 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       });
       setPaymentMethod(method as any);
     }
-  }, [hasComboInCart, isMisto, valorTotalAbsoluto]);
+  }, [hasComboInCart, hasSubscriberService, isMisto, valorTotalAbsoluto]);
 
   useEffect(() => {
-    if (hasComboInCart) {
+    if (hasComboInCart || hasSubscriberService) {
       setPaymentMethod('pacote');
       setSplitValues({
         dinheiro: 0, pix: 0, debito: 0, credito: 0,
         pacote: valorTotalAbsoluto
       });
-    } else if (paymentMethod === 'pacote' && !hasComboInCart) {
+    } else if (paymentMethod === 'pacote' && !hasComboInCart && !hasSubscriberService) {
       setPaymentMethod('pix');
     }
-  }, [hasComboInCart, valorTotalAbsoluto, paymentMethod]);
+  }, [hasComboInCart, hasSubscriberService, valorTotalAbsoluto, paymentMethod]);
 
   useEffect(() => {
     if (!barbershopId) return;
@@ -399,6 +535,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
               if (selectedCustomer?.id === payload.old.id) {
                 setSelectedCustomer(null);
                 setIsVipMode(false);
+                setIsSubscriber(false);
+                setActiveSubscription(null);
               }
               return current.filter(c => c.id !== payload.old.id);
             }
@@ -412,6 +550,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         }
       )
       .subscribe();
+
     const packagesChannel = supabase
       .channel(`rt_customer_packages_${barbershopId}`)
       .on(
@@ -433,12 +572,31 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       )
       .subscribe();
 
+    const subscriptionsChannel = supabase
+      .channel(`rt_subscriptions_${barbershopId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'club_subscriptions',
+          filter: `barbershop_id=eq.${barbershopId}`
+        },
+        (payload) => {
+          if (selectedCustomer?.id) {
+            checkIfSubscriber(selectedCustomer.id);
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       supabase.removeChannel(inventoryChannel);
       supabase.removeChannel(customersChannel);
       supabase.removeChannel(packagesChannel);
+      supabase.removeChannel(subscriptionsChannel);
     };
-  }, [barbershopId, fetchInventory, fetchCustomers, selectedCustomer?.id, reloadSelectedCustomer]);
+  }, [barbershopId, fetchInventory, fetchCustomers, selectedCustomer?.id, reloadSelectedCustomer, checkIfSubscriber]);
 
   useEffect(() => {
     if (!selectedCustomer?.id) return;
@@ -494,7 +652,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       return alert("⚠️ Valor total inválido!");
     }
 
-    if (isMisto && !hasComboInCart && valorTotalAbsoluto > 0 && valorFaltante > 0.01) {
+    if (isMisto && !hasComboInCart && !hasSubscriberService && valorTotalAbsoluto > 0 && valorFaltante > 0.01) {
       const confirmarDesconto = window.confirm(
         `⚠️ VALOR ABAIXO DO TOTAL!\n\n` +
         `Total: R$ ${valorTotalAbsoluto.toFixed(2)}\n` +
@@ -528,12 +686,14 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       const fallbackPhone = initialAppointment?.customerPhone || 'Balcão';
       const finalPhone = selectedCustomer?.phone || fallbackPhone;
 
-      const methodsUsed = hasComboInCart
-        ? "PACOTE"
-        : (Object.entries(splitValues) as [string, number][])
-          .filter(([_, v]) => v > 0)
-          .map(([k, v]) => `${k.toUpperCase()}(R$${v.toFixed(2)})`)
-          .join(' + ') || paymentMethod.toUpperCase();
+      const methodsUsed = hasSubscriberService
+        ? "PLANO ASSINATURA"
+        : (hasComboInCart
+          ? "PACOTE"
+          : (Object.entries(splitValues) as [string, number][])
+            .filter(([_, v]) => v > 0)
+            .map(([k, v]) => `${k.toUpperCase()}(R$${v.toFixed(2)})`)
+            .join(' + ') || paymentMethod.toUpperCase());
 
       const barberObj = barbers.find(b => b.name === selectedBarber);
 
@@ -557,6 +717,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
       for (const item of pdvItems) {
         const isPackageRedemption = !!(activePkg && item.type === 'servico' && isItemInActivePackage(item.name));
+        const isSubscriptionRedemption = !!(isSubscriber && item.type === 'servico' && activeSubscription && activeSubscription.remaining > 0);
 
         if (item.type === 'produto') {
           const produtoAtual = localInventory.find(p => p.id === item.originalId);
@@ -574,13 +735,30 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             newCredits: Number(activePkg.used_credits) + item.quantity
           });
         }
+
+        if (isSubscriptionRedemption && activeSubscription) {
+          setLoadingMessage(`Registrando uso do plano ${activeSubscription.planName}...`);
+
+          const { error: usageError } = await supabase
+            .from('club_usage_history')
+            .insert([{
+              subscription_id: activeSubscription.id,
+              appointment_id: initialAppointment?.id || null,
+              used_at: new Date().toISOString()
+            }]);
+
+          if (usageError) {
+            console.error('❌ Erro ao registrar uso da assinatura:', usageError);
+            throw new Error('Erro ao registrar uso da assinatura');
+          }
+        }
       }
 
       const appointmentPayload: any = {
         venda_id: vendaIdUnica,
         barbershop_id: barbershopId,
         customer_name: selectedCustomer ? selectedCustomer.name : (initialAppointment?.customerName || "Venda Direta"),
-        service: hasComboInCart ? `${serviceResumo} (Pacote)` : serviceResumo,
+        service: hasSubscriberService ? `${serviceResumo} (Plano Assinatura)` : (hasComboInCart ? `${serviceResumo} (Pacote)` : serviceResumo),
         barber: selectedBarber,
         barber_id: barberObj?.id || null,
         date: today,
@@ -590,7 +768,7 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         payment_method: methodsUsed,
         status: 'finalizado',
         customer_phone: finalPhone,
-        is_package_redemption: !!hasComboInCart,
+        is_package_redemption: !!(hasComboInCart || hasSubscriberService),
         tip_amount: tip || 0
       };
 
@@ -638,6 +816,10 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
         await reloadSelectedCustomer();
       }
 
+      if (hasSubscriberService && selectedCustomer) {
+        await checkIfSubscriber(selectedCustomer.id);
+      }
+
       setLoadingMessage('Registrando entrada no caixa...');
       const { error: cashError } = await supabase
         .from('cash_transactions')
@@ -664,16 +846,24 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
       const valorRecebido = totalPagoInput;
       const descontoAplicado = isMisto ? (valorTotalAbsoluto - valorRecebido) : 0;
 
-      alert(
-        `✅ VENDA FINALIZADA COM SUCESSO!\n\n` +
+      const mensagemSucesso = hasSubscriberService
+        ? `✅ VENDA FINALIZADA COM SUCESSO (PLANO ASSINATURA)!\n\n` +
+        `ID: ${vendaIdUnica}\n` +
+        `Cliente: ${selectedCustomer?.name}\n` +
+        `Plano: ${activeSubscription?.planName}\n` +
+        `Usos restantes: ${activeSubscription ? activeSubscription.remaining - 1 : 0}\n\n` +
+        `Profissional: ${selectedBarber}\n` +
+        `Resumo: ${serviceResumo}`
+        : `✅ VENDA FINALIZADA COM SUCESSO!\n\n` +
         `ID: ${vendaIdUnica}\n` +
         `Bruto (Tabela): R$ ${valorTotalAbsoluto.toFixed(2)}\n` +
         (descontoAplicado > 0.01 ? `🎁 Desconto: R$ ${descontoAplicado.toFixed(2)}\n` : '') +
         `Recebido (Bruto): R$ ${valorRecebido.toFixed(2)}\n` +
         `Líquido (Caixa): R$ ${netValue.toFixed(2)}\n\n` +
         `Profissional: ${selectedBarber}\n` +
-        `Resumo: ${serviceResumo}\n`
-      );
+        `Resumo: ${serviceResumo}`;
+
+      alert(mensagemSucesso);
 
     } catch (err: any) {
       console.error("❌ Erro completo:", err);
@@ -714,6 +904,8 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                 onClick={() => {
                   setIsVipMode(false);
                   setSelectedCustomer(null);
+                  setIsSubscriber(false);
+                  setActiveSubscription(null);
                 }}
                 className={`flex-1 py-3 rounded-xl text-[9px] uppercase font-black transition-all ${!isVipMode
                   ? 'bg-white text-black'
@@ -752,14 +944,29 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                 ) : (
                   <div className="flex items-center justify-between bg-amber-500/10 p-3 rounded-xl border border-amber-500/20">
                     <div className="flex items-center gap-3 truncate">
-                      <div className="bg-amber-500 p-1.5 rounded-lg text-black shrink-0">
-                        <User size={16} />
+                      <div className={`p-1.5 rounded-lg shrink-0 ${isSubscriber ? 'bg-purple-500' : 'bg-amber-500'
+                        }`}>
+                        {isSubscriber ? (
+                          <Award size={16} className="text-white" />
+                        ) : (
+                          <User size={16} className="text-black" />
+                        )}
                       </div>
                       <div className="truncate leading-none">
                         <p className="text-[10px] font-black uppercase italic text-white truncate">
                           {selectedCustomer.name}
                         </p>
-                        {activePkg && (
+                        {checkingSubscriber && (
+                          <p className="text-[7px] text-blue-400 font-black uppercase mt-1">
+                            Verificando assinatura...
+                          </p>
+                        )}
+                        {isSubscriber && activeSubscription && !checkingSubscriber && (
+                          <p className="text-[7px] text-purple-400 font-black uppercase mt-1">
+                            {activeSubscription.planName}: {activeSubscription.remaining} restantes
+                          </p>
+                        )}
+                        {activePkg && !isSubscriber && (
                           <p className="text-[7px] text-amber-500 font-black uppercase mt-1">
                             Combo: {Number(activePkg.total_credits) - Number(activePkg.used_credits)} restantes
                           </p>
@@ -767,7 +974,11 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                       </div>
                     </div>
                     <button
-                      onClick={() => setSelectedCustomer(null)}
+                      onClick={() => {
+                        setSelectedCustomer(null);
+                        setIsSubscriber(false);
+                        setActiveSubscription(null);
+                      }}
                       className="p-1.5 text-slate-500 hover:text-red-500"
                     >
                       <Trash2 size={14} />
@@ -856,16 +1067,26 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                   .map(s => {
                     const price = s.price || 0;
                     const isCombo = activePkg && isItemInActivePackage(s.name);
+                    const isSubscriberService = isSubscriber && activeSubscription && activeSubscription.remaining > 0;
 
                     return (
                       <button
                         key={s.id}
                         onClick={() => addItem(s, 'servico')}
-                        className="w-full flex justify-between p-4 bg-amber-500/5 border border-white/5 rounded-2xl hover:bg-amber-500 hover:text-black transition-all group text-left"
+                        className={`w-full flex justify-between p-4 border border-white/5 rounded-2xl transition-all group text-left
+                          ${isSubscriberService
+                            ? 'bg-purple-500/10 hover:bg-purple-500 hover:text-white'
+                            : 'bg-amber-500/5 hover:bg-amber-500 hover:text-black'
+                          }`}
                       >
                         <div>
                           <p className="text-[10px] uppercase font-black italic">{s.name}</p>
-                          {isCombo && (
+                          {isSubscriberService && (
+                            <span className="text-[7px] font-black uppercase bg-purple-500/30 px-1 rounded mt-1 inline-block text-purple-300">
+                              GRÁTIS - ASSINANTE ({activeSubscription.remaining} restantes)
+                            </span>
+                          )}
+                          {isCombo && !isSubscriberService && (
                             <span className="text-[7px] font-black uppercase bg-black/20 px-1 rounded mt-1 inline-block">
                               {Number(activePkg.used_credits) === 0
                                 ? "1º Uso do Combo"
@@ -873,8 +1094,9 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                             </span>
                           )}
                         </div>
-                        <span className="font-black italic text-[10px]">
-                          R$ {Number(price).toFixed(2)}
+                        <span className={`font-black italic text-[10px] ${isSubscriberService ? 'text-purple-400 line-through' : ''
+                          }`}>
+                          {isSubscriberService ? 'R$ 0,00' : `R$ ${Number(price).toFixed(2)}`}
                         </span>
                       </button>
                     );
@@ -929,21 +1151,25 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             {pdvItems.map(item => {
               const currentPrice = getItemPrice(item);
               const showComboTag = item.type === 'servico' && currentPrice === 0 && activePkg;
+              const showSubscriberTag = item.type === 'servico' && currentPrice === 0 && isSubscriber;
 
               return (
                 <div
                   key={item.id}
-                  className="flex items-center justify-between p-4 bg-white/[0.02] rounded-2xl border border-white/5 font-bold italic"
+                  className={`flex items-center justify-between p-4 bg-white/[0.02] rounded-2xl border font-bold italic
+                    ${showSubscriberTag ? 'border-purple-500/30' : 'border-white/5'}`}
                 >
                   <div className="flex-1 mr-2 truncate">
                     <p className="text-[10px] font-black uppercase text-white truncate italic">
                       {item.name}
                     </p>
-                    <p className={`text-[9px] font-black ${showComboTag ? 'text-green-500' : 'text-amber-500'
+                    <p className={`text-[9px] font-black ${showSubscriberTag ? 'text-purple-400' : (showComboTag ? 'text-green-500' : 'text-amber-500')
                       }`}>
-                      {showComboTag
-                        ? 'DESCONTO COMBO'
-                        : `R$ ${currentPrice.toFixed(2)}`}
+                      {showSubscriberTag
+                        ? 'GRÁTIS - ASSINANTE'
+                        : showComboTag
+                          ? 'DESCONTO COMBO'
+                          : `R$ ${currentPrice.toFixed(2)}`}
                     </p>
                   </div>
 
@@ -976,11 +1202,32 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             })}
           </div>
 
+          {/* Card informativo de assinante */}
+          {isSubscriber && activeSubscription && (
+            <div className="bg-purple-500/10 border border-purple-500/30 rounded-2xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Award size={16} className="text-purple-400" />
+                <span className="text-[9px] font-black text-purple-400 uppercase">
+                  Assinante Ativo - {activeSubscription.planName}
+                </span>
+              </div>
+              <div className="flex justify-between text-[8px] text-slate-400">
+                <span>Usos no mês: {activeSubscription.usedCount}</span>
+                <span>Restantes: {activeSubscription.remaining}</span>
+              </div>
+              {activeSubscription.remaining === 0 && (
+                <p className="text-[8px] text-red-400 mt-2 text-center">
+                  ⚠️ Limite de usos atingido! Serviços serão cobrados normalmente.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Métodos de Pagamento */}
           <div className="pt-4 border-t border-white/5 space-y-4">
             <div
-              onClick={() => !hasComboInCart && setIsMisto(!isMisto)}
-              className={`flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5 transition-all ${hasComboInCart
+              onClick={() => !hasComboInCart && !hasSubscriberService && setIsMisto(!isMisto)}
+              className={`flex items-center justify-between bg-white/5 p-3 rounded-xl border border-white/5 transition-all ${(hasComboInCart || hasSubscriberService)
                 ? 'opacity-30 cursor-not-allowed'
                 : 'cursor-pointer hover:bg-white/10'
                 }`}
@@ -1004,11 +1251,11 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                 { id: 'pix', icon: <QrCode size={16} />, label: 'PIX' },
                 { id: 'debito', icon: <CreditCard size={16} />, label: 'Débito' },
                 { id: 'credito', icon: <CreditCard size={16} />, label: 'Crédito' },
-                { id: 'pacote', icon: <Package size={16} />, label: 'Combo/Pacote' }
+                { id: 'pacote', icon: <Package size={16} />, label: 'Assinatura/Combo' }
               ].map(m => {
                 const isSelected = paymentMethod === m.id;
-                const isDisabled = hasComboInCart ? (m.id !== 'pacote') : (m.id === 'pacote');
-                const isGlowing = splitValues[m.id] > 0 || (isSelected && (hasComboInCart || !isMisto));
+                const isDisabled = (hasComboInCart || hasSubscriberService) ? (m.id !== 'pacote') : (m.id === 'pacote');
+                const isGlowing = splitValues[m.id] > 0 || (isSelected && ((hasComboInCart || hasSubscriberService) || !isMisto));
 
                 return (
                   <div
@@ -1018,14 +1265,19 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                       ? 'opacity-20 cursor-not-allowed border-transparent'
                       : 'cursor-pointer'
                       } ${isGlowing
-                        ? 'border-amber-500 bg-amber-500/5'
+                        ? m.id === 'pacote' && (hasSubscriberService || hasComboInCart)
+                          ? 'border-purple-500 bg-purple-500/5'
+                          : 'border-amber-500 bg-amber-500/5'
                         : 'border-white/5'
                       } ${!isMisto && !isSelected
                         ? 'opacity-40'
                         : 'opacity-100'
                       }`}
                   >
-                    <span className={isGlowing ? 'text-amber-500' : 'text-slate-600'}>
+                    <span className={isGlowing
+                      ? (m.id === 'pacote' && (hasSubscriberService || hasComboInCart) ? 'text-purple-500' : 'text-amber-500')
+                      : 'text-slate-600'
+                    }>
                       {m.icon}
                     </span>
                     <div className="flex-1 text-[10px] uppercase font-black italic text-white">
@@ -1044,7 +1296,10 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                         placeholder="0.00"
                       />
                     ) : (
-                      <Zap size={12} className={isGlowing ? "text-amber-500" : "text-slate-800"} />
+                      <Zap size={12} className={isGlowing
+                        ? (m.id === 'pacote' && (hasSubscriberService || hasComboInCart) ? 'text-purple-500' : 'text-amber-500')
+                        : 'text-slate-800'
+                      } />
                     )}
                   </div>
                 );
@@ -1054,7 +1309,6 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             <div className="bg-black/60 p-6 rounded-[2rem] border border-white/5 space-y-2">
               <div className="flex justify-between text-[9px] text-slate-500 uppercase font-black">
                 <span>Preço de Tabela: R$ {valorTotalAbsoluto.toFixed(2)}</span>
-                {/* ✅ CORREÇÃO: só mostra desconto se houver e estiver no modo misto */}
                 {isMisto && descontoNominal > 0.01 && (
                   <span className="text-amber-500">
                     Desconto: - R$ {descontoNominal.toFixed(2)}
@@ -1078,13 +1332,13 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
             </div>
 
             <button
-              disabled={loading || !activeCashSession || !selectedBarber}
+              disabled={loading || !activeCashSession || !selectedBarber || checkingSubscriber}
               onClick={handleFinalize}
-              className={`w-full py-6 rounded-[2rem] font-black uppercase text-[11px] tracking-[0.3em] transition-all flex items-center justify-center gap-3 ${loading ||
-                !activeCashSession ||
-                !selectedBarber
+              className={`w-full py-6 rounded-[2rem] font-black uppercase text-[11px] tracking-[0.3em] transition-all flex items-center justify-center gap-3 ${loading || !activeCashSession || !selectedBarber || checkingSubscriber
                 ? 'bg-white/5 text-slate-700 cursor-not-allowed'
-                : 'bg-white text-black shadow-xl active:scale-95 hover:shadow-2xl'
+                : hasSubscriberService
+                  ? 'bg-purple-500 text-white shadow-xl hover:bg-purple-600 active:scale-95'
+                  : 'bg-white text-black shadow-xl active:scale-95 hover:shadow-2xl'
                 }`}
             >
               {loading ? (
@@ -1092,9 +1346,22 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
                   <Loader2 className="animate-spin" size={18} />
                   {loadingMessage || 'Processando...'}
                 </>
+              ) : checkingSubscriber ? (
+                <>
+                  <Loader2 className="animate-spin" size={18} />
+                  Verificando assinatura...
+                </>
               ) : (
                 <>
-                  <CheckCircle2 size={18} /> Finalizar
+                  {hasSubscriberService ? (
+                    <>
+                      <Award size={18} /> Finalizar com Plano
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} /> Finalizar
+                    </>
+                  )}
                 </>
               )}
             </button>

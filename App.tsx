@@ -11,6 +11,7 @@ import InstallBanner from './views/InstallBanner';
 import SubscriptionPage from './views/SubscriptionPage';
 import CustomersModule from './views/CustomersModule';
 import CommissionsModule from './views/CommissionsModule';
+import ClubManagement from './views/ClubManagement';
 import InventoryModule from './views/InventoryModule';
 import AdminCalendarView from './views/AdminCalendarView';
 import CashFlowModule from './views/CashFlowModule';
@@ -37,6 +38,7 @@ type AdminTab =
   | 'historico'
   | 'caixa'
   | 'despesas'
+  | 'club'
   | 'billing';
 
 const AppContent: React.FC = () => {
@@ -75,46 +77,45 @@ const AppContent: React.FC = () => {
     }
   }, []);
 
-useEffect(() => {
-  const fetchAllAdminData = async () => {
-    if (!barbershopId || !isAdmin || isResetPasswordRoute.current) return;
+  useEffect(() => {
+    const fetchAllAdminData = async () => {
+      if (!barbershopId || !isAdmin || isResetPasswordRoute.current) return;
 
-    try {
-      if (barbershopId && fetchAppointments) {
-        await fetchAppointments(barbershopId);
+      try {
+        if (barbershopId && fetchAppointments) {
+          await fetchAppointments(barbershopId);
+        }
+
+        const [barbersRes, servicesRes, inventoryRes, customersRes, settingsRes, shopRes, expensesRes] = await Promise.all([
+          supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
+          supabase.from('services').select('*').eq('barbershop_id', barbershopId),
+          supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
+          supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name'),
+          supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
+          supabase.from('barbershops').select('name, subscription_status, expires_at, trial_ends_at, current_plan, slug').eq('id', barbershopId).single(),
+          supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
+        ]);
+
+        if (barbersRes.data) setBarbers(barbersRes.data);
+        if (servicesRes.data) setServices(servicesRes.data);
+        if (inventoryRes.data) setInventory(inventoryRes.data);
+        if (customersRes.data) setCustomers(customersRes.data);
+        if (shopRes.data) {
+          setBarbershopSlug(shopRes.data.slug);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar dados administrativos:", err);
       }
+    };
 
-      const [barbersRes, servicesRes, inventoryRes, customersRes, settingsRes, shopRes, expensesRes] = await Promise.all([
-        supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
-        supabase.from('services').select('*').eq('barbershop_id', barbershopId),
-        supabase.from('inventory').select('*').eq('barbershop_id', barbershopId).gt('current_stock', 0),
-        supabase.from('customers').select('*, customer_packages(*)').eq('barbershop_id', barbershopId).order('name'),
-        supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
-        supabase.from('barbershops').select('name, subscription_status, expires_at, trial_ends_at, current_plan, slug').eq('id', barbershopId).single(),
-        supabase.from('expenses').select('*').eq('barbershop_id', barbershopId)
-      ]);
-
-      if (barbersRes.data) setBarbers(barbersRes.data);
-      if (servicesRes.data) setServices(servicesRes.data);
-      if (inventoryRes.data) setInventory(inventoryRes.data);
-      if (customersRes.data) setCustomers(customersRes.data);
-      if (shopRes.data) {
-        setBarbershopSlug(shopRes.data.slug);
-      }
-    } catch (err) {
-      console.error("Erro ao carregar dados administrativos:", err);
-    }
-  };
-
-  fetchAllAdminData();
-}, [barbershopId, isAdmin, fetchAppointments]); 
+    fetchAllAdminData();
+  }, [barbershopId, isAdmin, fetchAppointments]);
 
   useEffect(() => {
     if (isResetPasswordRoute.current) return;
 
     const pathSlug = window.location.pathname.split('/')[1];
-    const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
-
+    const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', 'clube', ''];
     if (isAdmin && barbershopSlug && pathSlug && !reservedRoutes.includes(pathSlug)) {
       if (pathSlug !== barbershopSlug) {
         localStorage.setItem('last_visited_slug', pathSlug);
@@ -262,20 +263,20 @@ useEffect(() => {
             new Date(barbershopData.expires_at) > now;
           setIsBlocked(!isTrialActive && !isSubscriptionActive);
 
-          if (normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath) && normalizedCurrentPath !== barbershopData.slug) {            
+          if (normalizedCurrentPath && !reservedRoutes.includes(normalizedCurrentPath) && normalizedCurrentPath !== barbershopData.slug) {
             window.history.pushState({}, '', `/${barbershopData.slug}`);
             setUrlSlug(barbershopData.slug);
-            
+
             if (profile.role === 'admin') {
               setView('admin');
             } else {
               setView('client');
             }
-            
+
             setLoading(false);
             return;
           }
-          
+
           if (!normalizedCurrentPath || reservedRoutes.includes(normalizedCurrentPath)) {
             setUrlSlug(barbershopData.slug);
           }
@@ -429,7 +430,10 @@ useEffect(() => {
     }
   };
 
+  // No App.tsx
   const handleFinalizeFromCalendar = (appointment: any) => {
+    // O componente AdminCalendarView já calculou isSubscriber() antes de renderizar
+    // Então passamos o appointment completo
     setPendingCheckoutApp(appointment);
     setAdminActiveTab('lancamento');
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -536,6 +540,7 @@ useEffect(() => {
               )}
               {adminActiveTab === 'comissoes' && <CommissionsModule barbershopId={barbershopId} />}
               {adminActiveTab === 'clientes' && <CustomersModule barbershopId={barbershopId} />}
+              {adminActiveTab === 'club' && <ClubManagement barbershopId={barbershopId} />}
               {adminActiveTab === 'estoque' && <InventoryModule barbershopId={barbershopId} />}
               {adminActiveTab === 'despesas' && <ExpensesModule barbershopId={barbershopId} />}
               {adminActiveTab === 'historico' && (
@@ -571,13 +576,13 @@ useEffect(() => {
         {view === 'settings' && isAdmin && barbershopId && <AdminSettings barbershopId={barbershopId} />}
         {view === 'booking' && <BookingFlow onComplete={() => navigateTo('client')} onCancel={() => navigateTo('client')} />}
         {view === 'my_appointments' && (
-          <MyAppointments 
+          <MyAppointments
             onBack={() => setView('profile')}
             customerName={userName}
             customerPhone={session?.user?.phone || ""}
             userId={session?.user?.id || ""}
             isAdmin={isAdmin}
-            barbershopId={barbershopId} 
+            barbershopId={barbershopId}
           />
         )}
 

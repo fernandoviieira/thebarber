@@ -148,6 +148,14 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
     }
   };
 
+  const formatPhone = (value: string) => {
+    if (!value) return "";
+    value = value.replace(/\D/g, ""); // Remove tudo que não é número
+    value = value.replace(/(\d{2})(\d)/, "($1) $2");
+    value = value.replace(/(\d{5})(\d)/, "$1-$2");
+    return value.substring(0, 15); // Trava no tamanho (11) 99999-9999
+  };
+
   const handleUpdateCredits = async (packageId: string) => {
     await supabase.from('customer_packages').update({ total_credits: tempCredits }).eq('id', packageId);
     setEditingPkgId(null);
@@ -415,9 +423,11 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
                   <label className="text-[9px] font-black text-slate-500 uppercase ml-2">WhatsApp</label>
                   <input
                     required
+                    type="tel"
+                    maxLength={15}
                     placeholder="(00) 00000-0000"
                     value={editingCustomer.phone}
-                    onChange={e => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
+                    onChange={e => setEditingCustomer({ ...editingCustomer, phone: formatPhone(e.target.value) })}
                     className="w-full bg-slate-900 border border-white/10 rounded-xl md:rounded-2xl p-4 md:p-5 text-sm text-white font-bold outline-none focus:border-blue-500"
                   />
                 </div>
@@ -539,9 +549,11 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
                   <label className="text-[9px] font-black text-slate-500 uppercase ml-2">WhatsApp</label>
                   <input
                     required
+                    type="tel" // Mude para tel
+                    maxLength={15} // Trava física no HTML
                     placeholder="(00) 00000-0000"
                     value={newCustomer.phone}
-                    onChange={e => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+                    onChange={e => setNewCustomer({ ...newCustomer, phone: formatPhone(e.target.value) })}
                     className="w-full bg-slate-900 border border-white/10 rounded-xl md:rounded-2xl p-4 md:p-5 text-sm text-white font-bold outline-none focus:border-amber-500"
                   />
                 </div>

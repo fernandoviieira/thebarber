@@ -30,6 +30,7 @@ const CreateBarbershop: React.FC = () => {
       }
 
       const trialDays = 20;
+      const cleanPhone = phone.replace(/\D/g, "");
       const trialEndsAt = new Date();
       trialEndsAt.setDate(trialEndsAt.getDate() + trialDays);
 
@@ -39,7 +40,7 @@ const CreateBarbershop: React.FC = () => {
           name,
           slug,
           address,
-          phone: phone || null,
+          phone: cleanPhone || null,
           owner_id: user.id,
           subscription_status: 'trialing',
           trial_ends_at: trialEndsAt.toISOString(),

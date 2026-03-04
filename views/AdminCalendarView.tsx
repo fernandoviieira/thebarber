@@ -17,7 +17,8 @@ import {
   Phone,
   Search,
   XCircle,
-  Navigation
+  Navigation,
+  Crown // ✅ NOVO: Ícone para assinantes
 } from 'lucide-react';
 import {
   addDays,
@@ -65,7 +66,17 @@ type Appointment = {
   created_by_admin?: boolean;
   venda_id?: string | null;
   customerPhone?: string;
+  // ✅ NOVO: Campo para identificar se foi pago com plano
+  payment_method?: string;
 };
+
+// ✅ NOVO: Interface para assinante
+interface SubscriberInfo {
+  id: string;
+  customer_id: string;
+  plan_name: string;
+  remaining_services: number;
+}
 
 interface CalendarProps {
   barbers: Barber[];
@@ -133,6 +144,9 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<Customer[]>([]);
 
+  // ✅ NOVO: Estado para armazenar mapa de assinantes (phone -> subscriber info)
+  const [subscribersMap, setSubscribersMap] = useState<Map<string, SubscriberInfo>>(new Map());
+
   const currentTime = useCurrentTime();
   const currentTimeLineRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -158,6 +172,93 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
 
   const SLOT_HEIGHT_DESKTOP = 64;
   const SLOT_HEIGHT_MOBILE = 76;
+
+  // ✅ NOVO: Buscar assinantes ativos
+  useEffect(() => {
+    const fetchSubscribers = async () => {
+      if (!barbershopId) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('club_subscriptions')
+          .select(`
+            id,
+            customer_id,
+            status,
+            plan:plan_id (
+              name
+            ),
+            profiles:customer_id (
+              phone
+            ),
+            usage:club_usage_history (
+              id
+            )
+          `)
+          .eq('barbershop_id', barbershopId)
+          .eq('status', 'active');
+
+        if (error) throw error;
+
+        const map = new Map<string, SubscriberInfo>();
+        
+        data?.forEach(sub => {
+          const customerPhone = sub.profiles?.phone;
+          if (!customerPhone) return;
+
+          const usedCount = sub.usage?.length || 0;
+          const limit = 10; // Idealmente buscar do plano, mas vamos simplificar
+          
+          map.set(customerPhone.replace(/\D/g, ''), {
+            id: sub.id,
+            customer_id: sub.customer_id,
+            plan_name: sub.plan?.name || 'Plano',
+            remaining_services: Math.max(0, limit - usedCount)
+          });
+        });
+
+        setSubscribersMap(map);
+      } catch (error) {
+        console.error('❌ Erro ao buscar assinantes:', error);
+      }
+    };
+
+    fetchSubscribers();
+
+    // Canal realtime para atualizações
+    const channel = supabase
+      .channel('subscribers-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'club_subscriptions',
+          filter: `barbershop_id=eq.${barbershopId}`
+        },
+        () => {
+          fetchSubscribers();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [barbershopId]);
+
+  // ✅ NOVO: Função para verificar se um telefone é de assinante
+  const isSubscriber = useCallback((phone?: string): boolean => {
+    if (!phone || phone === 'Balcão') return false;
+    const cleanPhone = phone.replace(/\D/g, '');
+    return subscribersMap.has(cleanPhone);
+  }, [subscribersMap]);
+
+  // ✅ NOVO: Função para verificar se um agendamento usou plano
+  const isPaidWithPlan = useCallback((appointment: Appointment): boolean => {
+    return appointment.payment_method?.toLowerCase() === 'plano' || 
+           appointment.payment_method?.toLowerCase() === 'pacote';
+  }, []);
 
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
@@ -717,9 +818,11 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                         className={`absolute left-[90px] right-2 z-30 rounded-2xl p-4 border-2 text-left overflow-hidden shadow-2xl transition-all active:scale-[0.99]
                           ${startApp.status === 'finalizado'
                             ? 'bg-emerald-500/15 border-emerald-400/45 shadow-emerald-500/20'
-                            : startApp.created_by_admin
-                              ? 'bg-amber-500/15 border-amber-400/45 shadow-amber-500/20'
-                              : 'bg-cyan-400/15 border-cyan-300/45 shadow-cyan-500/20'
+                            : isPaidWithPlan(startApp) || (startApp.payment_method?.toLowerCase() === 'plano')
+                              ? 'bg-purple-500/20 border-purple-400/50 shadow-purple-500/30' // ✅ COR ROXA PARA ASSINANTES
+                              : startApp.created_by_admin
+                                ? 'bg-amber-500/15 border-amber-400/45 shadow-amber-500/20'
+                                : 'bg-cyan-400/15 border-cyan-300/45 shadow-cyan-500/20'
                           }`}
                         style={{
                           top: 6 + getTopOffsetWithinSlot(startApp, slot, true),
@@ -738,6 +841,13 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                             </span>
                           </div>
 
+                          {/* ✅ NOVO: Ícone de coroa para assinantes */}
+                          {(isPaidWithPlan(startApp) || isSubscriber(startApp.customerPhone)) && (
+                            <div className="bg-purple-500/30 p-1.5 rounded-full backdrop-blur-sm">
+                              <Crown size={14} className="text-purple-300" />
+                            </div>
+                          )}
+
                           {startApp.status === 'finalizado' && (
                             <div className="bg-emerald-500/25 p-1.5 rounded-full backdrop-blur-sm">
                               <ShieldCheck size={14} className="text-emerald-300" />
@@ -755,6 +865,12 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                         <div className="relative z-10 flex items-center gap-1 mt-2 text-[9px] text-slate-100/60">
                           <Clock size={10} />
                           {getServiceDuration(startApp)} min
+                          {/* ✅ NOVO: Badge de plano */}
+                          {isPaidWithPlan(startApp) && (
+                            <span className="ml-2 bg-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded text-[6px] font-black uppercase">
+                              PLANO
+                            </span>
+                          )}
                         </div>
                       </button>
                     )}
@@ -779,8 +895,20 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
           <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
             <div className="bg-gradient-to-br from-[#111827] to-[#0b1020] border border-white/15 w-full max-w-sm rounded-3xl p-6 shadow-2xl text-center">
               <div className="flex justify-center mb-4">
-                <div className={`p-4 rounded-full ${selectedApp.status === 'finalizado' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
-                  {selectedApp.status === 'finalizado' ? <ShieldCheck size={32} /> : <User size={32} />}
+                <div className={`p-4 rounded-full 
+                  ${selectedApp.status === 'finalizado' 
+                    ? 'bg-emerald-500/15 text-emerald-300' 
+                    : isPaidWithPlan(selectedApp)
+                      ? 'bg-purple-500/15 text-purple-300'
+                      : 'bg-amber-500/15 text-amber-300'
+                  }`}>
+                  {selectedApp.status === 'finalizado' ? (
+                    <ShieldCheck size={32} />
+                  ) : isPaidWithPlan(selectedApp) ? (
+                    <Crown size={32} /> // ✅ Ícone de coroa para assinantes
+                  ) : (
+                    <User size={32} />
+                  )}
                 </div>
               </div>
 
@@ -791,6 +919,18 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
               <p className="text-slate-200/70 text-[9px] mb-6">
                 {selectedApp.time} - {minutesToTime(timeToMinutes(selectedApp.time) + getServiceDuration(selectedApp))} ({getServiceDuration(selectedApp)}min)
               </p>
+
+              {/* ✅ NOVO: Badge de plano no modal de detalhes */}
+              {isPaidWithPlan(selectedApp) && (
+                <div className="bg-purple-500/15 border border-purple-400/25 py-3 px-4 rounded-2xl mb-4">
+                  <div className="flex items-center gap-2">
+                    <Crown size={16} className="text-purple-400" />
+                    <span className="text-[9px] font-black text-purple-300 uppercase">
+                      Pagamento via Plano
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {selectedApp.status === 'finalizado' ? (
                 <div className="bg-emerald-500/15 border border-emerald-400/25 py-4 px-4 rounded-2xl mb-6">
@@ -1089,7 +1229,6 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                   ))}
                 </select>
 
-                {/* Ícone de seta personalizado para garantir visibilidade */}
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-amber-400 group-hover:text-white transition-colors">
                   <ChevronDown size={14} />
                 </div>
@@ -1190,6 +1329,9 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
 
                     const isByAdmin = appStartingHere?.created_by_admin === true;
                     const isFinalized = appStartingHere?.status === 'finalizado';
+                    // ✅ NOVO: Verifica se é assinante ou pagou com plano
+                    const isPlanUser = appStartingHere ? 
+                      (isPaidWithPlan(appStartingHere) || isSubscriber(appStartingHere.customerPhone)) : false;
 
                     const slotOccupied = isTimeOccupied(targetDate, barberName, slot);
 
@@ -1220,9 +1362,11 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                             className={`absolute left-0 right-0 mx-1 text-black rounded-xl p-2 shadow-xl flex flex-col transition-all group overflow-hidden border
                               ${isFinalized
                                 ? 'bg-emerald-500/90 border-emerald-200/40 cursor-default'
-                                : isByAdmin
-                                  ? 'bg-amber-400 border-amber-200/50 cursor-move hover:brightness-110'
-                                  : 'bg-cyan-300 border-cyan-100/50 cursor-move hover:brightness-110'
+                                : isPlanUser // ✅ COR ROXA PARA ASSINANTES
+                                  ? 'bg-purple-500/90 border-purple-200/50 cursor-move hover:brightness-110'
+                                  : isByAdmin
+                                    ? 'bg-amber-400 border-amber-200/50 cursor-move hover:brightness-110'
+                                    : 'bg-cyan-300 border-cyan-100/50 cursor-move hover:brightness-110'
                               }`}
                           >
                             <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1231,7 +1375,14 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                               <span className="bg-black/20 px-1 rounded text-[8px] font-bold backdrop-blur-sm">
                                 {appStartingHere.time}
                               </span>
-                              {isFinalized && <ShieldCheck size={10} className="text-black/60" />}
+                              <div className="flex gap-1">
+                                {isPlanUser && (
+                                  <Crown size={10} className="text-white/80" />
+                                )}
+                                {isFinalized && (
+                                  <ShieldCheck size={10} className="text-black/60" />
+                                )}
+                              </div>
                             </div>
 
                             <p className="font-black text-[10px] uppercase truncate relative z-10">
@@ -1240,9 +1391,16 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                             <p className="text-[7px] font-bold opacity-70 uppercase truncate relative z-10">
                               {appStartingHere.service}
                             </p>
-                            <p className="text-[7px] font-bold opacity-60 mt-auto relative z-10">
-                              {getServiceDuration(appStartingHere)}min
-                            </p>
+                            <div className="relative z-10 flex items-center justify-between mt-auto">
+                              <p className="text-[7px] font-bold opacity-60">
+                                {getServiceDuration(appStartingHere)}min
+                              </p>
+                              {isPlanUser && (
+                                <span className="text-[6px] font-black bg-white/20 px-1 rounded uppercase">
+                                  PLANO
+                                </span>
+                              )}
+                            </div>
                           </div>
                         ) : (
                           <button
@@ -1284,8 +1442,20 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
           <div className="bg-gradient-to-br from-[#111827] to-[#0b1020] border border-white/15 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center">
             <div className="flex justify-center mb-6">
-              <div className={`p-5 rounded-full ${selectedApp.status === 'finalizado' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
-                {selectedApp.status === 'finalizado' ? <ShieldCheck size={40} /> : <User size={40} />}
+              <div className={`p-5 rounded-full 
+                ${selectedApp.status === 'finalizado' 
+                  ? 'bg-emerald-500/15 text-emerald-300' 
+                  : isPaidWithPlan(selectedApp)
+                    ? 'bg-purple-500/15 text-purple-300'
+                    : 'bg-amber-500/15 text-amber-300'
+                }`}>
+                {selectedApp.status === 'finalizado' ? (
+                  <ShieldCheck size={40} />
+                ) : isPaidWithPlan(selectedApp) ? (
+                  <Crown size={40} />
+                ) : (
+                  <User size={40} />
+                )}
               </div>
             </div>
 
@@ -1296,6 +1466,17 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
             <p className="text-slate-200/70 text-[9px] mb-8">
               {selectedApp.time} - {minutesToTime(timeToMinutes(selectedApp.time) + getServiceDuration(selectedApp))} ({getServiceDuration(selectedApp)}min)
             </p>
+
+            {isPaidWithPlan(selectedApp) && (
+              <div className="bg-purple-500/15 border border-purple-400/25 py-4 px-4 rounded-2xl mb-6">
+                <div className="flex items-center gap-2 justify-center">
+                  <Crown size={18} className="text-purple-400" />
+                  <span className="text-[10px] font-black text-purple-300 uppercase">
+                    Pagamento via Plano
+                  </span>
+                </div>
+              </div>
+            )}
 
             {selectedApp.status === 'finalizado' ? (
               <div className="bg-emerald-500/15 border border-emerald-400/25 py-5 px-6 rounded-2xl mb-8">

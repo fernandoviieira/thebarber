@@ -23,6 +23,19 @@ export interface Appointment {
   barber_id?: string
 }
 
+// ✅ NOVO: Interface para assinatura ativa
+export interface ActiveSubscription {
+  id: string;
+  customer_id: string;
+  plan_id: string;
+  plan_name: string;
+  limit_services: number;
+  used_services: number;
+  remaining_services: number;
+  current_period_end: string;
+  status: string;
+}
+
 interface BookingContextType {
   appointments: Appointment[];
   addAppointment: (appointment: Omit<Appointment, 'id'>) => Promise<{ success: boolean; error?: string }>;
@@ -33,6 +46,11 @@ interface BookingContextType {
   sendCancellationNotification: (appointment: Appointment, barbershopPhone: string) => Promise<{ success: boolean; error?: string }>;
   reservingSlots: Set<string>;
   loading: boolean;
+  // ✅ NOVAS FUNÇÕES PARA ASSINANTES
+  checkCustomerSubscription: (customerPhone: string) => Promise<ActiveSubscription | null>;
+  recordSubscriptionUsage: (subscriptionId: string, appointmentId: string) => Promise<{ success: boolean; error?: string }>;
+  getSubscribersMap: () => Promise<Map<string, ActiveSubscription>>;
+  activeSubscriptions: Map<string, ActiveSubscription>;
 }
 
 const formatAppointment = (app: any): Appointment => ({
@@ -62,10 +80,183 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [reservingSlots, setReservingSlots] = useState<Set<string>>(new Set());
+  // ✅ NOVO: Estado para armazenar mapa de assinantes ativos (phone -> subscription)
+  const [activeSubscriptions, setActiveSubscriptions] = useState<Map<string, ActiveSubscription>>(new Map());
+  
   const mountedRef = useRef(true);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const currentBarbershopIdRef = useRef<string | undefined>(undefined);
- 
+
+  // ✅ NOVO: Buscar todos os assinantes ativos da barbearia
+  const fetchActiveSubscriptions = useCallback(async (barbershopId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('club_subscriptions')
+        .select(`
+          id,
+          customer_id,
+          plan_id,
+          status,
+          current_period_end,
+          profiles:customer_id (
+            phone
+          ),
+          plan:plan_id (
+            name,
+            limit_services
+          ),
+          usage:club_usage_history (
+            id
+          )
+        `)
+        .eq('barbershop_id', barbershopId)
+        .eq('status', 'active');
+
+      if (error) throw error;
+
+      const subscriptionMap = new Map<string, ActiveSubscription>();
+      
+      data?.forEach(sub => {
+        const customerPhone = sub.profiles?.phone;
+        if (!customerPhone) return;
+
+        const usedCount = sub.usage?.length || 0;
+        const limit = sub.plan?.limit_services || 0;
+        
+        subscriptionMap.set(customerPhone.replace(/\D/g, ''), {
+          id: sub.id,
+          customer_id: sub.customer_id,
+          plan_id: sub.plan_id,
+          plan_name: sub.plan?.name || 'Plano',
+          limit_services: limit,
+          used_services: usedCount,
+          remaining_services: Math.max(0, limit - usedCount),
+          current_period_end: sub.current_period_end,
+          status: sub.status
+        });
+      });
+
+      setActiveSubscriptions(subscriptionMap);
+      return subscriptionMap;
+    } catch (err) {
+      console.error('❌ Erro ao buscar assinantes ativos:', err);
+      return new Map();
+    }
+  }, []);
+
+  // ✅ NOVO: Verificar se um telefone pertence a um assinante ativo
+  const checkCustomerSubscription = useCallback(async (customerPhone: string): Promise<ActiveSubscription | null> => {
+    if (!customerPhone || !currentBarbershopIdRef.current) return null;
+
+    const cleanPhone = customerPhone.replace(/\D/g, '');
+    
+    // Primeiro tenta no mapa em memória
+    const cached = activeSubscriptions.get(cleanPhone);
+    if (cached) return cached;
+
+    // Se não estiver em memória, busca no banco
+    try {
+      const { data, error } = await supabase
+        .from('club_subscriptions')
+        .select(`
+          id,
+          customer_id,
+          plan_id,
+          status,
+          current_period_end,
+          profiles:customer_id!inner (
+            phone
+          ),
+          plan:plan_id (
+            name,
+            limit_services
+          ),
+          usage:club_usage_history (
+            id
+          )
+        `)
+        .eq('profiles.phone', cleanPhone)
+        .eq('status', 'active')
+        .eq('barbershop_id', currentBarbershopIdRef.current)
+        .maybeSingle();
+
+      if (error || !data) return null;
+
+      const usedCount = data.usage?.length || 0;
+      const limit = data.plan?.limit_services || 0;
+
+      const subscription: ActiveSubscription = {
+        id: data.id,
+        customer_id: data.customer_id,
+        plan_id: data.plan_id,
+        plan_name: data.plan?.name || 'Plano',
+        limit_services: limit,
+        used_services: usedCount,
+        remaining_services: Math.max(0, limit - usedCount),
+        current_period_end: data.current_period_end,
+        status: data.status
+      };
+
+      // Atualiza o mapa
+      setActiveSubscriptions(prev => new Map(prev).set(cleanPhone, subscription));
+
+      return subscription;
+    } catch (err) {
+      console.error('❌ Erro ao verificar assinatura:', err);
+      return null;
+    }
+  }, [activeSubscriptions]);
+
+  // ✅ NOVO: Registrar uso de assinatura
+  const recordSubscriptionUsage = useCallback(async (
+    subscriptionId: string, 
+    appointmentId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase
+        .from('club_usage_history')
+        .insert([{
+          subscription_id: subscriptionId,
+          appointment_id: appointmentId,
+          used_at: new Date().toISOString()
+        }]);
+
+      if (error) throw error;
+
+      // Atualiza o mapa de assinantes (reduz remaining_services)
+      setActiveSubscriptions(prev => {
+        const updated = new Map(prev);
+        for (let [phone, sub] of updated.entries()) {
+          if (sub.id === subscriptionId) {
+            updated.set(phone, {
+              ...sub,
+              used_services: sub.used_services + 1,
+              remaining_services: Math.max(0, sub.remaining_services - 1)
+            });
+            break;
+          }
+        }
+        return updated;
+      });
+
+      return { success: true };
+    } catch (err: any) {
+      console.error('❌ Erro ao registrar uso da assinatura:', err);
+      return {
+        success: false,
+        error: err.message || 'Erro ao registrar uso da assinatura'
+      };
+    }
+  }, []);
+
+  // ✅ NOVO: Buscar mapa completo de assinantes
+  const getSubscribersMap = useCallback(async (): Promise<Map<string, ActiveSubscription>> => {
+    if (currentBarbershopIdRef.current) {
+      await fetchActiveSubscriptions(currentBarbershopIdRef.current);
+    }
+    return activeSubscriptions;
+  }, [activeSubscriptions, fetchActiveSubscriptions]);
+
   const fetchAppointments = useCallback(async (barbershopId?: string) => {
     try {
       setLoading(true);
@@ -90,6 +281,9 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       setAppointments(data?.map(formatAppointment) || []);
       currentBarbershopIdRef.current = barbershopId;
 
+      // ✅ NOVO: Quando carregar agendamentos, também carrega assinantes ativos
+      await fetchActiveSubscriptions(barbershopId);
+
     } catch (err: any) {
       console.error("❌ Erro ao carregar agendamentos:", {
         message: err.message,
@@ -103,7 +297,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
       }
     }
-  }, []);
+  }, [fetchActiveSubscriptions]);
 
   const checkSlotAvailability = useCallback(async (
     barberId: string,
@@ -241,7 +435,6 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
                   return;
                 }
 
-
                 const slotKey = `${newApp.barber_id}-${newApp.date}-${newApp.time}`;
                 setReservingSlots(prev => new Set(prev).add(slotKey));
 
@@ -296,6 +489,41 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
         channelRef.current = channel;
 
+        // ✅ NOVO: Canal para atualizações de assinaturas
+        const subsChannel = supabase
+          .channel('subscriptions-changes')
+          .on(
+            'postgres_changes',
+            {
+              event: '*',
+              schema: 'public',
+              table: 'club_subscriptions',
+              filter: `barbershop_id=eq.${barbershopId}`
+            },
+            () => {
+              // Recarrega assinantes quando houver mudanças
+              fetchActiveSubscriptions(barbershopId);
+            }
+          )
+          .subscribe();
+
+        // ✅ NOVO: Canal para histórico de uso
+        const usageChannel = supabase
+          .channel('usage-changes')
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'club_usage_history'
+            },
+            (payload) => {
+              // Quando um novo uso é registrado, atualiza o mapa
+              fetchActiveSubscriptions(barbershopId);
+            }
+          )
+          .subscribe();
+
       } catch (err) {
         console.error('❌ Erro ao configurar realtime:', err);
         setLoading(false);
@@ -311,7 +539,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         channelRef.current = null;
       }
     };
-  }, [fetchAppointments]);
+  }, [fetchAppointments, fetchActiveSubscriptions]);
 
   const addAppointment = async (data: Omit<Appointment, 'id'>): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -448,7 +676,12 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         checkSlotAvailability,
         sendCancellationNotification,
         reservingSlots,
-        loading
+        loading,
+        // ✅ NOVAS FUNÇÕES EXPORTADAS
+        checkCustomerSubscription,
+        recordSubscriptionUsage,
+        getSubscribersMap,
+        activeSubscriptions
       }}
     >
       {children}

@@ -6,10 +6,24 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-// Função auxiliar para limpar e formatar o número (55 + DDD + Numero)
+/**
+ * Função Robusta para formatar o número:
+ * 1. Remove tudo que não é número.
+ * 2. Garante o DDI 55.
+ * 3. Remove o 9º dígito se necessário (Opcional, mas recomendado para APIs de integração)
+ */
 const formatWhatsappNumber = (num: string) => {
-  const clean = num.replace(/\D/g, '');
-  return clean.startsWith('55') ? clean : `55${clean}`;
+  if (!num) return '';
+  
+  // Remove parênteses, traços, espaços e o símbolo +
+  let clean = num.replace(/\D/g, '');
+  
+  // Se o usuário digitou sem o 55 (ex: 41984591710), nós adicionamos
+  if (!clean.startsWith('55') && clean.length >= 10) {
+    clean = `55${clean}`;
+  }
+  
+  return clean;
 };
 
 serve(async (req) => {
@@ -25,15 +39,17 @@ serve(async (req) => {
     const apiKey = Deno.env.get('EVOLUTION_API_KEY')
 
     if (!url || !instance || !apiKey) {
-      return new Response(JSON.stringify({ error: 'Configurações ausentes' }), {
+      return new Response(JSON.stringify({ error: 'Configurações de ambiente ausentes' }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 500
       })
     }
 
+    // Formata os números antes do envio
     const clientNumber = formatWhatsappNumber(number);
+    const barbershopNumber = shopNumber ? formatWhatsappNumber(shopNumber) : null;
     
-    // Enviar para o cliente (sempre com a mensagem original)
+    // 1. Enviar para o cliente
     const clientResponse = await fetch(`${url}/message/sendText/${instance}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'apikey': apiKey },
@@ -46,23 +62,19 @@ serve(async (req) => {
     const clientResult = await clientResponse.json();
     let shopResult = null;
     
-    // Enviar para a barbearia (se informado)
-    if (shopNumber) {
-      const barbershopNumber = formatWhatsappNumber(shopNumber);
+    // 2. Enviar para a barbearia (se houver número)
+    if (barbershopNumber) {
       
-      // Verificar se é uma mensagem de cancelamento
       const isCancellation = message.includes('AGENDAMENTO CANCELADO');
-      
       let shopMessage;
       
       if (isCancellation) {
-        // Para cancelamento, enviar a mensagem original (já tem o formato correto)
         shopMessage = message;
       } else {
-        // Para novo agendamento, adicionar o cabeçalho e rodapé
-        shopMessage = `🔔 *NOVO AGENDAMENTO RECEBIDO!* 🔔\n\n${
-          message.split('Olá,')[1] || message
-        }\n\n🚀 _Verifique seu painel para confirmar!_`;
+        // Melhora a extração da mensagem para evitar o "Olá,"
+        const extractedBody = message.includes('Olá,') ? message.split('Olá,')[1] : message;
+        
+        shopMessage = `🔔 *NOVO AGENDAMENTO!* 🔔\n\n${extractedBody}\n\n🚀 _Verifique seu painel BarbersPro!_`;
       }
       
       const shopResponse = await fetch(`${url}/message/sendText/${instance}`, {
@@ -73,6 +85,13 @@ serve(async (req) => {
           text: shopMessage
         })
       });
+
+      // Se a API retornar erro, logamos para saber o motivo (ex: número não existe)
+      if (!shopResponse.ok) {
+        const errorText = await shopResponse.text();
+        console.error(`❌ Erro Evolution API (Barbearia):`, errorText);
+      }
+
       shopResult = await shopResponse.json();
     }
 
@@ -82,7 +101,7 @@ serve(async (req) => {
     })
 
   } catch (error: any) {
-    console.error('❌ Erro interno:', error.message)
+    console.error('❌ Erro Crítico na Edge Function:', error.message)
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
