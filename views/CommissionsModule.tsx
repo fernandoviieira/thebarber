@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
     Users, ChevronDown, ChevronUp, Wallet, Save,
-    Loader2, Percent, Calendar as CalendarIcon, MinusCircle, Printer, Filter, Receipt, Scissors, Package, TrendingUp, X, FileText
+    Loader2, Percent, Calendar as CalendarIcon, MinusCircle, Printer, Filter, Scissors, Package, TrendingUp, X, FileText
 } from 'lucide-react';
 import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
@@ -15,12 +15,9 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
     const [startDate, endDate] = dateRange;
     const [reportData, setReportData] = useState<any[]>([]);
     const [expandedBarber, setExpandedBarber] = useState<string | null>(null);
-
     const [selectedBarberId, setSelectedBarberId] = useState<string | 'all'>('all');
     const [barbershopName, setBarbershopName] = useState('');
-
     const [printMode, setPrintMode] = useState<'simple' | 'complete' | null>(null);
-
     const [servicesCache, setServicesCache] = useState<any[]>([]);
     const [inventoryCache, setInventoryCache] = useState<any[]>([]);
 
@@ -35,34 +32,23 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
             const endIso = endDate?.toISOString().split('T')[0];
 
             const { data: shopData } = await supabase
-                .from('barbershops')
-                .select('name')
-                .eq('id', barbershopId)
-                .single();
-
+                .from('barbershops').select('name').eq('id', barbershopId).single();
             if (shopData) setBarbershopName(shopData.name);
 
             const { data: servicesData } = await supabase
-                .from('services')
-                .select('*')
-                .eq('barbershop_id', barbershopId);
+                .from('services').select('*').eq('barbershop_id', barbershopId);
 
             const { data: inventoryData } = await supabase
-                .from('inventory')
-                .select('*')
-                .eq('barbershop_id', barbershopId);
+                .from('inventory').select('*').eq('barbershop_id', barbershopId);
 
             setServicesCache(servicesData || []);
             setInventoryCache(inventoryData || []);
 
             const { data: barbersData } = await supabase
-                .from('barbers')
-                .select('*')
-                .eq('barbershop_id', barbershopId);
+                .from('barbers').select('*').eq('barbershop_id', barbershopId);
 
             const { data: salesData } = await supabase
-                .from('appointments')
-                .select('*')
+                .from('appointments').select('*')
                 .eq('barbershop_id', barbershopId)
                 .eq('status', 'finalizado')
                 .gte('date', startIso)
@@ -70,8 +56,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 .order('date', { ascending: false });
 
             const { data: advancesData } = await supabase
-                .from('barber_advances')
-                .select('*')
+                .from('barber_advances').select('*')
                 .eq('barbershop_id', barbershopId)
                 .gte('date', startIso)
                 .lte('date', endIso);
@@ -88,9 +73,9 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
                     const salesWithDetailedItems = mySales.map(sale => {
                         const rawServiceStr = sale.service || 'Serviço';
-                        const parts = rawServiceStr.split(' + ').map(p => p.trim());
+                        const parts = rawServiceStr.split(' + ').map((p: string) => p.trim());
 
-                        const detailedItems = parts.map(part => {
+                        let detailedItems = parts.map((part: string) => {
                             let itemPrice = 0;
                             const isGorjeta = part.toLowerCase().includes('gorjeta');
                             const isProduct = part.toLowerCase().includes('(produto)');
@@ -99,22 +84,51 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                 const match = part.match(/\d+\.?\d*/);
                                 itemPrice = match ? parseFloat(match[0]) : 0;
                                 return { name: part, price: itemPrice, commission: itemPrice, isProduct: false, isGorjeta: true };
-                            }
-                            else if (isProduct) {
+                            } else if (isProduct) {
                                 const productName = part.replace(/\(Produto\)\s+/i, '').trim();
-                                const foundProduct = inventoryData?.find(p => p.name.trim() === productName);
+                                const foundProduct = inventoryData?.find((p: any) => p.name.trim() === productName);
                                 itemPrice = foundProduct ? Number(foundProduct.price_sell) : 0;
                                 const productRate = foundProduct ? Number(foundProduct.commission_rate) : 0;
                                 return { name: part, price: itemPrice, commission: itemPrice * (productRate / 100), isProduct: true, isGorjeta: false };
-                            }
-                            else {
-                                const foundService = servicesData?.find(s => s.name.trim() === part);
-                                itemPrice = foundService ? Number(foundService.price) : 0;
-                                return { name: part, price: itemPrice, commission: itemPrice * (barber.commission_rate / 100), isProduct: false, isGorjeta: false };
+                            } else {
+                                const cleanServiceName = part.split(' x')[0].trim();
+                                const qtyMatch = part.match(/x(\d+)/);
+                                const quantity = qtyMatch ? parseInt(qtyMatch[1]) : 1;
+                                const foundService = servicesData?.find((s: any) =>
+                                    s.name.trim().toLowerCase() === cleanServiceName.toLowerCase()
+                                );
+                                const unitPrice = foundService ? Number(foundService.price) : 0;
+                                itemPrice = unitPrice * quantity;
+                                return {
+                                    name: part,
+                                    price: itemPrice,
+                                    commission: itemPrice * (barber.commission_rate / 100),
+                                    isProduct: false,
+                                    isGorjeta: false
+                                };
                             }
                         });
 
-                        const totalVendaComissao = detailedItems.reduce((acc, item) => acc + item.commission, 0);
+                        const comissaoPelaSomaDosItens = detailedItems.reduce(
+                            (acc: number, item: any) => acc + item.commission, 0
+                        );
+
+                        const comissaoPeloValorPago = Number(sale.price) * (barber.commission_rate / 100);
+
+                        const totalVendaComissao = sale.service.includes('(Produto)')
+                            ? comissaoPelaSomaDosItens  
+                            : comissaoPeloValorPago;     
+                        const hasDiscount =
+                            sale.original_price &&
+                            Number(sale.original_price) > Number(sale.price);
+
+                        if (hasDiscount && !sale.service.includes('(Produto)') && comissaoPelaSomaDosItens > 0) {
+                            const ratio = totalVendaComissao / comissaoPelaSomaDosItens;
+                            detailedItems = detailedItems.map((item: any) => ({
+                                ...item,
+                                commission: item.isGorjeta ? item.commission : item.commission * ratio
+                            }));
+                        }
 
                         return {
                             ...sale,
@@ -126,12 +140,12 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                     return {
                         ...barber,
                         atendimentos: salesWithDetailedItems.length,
-                        totalBruto: salesWithDetailedItems.reduce((acc, curr) => acc + Number(curr.price), 0),
+                        totalBruto: salesWithDetailedItems.reduce((acc: number, curr: any) => acc + Number(curr.price), 0),
                         currentRate: barber.commission_rate || 0,
                         expenses: totalAdvancesPeriod,
                         advancesList: myAdvances,
-                        totalComissaoCalculada: salesWithDetailedItems.reduce((acc, sale) => acc + sale.comissaoTotalVenda, 0),
-                        totalGorjetas: salesWithDetailedItems.reduce((acc, sale) => acc + (Number(sale.tip_amount) || 0), 0),
+                        totalComissaoCalculada: salesWithDetailedItems.reduce((acc: number, sale: any) => acc + sale.comissaoTotalVenda, 0),
+                        totalGorjetas: salesWithDetailedItems.reduce((acc: number, sale: any) => acc + (Number(sale.tip_amount) || 0), 0),
                         detalhes: salesWithDetailedItems
                     };
                 }));
@@ -145,18 +159,10 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
     const handleAddAdvance = async (barberId: string, description: string, amount: number, date: string) => {
         try {
-            const { error } = await supabase
-                .from('barber_advances')
-                .insert([{
-                    barbershop_id: barbershopId,
-                    barber_id: barberId,
-                    description: description,
-                    amount: amount,
-                    date: date
-                }]);
-
+            const { error } = await supabase.from('barber_advances').insert([{
+                barbershop_id: barbershopId, barber_id: barberId, description, amount, date
+            }]);
             if (error) throw error;
-
             fetchCommissions();
         } catch (e) {
             console.error(e);
@@ -164,33 +170,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
         }
     };
 
-    const calculateSaleCommission = (venda: any, barberRate: number) => {
-        if (venda.service === "Caixinha / Gorjeta") return 0;
-
-        const serviceText = venda.service || '';
-        let comissaoVenda = 0;
-
-        if (serviceText.includes('+') || serviceText.includes('(Produto)')) {
-            const parts = serviceText.split('+').map(p => p.trim());
-
-            parts.forEach(part => {
-                if (part.toLowerCase().includes('gorjeta')) return;
-
-                if (part.includes('(Produto)')) {
-                    const productName = part.replace('(Produto)', '').trim().split(' x')[0].trim();
-                    const product = inventoryCache.find(p => p.name.toLowerCase() === productName.toLowerCase());
-                    if (product) comissaoVenda += (Number(product.price_sell) || 0) * (Number(product.commission_rate) / 100);
-                } else {
-                    const serviceName = part.split(' x')[0].trim();
-                    const service = servicesCache.find(s => s.name.toLowerCase() === serviceName.toLowerCase());
-                    if (service) comissaoVenda += (Number(service.price) || 0) * (barberRate / 100);
-                }
-            });
-            return comissaoVenda;
-        }
-
-        return Number(venda.price) * (barberRate / 100);
-    };
+    const calculateSaleCommission = (venda: any) => Number(venda.comissaoTotalVenda) || 0;
 
     const updateLocalValue = (id: string, field: 'currentRate' | 'expenses', value: number) => {
         setReportData(prev => prev.map(b => b.id === id ? { ...b, [field]: value } : b));
@@ -200,16 +180,10 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
         setIsSaving(barberId);
         const barber = reportData.find(b => b.id === barberId);
         if (!barber) return;
-
         try {
-            const { error } = await supabase
-                .from('barbers')
-                .update({
-                    commission_rate: barber.currentRate,
-                    expenses: barber.expenses
-                })
+            const { error } = await supabase.from('barbers')
+                .update({ commission_rate: barber.currentRate, expenses: barber.expenses })
                 .eq('id', barberId);
-
             if (error) throw error;
             alert(`✅ Dados de ${barber.name} salvos com sucesso!`);
         } catch (e) {
@@ -222,15 +196,9 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
     const handleDeleteAdvance = async (advanceId: string) => {
         if (!confirm("Deseja realmente remover este vale? Ele não será mais descontado.")) return;
-
         try {
-            const { error } = await supabase
-                .from('barber_advances')
-                .delete()
-                .eq('id', advanceId);
-
+            const { error } = await supabase.from('barber_advances').delete().eq('id', advanceId);
             if (error) throw error;
-
             fetchCommissions();
         } catch (e) {
             console.error(e);
@@ -240,18 +208,12 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
     const handlePrintSimple = () => {
         setPrintMode('simple');
-        setTimeout(() => {
-            window.print();
-            setPrintMode(null);
-        }, 150);
+        setTimeout(() => { window.print(); setPrintMode(null); }, 150);
     };
 
     const handlePrintComplete = () => {
         setPrintMode('complete');
-        setTimeout(() => {
-            window.print();
-            setPrintMode(null);
-        }, 150);
+        setTimeout(() => { window.print(); setPrintMode(null); }, 150);
     };
 
     const filteredReportData = selectedBarberId === 'all'
@@ -260,6 +222,8 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
     return (
         <div className="space-y-6 md:space-y-8 animate-in fade-in slide-in-from-right-4 duration-500 pb-20 md:pb-0">
+
+            {/* HEADER */}
             <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 border-b border-white/5 pb-8 print:hidden">
                 <div className="space-y-1">
                     <h2 className="text-3xl md:text-6xl font-black text-white italic uppercase tracking-tighter leading-none">
@@ -292,9 +256,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                         <div className="flex items-center gap-3 px-2 md:px-4">
                             <CalendarIcon size={20} className="text-amber-500 shrink-0" />
                             <div className="flex flex-col min-w-0">
-                                <span className="text-[7px] md:text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">
-                                    Período
-                                </span>
+                                <span className="text-[7px] md:text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Período</span>
                                 <DatePicker
                                     selectsRange={true}
                                     startDate={startDate}
@@ -311,6 +273,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 </div>
             </header>
 
+            {/* LISTA DE BARBEIROS */}
             <div className="grid grid-cols-1 gap-4 md:gap-6 print:hidden">
                 {loading ? (
                     <div className="py-20 flex flex-col items-center gap-4 text-amber-500 font-black text-[10px] tracking-[0.5em]">
@@ -325,20 +288,15 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                             <div key={barber.id} className="group">
                                 <div
                                     onClick={() => setExpandedBarber(expandedBarber === barber.id ? null : barber.id)}
-                                    className={`bg-slate-900/40 border border-white/5 rounded-2xl md:rounded-[3rem] p-4 md:p-8 hover:border-amber-500/30 transition-all cursor-pointer flex flex-col md:flex-row items-center justify-between gap-4 ${expandedBarber === barber.id ? 'border-amber-500/50 rounded-b-none bg-slate-900' : ''
-                                        }`}
+                                    className={`bg-slate-900/40 border border-white/5 rounded-2xl md:rounded-[3rem] p-4 md:p-8 hover:border-amber-500/30 transition-all cursor-pointer flex flex-col md:flex-row items-center justify-between gap-4 ${expandedBarber === barber.id ? 'border-amber-500/50 rounded-b-none bg-slate-900' : ''}`}
                                 >
                                     <div className="flex items-center gap-4 md:gap-8 w-full md:w-auto">
                                         <div className="w-12 h-12 md:w-20 md:h-20 rounded-xl md:rounded-[2rem] bg-gradient-to-br from-slate-800 to-black flex items-center justify-center text-amber-500 border border-white/5 shadow-2xl shrink-0">
                                             <Users size={24} />
                                         </div>
                                         <div className="min-w-0">
-                                            <h4 className="text-xl md:text-3xl font-black text-white uppercase italic tracking-tighter truncate">
-                                                {barber.name}
-                                            </h4>
-                                            <p className="text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">
-                                                {barber.atendimentos} vendas
-                                            </p>
+                                            <h4 className="text-xl md:text-3xl font-black text-white uppercase italic tracking-tighter truncate">{barber.name}</h4>
+                                            <p className="text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest mt-1">{barber.atendimentos} vendas</p>
                                         </div>
                                         <div className="ml-auto md:hidden">
                                             {expandedBarber === barber.id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
@@ -348,30 +306,18 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                     <div className="flex flex-wrap md:flex-nowrap items-center justify-between md:justify-end gap-4 md:gap-12 w-full md:w-auto border-t border-white/5 pt-4 md:border-0 md:pt-0">
                                         <div className="text-left md:text-right">
                                             <p className="text-[8px] md:text-[10px] font-black text-slate-500 uppercase mb-1">Comissão</p>
-                                            <p className="text-sm md:text-xl font-black text-white italic tabular-nums">
-                                                R$ {barber.totalComissaoCalculada.toFixed(2)}
-                                            </p>
+                                            <p className="text-sm md:text-xl font-black text-white italic tabular-nums">R$ {barber.totalComissaoCalculada.toFixed(2)}</p>
                                         </div>
                                         <div className="text-right text-green-500">
                                             <p className="text-[8px] md:text-[10px] font-black uppercase mb-1 opacity-60">Gorjetas</p>
-                                            <p className="text-sm md:text-xl font-black italic tabular-nums">
-                                                + R$ {barber.totalGorjetas.toFixed(2)}
-                                            </p>
+                                            <p className="text-sm md:text-xl font-black italic tabular-nums">+ R$ {barber.totalGorjetas.toFixed(2)}</p>
                                         </div>
                                         <div className="bg-amber-500 px-6 md:px-10 py-3 md:py-5 rounded-xl md:rounded-[2rem] text-center shadow-xl w-full md:w-auto min-w-[140px] md:min-w-[200px]">
-                                            <p className="text-[8px] md:text-[10px] font-black text-black/40 uppercase mb-1 italic leading-none">
-                                                Saldo Final
-                                            </p>
-                                            <p className="text-2xl md:text-4xl font-black text-black italic leading-none tabular-nums">
-                                                R$ {totalLiquido.toFixed(2)}
-                                            </p>
+                                            <p className="text-[8px] md:text-[10px] font-black text-black/40 uppercase mb-1 italic leading-none">Saldo Final</p>
+                                            <p className="text-2xl md:text-4xl font-black text-black italic leading-none tabular-nums">R$ {totalLiquido.toFixed(2)}</p>
                                         </div>
                                         <div className="hidden md:block">
-                                            {expandedBarber === barber.id ? (
-                                                <ChevronUp className="text-amber-500" />
-                                            ) : (
-                                                <ChevronDown className="text-slate-700" />
-                                            )}
+                                            {expandedBarber === barber.id ? <ChevronUp className="text-amber-500" /> : <ChevronDown className="text-slate-700" />}
                                         </div>
                                     </div>
                                 </div>
@@ -385,18 +331,10 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                         <MinusCircle size={14} /> Novo Vale / Adiantamento
                                                     </h5>
                                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                                        <input
-                                                            type="text"
-                                                            placeholder="Descrição (ex: Vale Almoço)"
-                                                            id={`desc-${barber.id}`}
-                                                            className="bg-slate-900 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-red-500"
-                                                        />
-                                                        <input
-                                                            type="number"
-                                                            placeholder="Valor R$"
-                                                            id={`val-${barber.id}`}
-                                                            className="bg-slate-900 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-red-500"
-                                                        />
+                                                        <input type="text" placeholder="Descrição (ex: Vale Almoço)" id={`desc-${barber.id}`}
+                                                            className="bg-slate-900 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-red-500" />
+                                                        <input type="number" placeholder="Valor R$" id={`val-${barber.id}`}
+                                                            className="bg-slate-900 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-red-500" />
                                                         <button
                                                             onClick={() => {
                                                                 const d = (document.getElementById(`desc-${barber.id}`) as HTMLInputElement).value;
@@ -411,9 +349,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                 </div>
 
                                                 <div className="space-y-2 mt-6">
-                                                    <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                                                        Detalhamento de Vales (Neste Período)
-                                                    </h5>
+                                                    <h5 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Detalhamento de Vales (Neste Período)</h5>
                                                     {barber.advancesList && barber.advancesList.length > 0 ? (
                                                         barber.advancesList.map((adv: any) => (
                                                             <div key={adv.id} className="flex justify-between items-center bg-white/5 p-3 rounded-xl border border-white/5">
@@ -423,10 +359,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                                 </div>
                                                                 <div className="flex items-center gap-4">
                                                                     <span className="text-red-500 font-black text-sm">- R$ {Number(adv.amount).toFixed(2)}</span>
-                                                                    <button
-                                                                        onClick={() => handleDeleteAdvance(adv.id)}
-                                                                        className="text-slate-600 hover:text-red-500 transition-colors"
-                                                                    >
+                                                                    <button onClick={() => handleDeleteAdvance(adv.id)} className="text-slate-600 hover:text-red-500 transition-colors">
                                                                         <X size={14} />
                                                                     </button>
                                                                 </div>
@@ -436,6 +369,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                         <p className="text-[10px] text-slate-600 italic">Nenhum vale encontrado para este período.</p>
                                                     )}
                                                 </div>
+
                                                 <div className="flex items-center gap-2 text-amber-500">
                                                     <Percent size={14} />
                                                     <span className="text-[10px] font-black uppercase italic">Comissão Serviços (%)</span>
@@ -447,6 +381,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                     className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-amber-500 font-black text-xl outline-none"
                                                 />
                                             </div>
+
                                             <div className="space-y-3">
                                                 <div className="flex items-center gap-2 text-red-500">
                                                     <MinusCircle size={14} />
@@ -459,44 +394,36 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                     className="w-full bg-slate-900 border border-white/10 rounded-xl p-3 text-red-500 font-black text-xl outline-none"
                                                 />
                                             </div>
+
                                             <div className="md:col-span-2 flex justify-end pt-2">
                                                 <button
                                                     onClick={() => saveBarberChanges(barber.id)}
                                                     disabled={isSaving === barber.id}
                                                     className="w-full md:w-auto flex items-center justify-center gap-3 bg-amber-500 text-black px-8 py-4 rounded-xl font-black uppercase text-[10px] tracking-widest transition-all hover:bg-amber-400 disabled:opacity-50"
                                                 >
-                                                    {isSaving === barber.id ? (
-                                                        <Loader2 className="animate-spin" size={16} />
-                                                    ) : (
-                                                        <Save size={16} />
-                                                    )}
+                                                    {isSaving === barber.id ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />}
                                                     Salvar Dados
                                                 </button>
                                             </div>
                                         </div>
 
+                                        {/* TABELA DE VENDAS */}
                                         <div className="overflow-x-auto custom-scrollbar rounded-xl border border-white/5">
                                             <table className="w-full text-left border-separate border-spacing-0 min-w-[600px]">
                                                 <thead className="sticky top-0 z-10">
                                                     <tr className="bg-slate-900">
-                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5">
-                                                            Data
-                                                        </th>
-                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5">
-                                                            Descrição da Venda
-                                                        </th>
-                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 text-right">
-                                                            Valor
-                                                        </th>
-                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-amber-500 uppercase tracking-widest border-b border-white/5 text-right italic">
-                                                            Comissão
-                                                        </th>
+                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5">Data</th>
+                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5">Descrição da Venda</th>
+                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-slate-500 uppercase tracking-widest border-b border-white/5 text-right">Valor</th>
+                                                        <th className="px-6 py-4 text-[8px] md:text-[9px] font-black text-amber-500 uppercase tracking-widest border-b border-white/5 text-right italic">Comissão</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-white/5">
                                                     {barber.detalhes.map((venda: any) => {
-                                                        const comissaoExibida = calculateSaleCommission(venda, barber.currentRate);
-                                                        const valorExibido = Number(venda.original_price || venda.price);
+                                                        const comissaoExibida = calculateSaleCommission(venda);
+                                                        const valorPago = Number(venda.price);
+                                                        const valorOriginal = Number(venda.original_price || venda.price);
+                                                        const temDesconto = venda.original_price && valorOriginal > valorPago;
                                                         const gorjetaVenda = Number(venda.tip_amount) || 0;
                                                         const comissaoTotal = comissaoExibida + gorjetaVenda;
 
@@ -515,22 +442,33 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                                                     <Scissors size={10} className="text-amber-500" />
                                                                                 )}
                                                                                 <span className="text-slate-300">{item.name}</span>
+                                                                                {/* ✅ Agora sempre bate com a coluna Comissão */}
                                                                                 <span className="text-[12px] text-amber-500/50 ml-auto">
                                                                                     (Com: R$ {Number(item.commission || 0).toFixed(2)})
                                                                                 </span>
                                                                             </div>
                                                                         ))}
-                                                                        {Number(venda.tip_amount) > 0 && (
+                                                                        {gorjetaVenda > 0 && (
                                                                             <div className="flex items-center gap-2 text-green-500 text-[8px]">
                                                                                 <TrendingUp size={10} />
-                                                                                <span>+ GORJETA: R$ {Number(venda.tip_amount).toFixed(2)}</span>
+                                                                                <span>+ GORJETA: R$ {gorjetaVenda.toFixed(2)}</span>
                                                                             </div>
                                                                         )}
                                                                     </div>
                                                                 </td>
-                                                                <td className="px-6 py-3 text-right text-[10px] font-bold tabular-nums text-slate-400">
-                                                                    R$ {valorExibido.toFixed(2)}
+
+                                                                {/* Valor pago + original riscado */}
+                                                                <td className="px-6 py-3 text-right">
+                                                                    <div className="text-white font-black text-sm tabular-nums leading-none">
+                                                                        R$ {valorPago.toFixed(2)}
+                                                                    </div>
+                                                                    {temDesconto && (
+                                                                        <div className="text-[10px] text-slate-500 line-through font-bold mt-1 tabular-nums">
+                                                                            R$ {valorOriginal.toFixed(2)}
+                                                                        </div>
+                                                                    )}
                                                                 </td>
+
                                                                 <td className="px-6 py-3 text-right text-[11px] font-black tabular-nums text-amber-500">
                                                                     R$ {comissaoTotal.toFixed(2)}
                                                                 </td>
@@ -548,7 +486,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                 )}
             </div>
 
-            {/* ✅ NOVO: Dois Botões de Impressão */}
+            {/* BOTÕES DE IMPRESSÃO */}
             {!loading && filteredReportData.length > 0 && (
                 <div className="bg-amber-500 rounded-2xl md:rounded-[4rem] p-6 md:p-12 flex flex-col xl:flex-row justify-between items-center shadow-2xl mt-8 md:mt-12 print:hidden gap-8">
                     <div className="flex flex-col md:flex-row items-center gap-4 md:gap-10 text-center md:text-left">
@@ -556,9 +494,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                             <Wallet size={32} className="text-amber-500 md:w-12 md:h-12" />
                         </div>
                         <div>
-                            <p className="text-[10px] md:text-[12px] font-black text-black/50 uppercase tracking-[0.2em] md:tracking-[0.3em] mb-1 md:mb-3">
-                                Repasse Total Período
-                            </p>
+                            <p className="text-[10px] md:text-[12px] font-black text-black/50 uppercase tracking-[0.2em] md:tracking-[0.3em] mb-1 md:mb-3">Repasse Total Período</p>
                             <h3 className="text-4xl md:text-7xl font-black text-black italic leading-none tabular-nums">
                                 R${' '}
                                 {filteredReportData
@@ -567,120 +503,77 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                             </h3>
                         </div>
                     </div>
-
-                    {/* ✅ DOIS BOTÕES LADO A LADO */}
                     <div className="flex flex-col md:flex-row gap-4 w-full md:w-auto">
-                        <button
-                            onClick={handlePrintSimple}
-                            className="w-full md:w-auto bg-black text-amber-500 px-6 md:px-10 py-5 md:py-7 rounded-xl md:rounded-[2.5rem] font-black uppercase text-xs md:text-sm tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all border-2 border-amber-500/20"
-                        >
+                        <button onClick={handlePrintSimple}
+                            className="w-full md:w-auto bg-black text-amber-500 px-6 md:px-10 py-5 md:py-7 rounded-xl md:rounded-[2.5rem] font-black uppercase text-xs md:text-sm tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all border-2 border-amber-500/20">
                             <FileText size={20} /> Recibo Simplificado
                         </button>
-                        <button
-                            onClick={handlePrintComplete}
-                            className="w-full md:w-auto bg-black text-amber-500 px-6 md:px-10 py-5 md:py-7 rounded-xl md:rounded-[2.5rem] font-black uppercase text-xs md:text-sm tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all"
-                        >
+                        <button onClick={handlePrintComplete}
+                            className="w-full md:w-auto bg-black text-amber-500 px-6 md:px-10 py-5 md:py-7 rounded-xl md:rounded-[2.5rem] font-black uppercase text-xs md:text-sm tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all">
                             <Printer size={20} /> Recibo Completo
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* ✅ ÁREA DE IMPRESSÃO - COM RENDERIZAÇÃO CONDICIONAL */}
+            {/* ÁREA DE IMPRESSÃO */}
             <div className="hidden print:block">
                 {filteredReportData.map((barber, index) => {
                     const isLast = index === filteredReportData.length - 1;
                     const totalLiquidoPrint = barber.totalComissaoCalculada + barber.totalGorjetas - (barber.expenses || 0);
 
                     return (
-                        <div
-                            key={barber.id}
-                            style={{
-                                pageBreakAfter: isLast ? 'auto' : 'always',
-                                pageBreakInside: 'avoid',
-                                padding: '20mm',
-                                backgroundColor: 'white',
-                                color: 'black'
-                            }}
-                        >
+                        <div key={barber.id} style={{ pageBreakAfter: isLast ? 'auto' : 'always', pageBreakInside: 'avoid', padding: '20mm', backgroundColor: 'white', color: 'black' }}>
+
                             {/* Cabeçalho */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', borderBottom: '2px solid black', paddingBottom: '20px' }}>
                                 <div>
-                                    <h1 style={{ fontSize: '24px', fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', margin: 0 }}>
-                                        {barbershopName || 'Barber Pro'}
-                                    </h1>
+                                    <h1 style={{ fontSize: '24px', fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', margin: 0 }}>{barbershopName || 'Barber Pro'}</h1>
                                     <p style={{ fontSize: '8px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '2px', margin: '5px 0 0 0' }}>
                                         Recibo de Repasse de Comissões {printMode === 'simple' ? '(SIMPLIFICADO)' : '(COMPLETO)'}
                                     </p>
                                 </div>
                                 <div style={{ textAlign: 'right', fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase' }}>
                                     <p style={{ margin: '0 0 5px 0' }}>Emitido em: {new Date().toLocaleDateString('pt-BR')}</p>
-                                    <p style={{ margin: 0 }}>
-                                        Período: {startDate?.toLocaleDateString('pt-BR')} - {endDate?.toLocaleDateString('pt-BR')}
-                                    </p>
+                                    <p style={{ margin: 0 }}>Período: {startDate?.toLocaleDateString('pt-BR')} - {endDate?.toLocaleDateString('pt-BR')}</p>
                                 </div>
                             </div>
 
-                            {/* Nome do Profissional */}
+                            {/* Profissional */}
                             <div style={{ marginBottom: '30px' }}>
-                                <p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#666', margin: '0 0 5px 0' }}>
-                                    Profissional:
-                                </p>
-                                <h2 style={{ fontSize: '36px', fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', margin: 0 }}>
-                                    {barber.name}
-                                </h2>
+                                <p style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: 'bold', color: '#666', margin: '0 0 5px 0' }}>Profissional:</p>
+                                <h2 style={{ fontSize: '36px', fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', margin: 0 }}>{barber.name}</h2>
                             </div>
 
                             {/* Resumo Financeiro */}
                             <div style={{ backgroundColor: '#f3f4f6', padding: '20px', borderRadius: '12px', marginBottom: '25px', border: '1px solid #e5e7eb' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '20px', textAlign: 'center', marginBottom: '25px' }}>
                                     <div>
-                                        <p style={{ fontSize: '8px', fontWeight: '900', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 8px 0' }}>
-                                            Comissões Total
-                                        </p>
-                                        <p style={{ fontSize: '18px', fontWeight: '900', margin: 0 }}>
-                                            R$ {barber.totalComissaoCalculada.toFixed(2)}
-                                        </p>
+                                        <p style={{ fontSize: '8px', fontWeight: '900', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 8px 0' }}>Comissões Total</p>
+                                        <p style={{ fontSize: '18px', fontWeight: '900', margin: 0 }}>R$ {barber.totalComissaoCalculada.toFixed(2)}</p>
                                     </div>
                                     <div>
-                                        <p style={{ fontSize: '8px', fontWeight: '900', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 8px 0' }}>
-                                            Gorjetas (+)
-                                        </p>
-                                        <p style={{ fontSize: '18px', fontWeight: '900', margin: 0 }}>
-                                            R$ {barber.totalGorjetas.toFixed(2)}
-                                        </p>
+                                        <p style={{ fontSize: '8px', fontWeight: '900', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 8px 0' }}>Gorjetas (+)</p>
+                                        <p style={{ fontSize: '18px', fontWeight: '900', margin: 0 }}>R$ {barber.totalGorjetas.toFixed(2)}</p>
                                     </div>
                                     <div>
-                                        <p style={{ fontSize: '8px', fontWeight: '900', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 8px 0' }}>
-                                            Taxa Base (%)
-                                        </p>
-                                        <p style={{ fontSize: '18px', fontWeight: '900', margin: 0 }}>
-                                            {barber.currentRate}%
-                                        </p>
+                                        <p style={{ fontSize: '8px', fontWeight: '900', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 8px 0' }}>Taxa Base (%)</p>
+                                        <p style={{ fontSize: '18px', fontWeight: '900', margin: 0 }}>{barber.currentRate}%</p>
                                     </div>
                                     <div>
-                                        <p style={{ fontSize: '8px', fontWeight: '900', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 8px 0' }}>
-                                            Vales/Desc (-)
-                                        </p>
-                                        <p style={{ fontSize: '18px', fontWeight: '900', color: '#dc2626', margin: 0 }}>
-                                            R$ {Number(barber.expenses || 0).toFixed(2)}
-                                        </p>
+                                        <p style={{ fontSize: '8px', fontWeight: '900', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 8px 0' }}>Vales/Desc (-)</p>
+                                        <p style={{ fontSize: '18px', fontWeight: '900', color: '#dc2626', margin: 0 }}>R$ {Number(barber.expenses || 0).toFixed(2)}</p>
                                     </div>
                                 </div>
                                 <div style={{ borderTop: '1px solid #d1d5db', paddingTop: '25px', textAlign: 'center' }}>
-                                    <p style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 8px 0' }}>
-                                        Total Líquido a Receber
-                                    </p>
-                                    <p style={{ fontSize: '36px', fontWeight: '900', fontStyle: 'italic', margin: 0 }}>
-                                        R$ {totalLiquidoPrint.toFixed(2)}
-                                    </p>
+                                    <p style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', color: '#9ca3af', margin: '0 0 8px 0' }}>Total Líquido a Receber</p>
+                                    <p style={{ fontSize: '36px', fontWeight: '900', fontStyle: 'italic', margin: 0 }}>R$ {totalLiquidoPrint.toFixed(2)}</p>
                                 </div>
                             </div>
 
-                            {/* ✅ CONDICIONAL: Só mostra detalhes no modo COMPLETO */}
+                            {/* Modo COMPLETO */}
                             {printMode === 'complete' && (
                                 <>
-                                    {/* Detalhamento de Vales */}
                                     {barber.advancesList && barber.advancesList.length > 0 && (
                                         <div style={{ marginBottom: '25px' }}>
                                             <h3 style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', borderBottom: '1px solid #e5e7eb', paddingBottom: '10px', marginBottom: '15px', fontStyle: 'italic', color: '#dc2626' }}>
@@ -697,23 +590,15 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                 <tbody>
                                                     {barber.advancesList.map((adv: any) => (
                                                         <tr key={adv.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                                            <td style={{ padding: '8px' }}>
-                                                                {new Date(adv.date).toLocaleDateString('pt-BR')}
-                                                            </td>
-                                                            <td style={{ padding: '8px', fontWeight: 'bold' }}>
-                                                                {adv.description}
-                                                            </td>
-                                                            <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#dc2626' }}>
-                                                                - R$ {Number(adv.amount).toFixed(2)}
-                                                            </td>
+                                                            <td style={{ padding: '8px' }}>{new Date(adv.date).toLocaleDateString('pt-BR')}</td>
+                                                            <td style={{ padding: '8px', fontWeight: 'bold' }}>{adv.description}</td>
+                                                            <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold', color: '#dc2626' }}>- R$ {Number(adv.amount).toFixed(2)}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
                                                 <tfoot>
                                                     <tr style={{ borderTop: '2px solid #d1d5db' }}>
-                                                        <td colSpan={2} style={{ padding: '10px', fontWeight: '900', textTransform: 'uppercase', fontSize: '8px' }}>
-                                                            Total de Vales Descontados:
-                                                        </td>
+                                                        <td colSpan={2} style={{ padding: '10px', fontWeight: '900', textTransform: 'uppercase', fontSize: '8px' }}>Total de Vales Descontados:</td>
                                                         <td style={{ padding: '10px', textAlign: 'right', fontWeight: '900', color: '#dc2626', fontSize: '11px' }}>
                                                             - R$ {barber.advancesList.reduce((acc: number, adv: any) => acc + Number(adv.amount), 0).toFixed(2)}
                                                         </td>
@@ -723,7 +608,6 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                         </div>
                                     )}
 
-                                    {/* Tabela de Detalhamento de Vendas */}
                                     <div style={{ marginBottom: '50px' }}>
                                         <h3 style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', borderBottom: '1px solid black', paddingBottom: '10px', marginBottom: '20px', fontStyle: 'italic' }}>
                                             Detalhamento das Vendas
@@ -740,9 +624,11 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                             <tbody>
                                                 {barber.detalhes.map((venda: any) => {
                                                     const gorjetaVenda = Number(venda.tip_amount) || 0;
-                                                    const comVal = calculateSaleCommission(venda, barber.currentRate);
+                                                    const comVal = calculateSaleCommission(venda);
                                                     const comissaoTotal = comVal + gorjetaVenda;
-                                                    const valorExibido = Number(venda.original_price || venda.price);
+                                                    const valorPago = Number(venda.price);
+                                                    const valorOriginal = Number(venda.original_price || venda.price);
+                                                    const temDesconto = venda.original_price && valorOriginal > valorPago;
 
                                                     return (
                                                         <tr key={venda.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
@@ -751,6 +637,7 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                             </td>
                                                             <td style={{ padding: '10px 0', fontWeight: 'bold', textTransform: 'uppercase', verticalAlign: 'top' }}>
                                                                 <div>
+                                                                    {/* ✅ (Com: X) no print também usa a comissão já ajustada */}
                                                                     {(venda.detailedItems || []).map((item: any, i: number) => (
                                                                         <div key={i} style={{ marginBottom: '4px', fontSize: '8px' }}>
                                                                             {item.isProduct ? '📦' : '✂️'} {item.name}
@@ -766,8 +653,13 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
                                                                     )}
                                                                 </div>
                                                             </td>
-                                                            <td style={{ padding: '10px 0', textAlign: 'right', color: '#9ca3af', verticalAlign: 'top' }}>
-                                                                R$ {valorExibido.toFixed(2)}
+                                                            <td style={{ padding: '10px 0', textAlign: 'right', verticalAlign: 'top' }}>
+                                                                <div style={{ fontWeight: '900', fontSize: '10px' }}>R$ {valorPago.toFixed(2)}</div>
+                                                                {temDesconto && (
+                                                                    <div style={{ textDecoration: 'line-through', color: '#9ca3af', fontSize: '8px', marginTop: '2px' }}>
+                                                                        R$ {valorOriginal.toFixed(2)}
+                                                                    </div>
+                                                                )}
                                                             </td>
                                                             <td style={{ padding: '10px 0', textAlign: 'right', fontWeight: 'bold', verticalAlign: 'top' }}>
                                                                 R$ {comissaoTotal.toFixed(2)}
@@ -783,84 +675,33 @@ const CommissionsModule = ({ barbershopId }: { barbershopId: string | null }) =>
 
                             {/* Assinatura */}
                             <div style={{ marginTop: '50px', paddingTop: '30px', borderTop: '1px solid black', width: '250px', margin: '50px auto 0', textAlign: 'center' }}>
-                                <p style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', margin: 0 }}>
-                                    Assinatura
-                                </p>
+                                <p style={{ fontSize: '10px', fontWeight: '900', textTransform: 'uppercase', fontStyle: 'italic', margin: 0 }}>Assinatura</p>
                             </div>
                         </div>
                     );
                 })}
             </div>
 
-            {/* ESTILOS */}
             <style>{`
                 @media print {
-                    @page { 
-                        size: A4; 
-                        margin: 0; 
-                    }
-                    body { 
-                        margin: 0 !important;
-                        padding: 0 !important;
-                    }
-                    body * {
-                        visibility: hidden;
-                    }
-                    .print\\:block, .print\\:block * {
-                        visibility: visible;
-                    }
-                    .print\\:block {
-                        position: absolute;
-                        left: 0;
-                        top: 0;
-                        width: 100%;
-                    }
-                    .print\\:hidden {
-                        display: none !important;
-                    }
-                    * {
-                        -webkit-print-color-adjust: exact !important;
-                        print-color-adjust: exact !important;
-                        color-adjust: exact !important;
-                    }
+                    @page { size: A4; margin: 0; }
+                    body { margin: 0 !important; padding: 0 !important; }
+                    body * { visibility: hidden; }
+                    .print\\:block, .print\\:block * { visibility: visible; }
+                    .print\\:block { position: absolute; left: 0; top: 0; width: 100%; }
+                    .print\\:hidden { display: none !important; }
+                    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
                 }
-                .react-datepicker { 
-                    background-color: #0f1115 !important; 
-                    border: 1px solid rgba(255,255,255,0.1) !important; 
-                    border-radius: 1.5rem !important; 
-                }
-                .react-datepicker__header { 
-                    background-color: #0f1115 !important; 
-                    border-bottom: 1px solid rgba(255,255,255,0.05) !important; 
-                }
-                .react-datepicker__current-month, 
-                .react-datepicker__day-name { 
-                    color: #94a3b8 !important; 
-                }
-                .react-datepicker__day { 
-                    color: #f8fafc !important; 
-                }
-                .react-datepicker__day:hover { 
-                    background-color: #1e293b !important; 
-                }
-                .react-datepicker__day--in-range { 
-                    background-color: rgba(245, 158, 11, 0.2) !important; 
-                }
-                .react-datepicker__day--selected { 
-                    background-color: #f59e0b !important; 
-                    color: #000 !important; 
-                }
-                .custom-scrollbar::-webkit-scrollbar { 
-                    height: 4px; 
-                    width: 4px; 
-                }
-                .custom-scrollbar::-webkit-scrollbar-track { 
-                    background: transparent; 
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb { 
-                    background: #333; 
-                    border-radius: 10px; 
-                }
+                .react-datepicker { background-color: #0f1115 !important; border: 1px solid rgba(255,255,255,0.1) !important; border-radius: 1.5rem !important; }
+                .react-datepicker__header { background-color: #0f1115 !important; border-bottom: 1px solid rgba(255,255,255,0.05) !important; }
+                .react-datepicker__current-month, .react-datepicker__day-name { color: #94a3b8 !important; }
+                .react-datepicker__day { color: #f8fafc !important; }
+                .react-datepicker__day:hover { background-color: #1e293b !important; }
+                .react-datepicker__day--in-range { background-color: rgba(245, 158, 11, 0.2) !important; }
+                .react-datepicker__day--selected { background-color: #f59e0b !important; color: #000 !important; }
+                .custom-scrollbar::-webkit-scrollbar { height: 4px; width: 4px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+                .custom-scrollbar::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
             `}</style>
         </div>
     );

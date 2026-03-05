@@ -72,7 +72,7 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
       await supabase.from('customer_packages').insert([{
         customer_id: customer.id,
         barbershop_id: barbershopId,
-        package_name: newCustomer.packageName,
+        package_name: formatPackageName(newCustomer.packageName),
         total_credits: Number(newCustomer.total_credits),
         price_paid: Number(newCustomer.price_paid),
         used_credits: 0
@@ -82,6 +82,14 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
     setIsModalOpen(false);
     setNewCustomer({ name: '', phone: '', birth_date: '', hasPackage: false, packageName: '', total_credits: '4', price_paid: '' });
     fetchCustomers();
+  };
+
+  const formatPackageName = (name: string) => {
+    const cleanName = name.trim();
+    if (cleanName.toLowerCase().startsWith('combo')) {
+      return cleanName.toUpperCase();
+    }
+    return `COMBO ${cleanName.toUpperCase()}`.trim();
   };
 
   const handleUpdateCustomer = async (e: React.FormEvent) => {
@@ -126,7 +134,7 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
     const { error } = await supabase.from('customer_packages').insert([{
       customer_id: targetCustomer.id,
       barbershop_id: barbershopId,
-      package_name: packageForm.packageName,
+      package_name: formatPackageName(packageForm.packageName),
       total_credits: Number(packageForm.total_credits),
       price_paid: Number(packageForm.price_paid),
       used_credits: 0
@@ -150,10 +158,10 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
 
   const formatPhone = (value: string) => {
     if (!value) return "";
-    value = value.replace(/\D/g, ""); // Remove tudo que não é número
+    value = value.replace(/\D/g, ""); 
     value = value.replace(/(\d{2})(\d)/, "($1) $2");
     value = value.replace(/(\d{5})(\d)/, "$1-$2");
-    return value.substring(0, 15); // Trava no tamanho (11) 99999-9999
+    return value.substring(0, 15); 
   };
 
   const handleUpdateCredits = async (packageId: string) => {
@@ -549,8 +557,8 @@ const CustomersModule = ({ barbershopId }: { barbershopId: string | null }) => {
                   <label className="text-[9px] font-black text-slate-500 uppercase ml-2">WhatsApp</label>
                   <input
                     required
-                    type="tel" // Mude para tel
-                    maxLength={15} // Trava física no HTML
+                    type="tel" 
+                    maxLength={15} 
                     placeholder="(00) 00000-0000"
                     value={newCustomer.phone}
                     onChange={e => setNewCustomer({ ...newCustomer, phone: formatPhone(e.target.value) })}

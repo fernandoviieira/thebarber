@@ -282,7 +282,10 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
   }, [barbershopId]);
 
   const activePkg = useMemo(() => {
-    if (!selectedCustomer?.customer_packages) return null;
+    if (!selectedCustomer?.customer_packages) {
+      return null;
+    }
+
     const pkg = selectedCustomer.customer_packages.find(
       (p: any) => Number(p.used_credits) < Number(p.total_credits)
     );
@@ -291,11 +294,13 @@ const CheckoutModule: React.FC<CheckoutProps> = ({
 
   const isItemInActivePackage = useCallback((itemName: string) => {
     if (!activePkg) return false;
+
     const pkgName = String(activePkg.package_name || activePkg.name || '').toLowerCase().trim();
     const serviceName = String(itemName || '').toLowerCase().trim();
 
-    if (pkgName === 'combo' || pkgName === 'pacote' || pkgName === 'plano') return true;
-    return pkgName.includes(serviceName) || serviceName.includes(pkgName);
+    const match = pkgName === 'combo' || pkgName === 'pacote' || pkgName === 'plano' ||
+      pkgName.includes(serviceName) || serviceName.includes(pkgName);
+    return match;
   }, [activePkg]);
 
   const getItemPrice = useCallback((item: any) => {
