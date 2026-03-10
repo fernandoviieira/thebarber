@@ -509,7 +509,15 @@ const AppContent: React.FC = () => {
             />
 
             <div className="flex-1 overflow-y-auto">
-              {adminActiveTab === 'dashboard' && <AdminDashboard barbershopId={barbershopId} />}
+              {adminActiveTab === 'dashboard' && (
+                <AdminDashboard
+                  barbershopId={barbershopId}
+                  expiresAt={expiresAt}
+                  subscriptionStatus={dbSubscriptionStatus}
+                  currentPlan={currentPlan}
+                />
+              )}
+
               {adminActiveTab === 'caixa' && <CashFlowModule barbershopId={barbershopId} appointments={appointments} />}
               {adminActiveTab === 'agendamentos' && (
                 <AdminCalendarView

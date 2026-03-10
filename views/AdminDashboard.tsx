@@ -17,18 +17,24 @@ import {
   Activity,
   MinusCircle,
   Volume2,
-  VolumeX
+  VolumeX,
+  ShieldCheck,
+  AlertTriangle,
+  CalendarClock
 } from 'lucide-react';
 
 interface AdminDashboardProps {
   barbershopId: string;
+  expiresAt?: string | null;
+  subscriptionStatus?: string | null;
+  currentPlan?: string | null;
 }
 
 type Appointment = {
   id: string;
   barbershop_id: string;
   barber_id?: string | null;
-  date: string;
+  date: string; // "YYYY-MM-DD"
   time: string;
   status: string;
   barber: string;
@@ -57,6 +63,7 @@ type Expense = {
 const parseDateSafe = (dateStr: string | null | undefined): Date | null => {
   if (!dateStr) return null;
   try {
+    // Força meia-noite UTC pra evitar variação por fuso em datas "YYYY-MM-DD"
     const date = new Date(dateStr + 'T00:00:00.000Z');
     return isNaN(date.getTime()) ? null : date;
   } catch {
@@ -69,13 +76,40 @@ const parseNumberSafe = (value: any): number => {
   return isNaN(num) ? 0 : num;
 };
 
-const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
-  const { appointments, fetchAppointments, loading: bookingLoading } = useBooking();
+function startOfDay(d: Date) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/**
+ * Dias corridos (por calendário) até expirar.
+ * 0: expira hoje, 1: amanhã, negativo: já expirou
+ */
+function getDaysRemainingCalendar(expiresAtIso?: string | null) {
+  if (!expiresAtIso) return null;
+
+  const exp = new Date(expiresAtIso);
+  if (Number.isNaN(exp.getTime())) return null;
+
+  const today = startOfDay(new Date());
+  const expDay = startOfDay(exp);
+
+  const ms = expDay.getTime() - today.getTime();
+  return Math.round(ms / (1000 * 60 * 60 * 24));
+}
+
+const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  barbershopId,
+  expiresAt,
+  subscriptionStatus,
+  currentPlan
+}) => {
+  const { appointments, fetchAppointments } = useBooking();
 
   const [barbers, setBarbers] = useState<Barber[]>([]);
-  const [trialDate, setTrialDate] = useState<barbershops[]>([]);
+  const [trialDate, setTrialDate] = useState<string | null>(null); // ✅ corrigido
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
   const [loadingData, setLoadingData] = useState(true);
+
   const [machineFees, setMachineFees] = useState({
     dinheiro: 0,
     pix: 0,
@@ -83,10 +117,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     credito: 4.99,
     pacote: 0
   });
-  const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([new Date(), new Date()]);
+
+  const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([
+    new Date(),
+    new Date()
+  ]);
   const [startDate, endDate] = dateRange;
+
   const [isSarahAnalyzing, setIsSarahAnalyzing] = useState(false);
   const [sarahMessage, setSarahMessage] = useState<string | null>(null);
+
   const [isAudioEnabled, setIsAudioEnabled] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`audio_enabled_${barbershopId}`);
@@ -97,18 +137,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
   const fetchData = useCallback(async () => {
     if (!barbershopId) return;
+
     setLoadingData(true);
     try {
       const [barbersRes, settingsRes, expensesRes, shopRes] = await Promise.all([
         supabase.from('barbers').select('*').eq('barbershop_id', barbershopId),
-        supabase.from('barbershop_settings').select('*').eq('barbershop_id', barbershopId).maybeSingle(),
+        supabase
+          .from('barbershop_settings')
+          .select('*')
+          .eq('barbershop_id', barbershopId)
+          .maybeSingle(),
         supabase.from('expenses').select('*').eq('barbershop_id', barbershopId),
-        supabase.from('barbershops').select('trial_ends_at').eq('id', barbershopId).single()
+        supabase
+          .from('barbershops')
+          .select('trial_ends_at')
+          .eq('id', barbershopId)
+          .single()
       ]);
 
       if (barbersRes.data) setBarbers(barbersRes.data);
       if (expensesRes.data) setAllExpenses(expensesRes.data);
-      if (shopRes.data) setTrialDate(shopRes.data.trial_ends_at);
+
+      if (shopRes.data?.trial_ends_at) setTrialDate(shopRes.data.trial_ends_at);
+      else setTrialDate(null);
+
       if (settingsRes.data) {
         setMachineFees({
           dinheiro: parseNumberSafe(settingsRes.data.fee_dinheiro),
@@ -126,14 +178,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   }, [barbershopId]);
 
   useEffect(() => {
-    if (barbershopId && fetchAppointments) {
-      fetchAppointments(barbershopId);
-    }
-  }, [barbershopId]);
+    if (barbershopId && fetchAppointments) fetchAppointments(barbershopId);
+  }, [barbershopId, fetchAppointments]);
 
   useEffect(() => {
     fetchData();
-
     if (!barbershopId) return;
 
     const channel = supabase
@@ -149,7 +198,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
         (payload) => {
           if (payload.eventType === 'INSERT' && isAudioEnabled) {
             const audio = new Audio('/sounds/notification.wav');
-            audio.play().catch(() => console.warn("Interaja com a página para liberar áudio"));
+            audio
+              .play()
+              .catch(() => console.warn('Interaja com a página para liberar áudio'));
           }
 
           if (fetchAppointments) fetchAppointments(barbershopId);
@@ -160,7 +211,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [barbershopId, fetchData, isAudioEnabled]);
+  }, [barbershopId, fetchData, isAudioEnabled, fetchAppointments]);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -180,8 +231,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   }, [isAudioEnabled, barbershopId]);
 
   const pendingApps = useMemo(() => {
-    return (appointments as Appointment[] || []).filter(
-      app => app.status === 'pendente' && app.barbershop_id === barbershopId
+    return ((appointments as Appointment[]) || []).filter(
+      (app) => app.status === 'pendente' && app.barbershop_id === barbershopId
     );
   }, [appointments, barbershopId]);
 
@@ -190,11 +241,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
     const start = new Date(startDate);
     start.setHours(0, 0, 0, 0);
+
     const end = new Date(endDate);
     end.setHours(23, 59, 59, 999);
 
-    return (appointments as Appointment[]).filter(app => {
+    return (appointments as Appointment[]).filter((app) => {
       if (app.barbershop_id !== barbershopId) return false;
+
       const [year, month, day] = app.date.split('-').map(Number);
       const appDate = new Date(year, month - 1, day);
 
@@ -204,7 +257,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
   const totalBruto = useMemo(() => {
     return filteredApps
-      .filter(app => app.status === 'finalizado')
+      .filter((app) => app.status === 'finalizado')
       .reduce((acc, curr) => {
         const valor = parseNumberSafe(curr.original_price) || parseNumberSafe(curr.price);
         return acc + valor;
@@ -213,7 +266,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 
   const totalLiquidoReal = useMemo(() => {
     return filteredApps
-      .filter(app => app.status === 'finalizado')
+      .filter((app) => app.status === 'finalizado')
       .reduce((acc, curr) => {
         const metodo = (curr.payment_method || 'dinheiro').toLowerCase();
         const taxa = (machineFees[metodo as keyof typeof machineFees] || 0) / 100;
@@ -222,25 +275,34 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   }, [filteredApps, machineFees]);
 
   const barberPerformance = useMemo(() => {
-    return barbers.map(barber => {
-      const servicesDone = filteredApps.filter(app => {
-        if (app.status !== 'finalizado') return false;
-        if (app.barber_id) return app.barber_id === barber.id;
-        return (app.barber || '').trim().toLowerCase() === (barber.name || '').trim().toLowerCase();
-      });
+    return barbers
+      .map((barber) => {
+        const servicesDone = filteredApps.filter((app) => {
+          if (app.status !== 'finalizado') return false;
+          if (app.barber_id) return app.barber_id === barber.id;
 
-      const bruto = servicesDone.reduce((acc, curr) => acc + parseNumberSafe(curr.price), 0);
-      const gorjetas = servicesDone.reduce((acc, curr) => acc + parseNumberSafe(curr.tip_amount), 0);
-      const rate = parseNumberSafe(barber.commission_rate);
+          return (
+            (app.barber || '').trim().toLowerCase() ===
+            (barber.name || '').trim().toLowerCase()
+          );
+        });
 
-      return {
-        ...barber,
-        count: servicesDone.length,
-        bruto,
-        gorjetas,
-        comissaoValor: bruto * (rate / 100)
-      };
-    }).sort((a, b) => b.bruto - a.bruto);
+        const bruto = servicesDone.reduce((acc, curr) => acc + parseNumberSafe(curr.price), 0);
+        const gorjetas = servicesDone.reduce(
+          (acc, curr) => acc + parseNumberSafe(curr.tip_amount),
+          0
+        );
+        const rate = parseNumberSafe(barber.commission_rate);
+
+        return {
+          ...barber,
+          count: servicesDone.length,
+          bruto,
+          gorjetas,
+          comissaoValor: bruto * (rate / 100)
+        };
+      })
+      .sort((a, b) => b.bruto - a.bruto);
   }, [barbers, filteredApps]);
 
   const totalExpenses = useMemo(() => {
@@ -248,30 +310,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     const end = endDate ? new Date(endDate).setUTCHours(23, 59, 59, 999) : 0;
 
     return allExpenses
-      .filter(exp => {
+      .filter((exp) => {
         const d = parseDateSafe(exp.date);
         return d && d.getTime() >= start && d.getTime() <= end;
       })
       .reduce((acc, exp) => acc + parseNumberSafe(exp.amount), 0);
   }, [allExpenses, startDate, endDate]);
 
-  const totalComissoes = useMemo(() =>
-    barberPerformance.reduce((acc, curr) => acc + curr.comissaoValor, 0),
+  const totalComissoes = useMemo(
+    () => barberPerformance.reduce((acc, curr) => acc + curr.comissaoValor, 0),
     [barberPerformance]
   );
 
-  const totalGorjeta = useMemo(() =>
-    barberPerformance.reduce((acc, curr) => acc + curr.gorjetas, 0),
+  const totalGorjeta = useMemo(
+    () => barberPerformance.reduce((acc, curr) => acc + curr.gorjetas, 0),
     [barberPerformance]
   );
 
-  const lucroLiquidoRealFinal = useMemo(() =>
-    totalLiquidoReal - totalComissoes - totalExpenses,
+  const lucroLiquidoRealFinal = useMemo(
+    () => totalLiquidoReal - totalComissoes - totalExpenses,
     [totalLiquidoReal, totalComissoes, totalExpenses]
   );
 
-  const custosOperacionais = useMemo(() =>
-    totalBruto - totalLiquidoReal + totalComissoes + totalGorjeta,
+  const custosOperacionais = useMemo(
+    () => totalBruto - totalLiquidoReal + totalComissoes + totalGorjeta,
     [totalBruto, totalLiquidoReal, totalComissoes, totalGorjeta]
   );
 
@@ -288,13 +350,15 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
   const analyzeWithSarah = async () => {
     setIsSarahAnalyzing(true);
     setSarahMessage(null);
+
     try {
       const payload = {
         faturamentoBruto: totalBruto,
         lucroLiquido: lucroLiquidoRealFinal,
         status: lucroLiquidoRealFinal < 0 ? 'PREJUÍZO' : 'LUCRO',
-        barbeiros: barberPerformance.map(b => ({ nome: b.name, faturamento: b.bruto }))
+        barbeiros: barberPerformance.map((b) => ({ nome: b.name, faturamento: b.bruto }))
       };
+
       const { data } = await supabase.functions.invoke('get-ai-insights', { body: payload });
       setSarahMessage(data?.insight || 'Análise concluída com sucesso.');
     } catch (error) {
@@ -304,13 +368,66 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     }
   };
 
-  const trialEnd = Math.max(0, Math.ceil((new Date(trialDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)));
+  // ---- Trial UI ----
+  const trialEnd = useMemo(() => {
+    if (!trialDate) return 0;
+    return Math.max(
+      0,
+      Math.ceil((new Date(trialDate).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    );
+  }, [trialDate]);
+
+  // (Opcional) só pra deixar a barrinha “bonita” quando não existe total real.
+  // Ajuste se seu trial for 7/14/30 dias.
+  const trialTotalDays = 7;
+  const trialRemainingPct = useMemo(() => {
+    if (!trialDate) return 0;
+    return Math.max(0, Math.min(100, (trialEnd / trialTotalDays) * 100));
+  }, [trialDate, trialEnd]);
+
+  // ---- Plano UI ----
+  const planDaysRemaining = useMemo(() => getDaysRemainingCalendar(expiresAt), [expiresAt]);
+
+  const planTotalDays = useMemo(() => {
+    const p = (currentPlan || '').toLowerCase();
+    if (p.includes('mensal')) return 30;
+    if (p.includes('semestral')) return 180;
+    if (p.includes('anual')) return 365;
+    return null;
+  }, [currentPlan]);
+
+  const planInfo = useMemo(() => {
+    if (planDaysRemaining === null) return null;
+
+    const isExpired = planDaysRemaining < 0;
+    const isUrgent = !isExpired && planDaysRemaining <= 10;
+
+    const label =
+      isExpired
+        ? `Expirado há ${Math.abs(planDaysRemaining)} dia(s)`
+        : planDaysRemaining === 0
+          ? 'Expira hoje'
+          : planDaysRemaining === 1
+            ? 'Expira amanhã'
+            : `Expira em ${planDaysRemaining} dias`;
+
+    const tone: 'ok' | 'urgent' | 'expired' = isExpired ? 'expired' : isUrgent ? 'urgent' : 'ok';
+
+    const remainingPct =
+      planTotalDays && !isExpired
+        ? Math.max(0, Math.min(100, (planDaysRemaining / planTotalDays) * 100))
+        : null;
+
+    return { tone, label, remainingPct };
+  }, [planDaysRemaining, planTotalDays]);
 
   if (loadingData) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-[#0f1115] text-amber-500">
         <Loader2 className="animate-spin mb-4" size={40} />
-        <span className="font-black uppercase text-[10px] tracking-[0.5em]">Carregando Dashboard...</span>
+        <span className="font-black uppercase text-[10px] tracking-[0.5em]">
+          Carregando Dashboard...
+        </span>
       </div>
     );
   }
@@ -319,60 +436,157 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
     <div className="flex-1 overflow-y-auto bg-[#0f1115] custom-scrollbar p-6">
       <div className="max-w-[1400px] mx-auto space-y-8">
         <header className="flex flex-col gap-6 border-b border-white/5 pb-8">
-          <div className="flex justify-between items-start">
-            <div className="space-y-3">
+          <div className="flex justify-between items-start gap-6">
+            <div className="space-y-3 flex-1 min-w-0">
+              {/* CARDS: Trial + Plano (lado a lado no desktop, wrap no mobile) */}
+              <div className="flex flex-wrap gap-4 items-start">
+                {trialDate && trialEnd !== 0 && (
+                  <div className="relative overflow-hidden group bg-slate-900/50 border border-white/5 p-4 rounded-2xl flex items-center gap-4 min-w-[240px] shadow-2xl">
+                    <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-500/10 blur-3xl rounded-full" />
 
-              {(trialDate && trialEnd !== 0) && (
-                <div className="relative overflow-hidden group bg-slate-900/50 border border-white/5 p-4 rounded-2xl flex items-center gap-4 min-w-[240px] shadow-2xl">
-                  {/* Efeito de brilho de fundo */}
-                  <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-500/10 blur-3xl rounded-full" />
+                    <div className="relative w-12 h-12 flex-shrink-0">
+                      <div className="absolute inset-0 border-2 border-amber-500/20 rounded-2xl" />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Clock size={18} className="text-amber-500 animate-pulse" />
+                      </div>
+                    </div>
 
-                  <div className="relative w-12 h-12 flex-shrink-0">
-                    {/* Círculo de progresso simplificado ou Ícone */}
-                    <div className="absolute inset-0 border-2 border-amber-500/20 rounded-full" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Clock size={18} className="text-amber-500 animate-pulse" />
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] italic">
+                          Free Trial Mode
+                        </span>
+                        <div className="w-1 h-1 rounded-full bg-amber-500 animate-ping" />
+                      </div>
+
+                      <h5 className="text-white font-black text-sm uppercase tracking-tighter">
+                        {trialEnd} Dia(s) Restante(s)
+                      </h5>
+
+                      <div className="w-full h-1 bg-white/5 rounded-full mt-2 overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-amber-600 to-amber-400 transition-all duration-700"
+                          style={{ width: `${trialRemainingPct}%` }}
+                        />
+                      </div>
                     </div>
                   </div>
+                )}
 
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[9px] font-black text-amber-500 uppercase tracking-[0.2em] italic">
-                        Free Trial Mode
-                      </span>
-                      <div className="w-1 h-1 rounded-full bg-amber-500 animate-ping" />
-                    </div>
+                {planInfo && (
+                  <div
+                    className={`
+                      relative overflow-hidden group border p-5 rounded-2xl flex items-center gap-4 min-w-[280px] shadow-2xl
+                      ${planInfo.tone === 'expired'
+                        ? 'bg-red-500/10 border-red-500/30'
+                        : planInfo.tone === 'urgent'
+                          ? 'bg-amber-500/10 border-amber-500/25'
+                          : 'bg-emerald-500/10 border-emerald-500/25'}
+                    `}
+                  >
+                    <div
+                      className={`
+                        absolute -right-4 -top-4 w-24 h-24 blur-3xl rounded-full
+                        ${planInfo.tone === 'expired'
+                          ? 'bg-red-500/15'
+                          : planInfo.tone === 'urgent'
+                            ? 'bg-amber-500/15'
+                            : 'bg-emerald-500/15'}
+                      `}
+                    />
 
-                    <h5 className="text-white font-black text-sm uppercase tracking-tighter">
-                      {Math.max(0, Math.ceil((new Date(trialDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)))} Dias Restantes
-                    </h5>
-
-                    {/* Barra de progresso micro */}
-                    <div className="w-full h-1 bg-white/5 rounded-full mt-2 overflow-hidden">
+                    <div className="relative w-12 h-12 flex-shrink-0">
                       <div
-                        className="h-full bg-gradient-to-r from-amber-600 to-amber-400"
-                        style={{ width: '65%' }}
+                        className={`
+                          absolute inset-0 border-2 rounded-2xl
+                          ${planInfo.tone === 'expired'
+                            ? 'border-red-500/30'
+                            : planInfo.tone === 'urgent'
+                              ? 'border-amber-500/30'
+                              : 'border-emerald-500/30'}
+                        `}
                       />
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        {planInfo.tone === 'expired' ? (
+                          <AlertTriangle size={18} className="text-red-400" />
+                        ) : (
+                          <ShieldCheck
+                            size={18}
+                            className={planInfo.tone === 'urgent' ? 'text-amber-400' : 'text-emerald-400'}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-[9px] font-black uppercase tracking-[0.2em] text-slate-300/80">
+                          Licença
+                        </span>
+
+                        <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black text-white/80 uppercase tracking-widest">
+                          {currentPlan || 'Plano:'}
+                        </span>
+
+                        {subscriptionStatus && (
+                          <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                            {subscriptionStatus == 'active' ? subscriptionStatus = 'Ativo' : subscriptionStatus = subscriptionStatus}
+                          </span>
+                        )}
+                      </div>
+
+                      <h5 className="text-white font-black text-sm uppercase tracking-tighter mt-1">
+                        {planInfo.label}
+                      </h5>
+
+                      {planInfo.remainingPct !== null && (
+                        <div className="w-full h-1.5 bg-white/5 rounded-full mt-2 overflow-hidden">
+                          <div
+                            className={`
+                              h-full rounded-full transition-all duration-700
+                              ${planInfo.tone === 'urgent'
+                                ? 'bg-gradient-to-r from-amber-600 to-amber-400'
+                                : 'bg-gradient-to-r from-emerald-600 to-emerald-400'}
+                            `}
+                            style={{ width: `${planInfo.remainingPct}%` }}
+                          />
+                        </div>
+                      )}
+
+                      <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+                        <CalendarClock size={12} className="opacity-80" />
+                        <span className="truncate">
+                          {planInfo.tone === 'expired'
+                            ? 'Acesso sob risco — vá em Cobrança para reativar'
+                            : planInfo.tone === 'urgent'
+                              ? 'Renove antes do vencimento para não bloquear'
+                              : 'Tudo certo — unidade operacional'}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
               <div className="flex items-center gap-2 text-amber-500 bg-amber-500/10 w-fit px-4 py-1.5 rounded-full border border-amber-500/20">
                 <Activity size={12} className="animate-pulse" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Painel Administrativo</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">
+                  Painel Administrativo
+                </span>
               </div>
+
               <h2 className="text-3xl lg:text-5xl font-black text-white uppercase italic tracking-tighter">
                 Performance <span className="text-amber-500">Center</span>
               </h2>
             </div>
 
             <button
-              onClick={() => setIsAudioEnabled(prev => !prev)}
-              className={`p-4 rounded-2xl border transition-all flex items-center gap-3 ${isAudioEnabled
-                ? 'bg-amber-500 text-black border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
-                : 'bg-red-500/10 text-red-500 border-red-500/20 shadow-[0_0_20px_rgba(239,68,68,0.1)]'
-                }`}
+              onClick={() => setIsAudioEnabled((prev) => !prev)}
+              className={`p-4 rounded-2xl border transition-all flex items-center gap-3 flex-shrink-0 ${
+                isAudioEnabled
+                  ? 'bg-amber-500 text-black border-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.3)]'
+                  : 'bg-red-500/10 text-red-500 border-red-500/20 shadow-[0_0_20px_rgba(239,68,68,0.1)]'
+              }`}
             >
               {isAudioEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
               <span className="font-black text-[10px] uppercase tracking-widest">
@@ -421,8 +635,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
                 {pendingApps.length}
               </span>
             </div>
+
             <div className="grid gap-3">
-              {pendingApps.map(app => (
+              {pendingApps.map((app) => (
                 <div
                   key={app.id}
                   className="bg-slate-900/60 border border-white/5 p-5 rounded-2xl flex justify-between items-center"
@@ -436,6 +651,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
                       {app.service} com {app.barber}
                     </p>
                   </div>
+
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleReject(app.id)}
@@ -488,8 +704,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
             <h4 className="text-xl font-black text-white uppercase italic mb-10 tracking-widest">
               Ranking de Profissionais
             </h4>
+
             <div className="space-y-8">
-              {barberPerformance.map(b => (
+              {barberPerformance.map((b) => (
                 <div key={b.id}>
                   <div className="flex justify-between items-end mb-3">
                     <span className="text-[10px] font-black text-white uppercase tracking-widest">
@@ -499,10 +716,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
                       R$ {b.bruto.toFixed(2)}
                     </span>
                   </div>
+
                   <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-amber-500 rounded-full transition-all duration-1000"
-                      style={{ width: `${totalBruto > 0 ? (b.bruto / totalBruto) * 100 : 0}%` }}
+                      style={{
+                        width: `${totalBruto > 0 ? (b.bruto / totalBruto) * 100 : 0}%`
+                      }}
                     />
                   </div>
                 </div>
@@ -514,12 +734,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
             <div>
               <div className="flex items-center gap-3 mb-8 text-amber-500">
                 <BrainCircuit size={20} />
-                <h4 className="text-xl font-black uppercase italic tracking-widest">Sarah Insights</h4>
+                <h4 className="text-xl font-black uppercase italic tracking-widest">
+                  Sarah Insights
+                </h4>
               </div>
               <p className="text-xs font-bold text-white leading-relaxed opacity-80">
-                {sarahMessage || 'Olá! Selecione um período e clique abaixo para analisar seu negócio.'}
+                {sarahMessage ||
+                  'Olá! Selecione um período e clique abaixo para analisar seu negócio.'}
               </p>
             </div>
+
             <button
               onClick={analyzeWithSarah}
               disabled={isSarahAnalyzing}
@@ -535,7 +759,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ barbershopId }) => {
 };
 
 const StatCard = ({ label, value, icon, variant = 'default' }: any) => {
-  const isNegative = value < 0;
+  const numericValue = typeof value === 'number' ? value : Number(value);
+  const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+  const isNegative = safeValue < 0;
+
   const variants: any = {
     amber: 'bg-amber-500/5 border-amber-500/20 text-amber-500',
     red: 'bg-red-500/5 border-red-500/20 text-red-500',
@@ -544,16 +771,22 @@ const StatCard = ({ label, value, icon, variant = 'default' }: any) => {
   };
 
   return (
-    <div className={`p-8 rounded-[2rem] border transition-all shadow-2xl ${isNegative ? 'bg-red-600 border-red-400 text-white' : variants[variant]
-      }`}>
+    <div
+      className={`p-8 rounded-[2rem] border transition-all shadow-2xl ${
+        isNegative ? 'bg-red-600 border-red-400 text-white' : variants[variant]
+      }`}
+    >
       <div className="flex justify-between items-start mb-6">
-        <p className="text-[10px] font-black uppercase tracking-widest opacity-70">{label}</p>
+        <p className="text-[10px] font-black uppercase tracking-widest opacity-70">
+          {label}
+        </p>
         <div className="p-3 rounded-2xl bg-white/5">{icon}</div>
       </div>
+
       <div className="flex items-baseline gap-1">
         <span className="text-xs font-bold opacity-40">R$</span>
         <h3 className="text-2xl lg:text-3xl font-black italic tracking-tighter">
-          {Math.abs(value).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          {Math.abs(safeValue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
         </h3>
       </div>
     </div>
