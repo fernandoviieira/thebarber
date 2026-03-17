@@ -178,14 +178,18 @@ const AppContent: React.FC = () => {
       setView('create_barbershop');
     }
 
+    // --- LOCALIZAÇÃO NO SEU APP.TSX ---
     if (urlSlug) {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
         const baseApi = "https://api.contafacilpro.com.br";
-        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
+        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}`;
 
+        // Ajuste aqui para evitar o erro de download de ícone:
         if (manifestLink.href !== newManifestHref) {
-          manifestLink.setAttribute('crossorigin', 'anonymous');
+          // ESTA LINHA É A CHAVE:
+          manifestLink.setAttribute('crossorigin', 'use-credentials');
+
           manifestLink.href = newManifestHref;
         }
       }
