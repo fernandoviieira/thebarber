@@ -188,19 +188,19 @@ const AppContent: React.FC = () => {
       setView('create_barbershop');
     }
 
-    // 2. MANIFEST PWA (REMOVIDO O Date.now() PARA EVITAR LOOP)
+    // ✅ CORRETO — passa pelo proxy do Vercel, mesma origem
     if (urlSlug) {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
-        const baseApi = "https://api.contafacilpro.com.br";
-        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}`; // Removido o v=Date.now()
+        const newManifestHref = `/api-manifest/${urlSlug}`; // relativo = sempre mesma origem
 
-        if (manifestLink.href !== newManifestHref) {
-          manifestLink.setAttribute('crossorigin', 'anonymous');
+        if (manifestLink.getAttribute('href') !== newManifestHref) {
+          manifestLink.removeAttribute('crossorigin'); // ❌ remove — não precisa para same-origin
           manifestLink.href = newManifestHref;
         }
       }
     }
+
 
     // 3. OUVINTE DE AUTH (SUPABASE)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
