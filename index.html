@@ -15,8 +15,7 @@
   <meta name="theme-color" content="#f59e0b">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="BarberPro">
-  <link rel="manifest" href="/api-manifest/default">
-
+  <link rel="manifest" href="/api/manifest/default">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
   <link rel="apple-touch-icon" href="/icon-192.png">
@@ -41,17 +40,19 @@
 <body class="bg-zinc-950 text-zinc-100">
   <div id="root"></div>
 
+  <!-- ✅ SERVICE WORKER REGISTRATION -->
   <script>
     document.addEventListener('DOMContentLoaded', function () {
       const path = window.location.pathname.split('/').filter(Boolean)[0];
-      const reserved = ['admin', 'login', 'profile', 'settings', 'create_barbershop',
-        'my_appointments', 'registrar', 'install', ''];
+      const reserved = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'install', ''];
+
+      // ✅ NO INDEX.HTML
       const manifestLink = document.querySelector('link[rel="manifest"]');
       if (manifestLink) {
         if (path && !reserved.includes(path)) {
-          manifestLink.href = `/api-manifest/${path}`;   // ✅ sem ?t=
+          manifestLink.href = `/api-manifest/${path}?t=${Date.now()}`;
         } else {
-          manifestLink.href = `/api-manifest/default`;   // ✅ sem ?t=
+          manifestLink.href = `/api-manifest/default?t=${Date.now()}`;
         }
       }
     });

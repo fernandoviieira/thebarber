@@ -19,14 +19,13 @@ import CheckoutModule from './views/CheckoutModule';
 import SalesHistoryModule from './views/SalesHistoryModule';
 import ExpensesModule from './views/ExpensesModule';
 import ResetPassword from './views/ResetPassword';
-import LandingPage from './views/LandingPage';
 import Sidebar from './views/Sidebar';
 import Login from './views/Login';
 import { MOCK_USER } from './constants';
 import { supabase } from '@/lib/supabase';
 import { Calendar, Settings, Plus, ShieldCheck, LogOut, LayoutDashboard } from 'lucide-react';
 
-type ViewState = 'landing' | 'client' | 'admin' | 'booking' | 'profile' | 'my_appointments' | 'settings' | 'create_barbershop' | 'subscription_plans' | 'reset_password';
+type ViewState = 'client' | 'admin' | 'booking' | 'profile' | 'my_appointments' | 'settings' | 'create_barbershop' | 'subscription_plans' | 'reset_password';
 
 type AdminTab =
   | 'dashboard'
@@ -159,72 +158,62 @@ const AppContent: React.FC = () => {
   }, [isAdmin, barbershopSlug]);
 
   useEffect(() => {
-    if (isResetPasswordRoute.current) return;
+    if (isResetPasswordRoute.current) {
+      return;
+    }
 
     const path = window.location.pathname.split('/')[1];
     const reservedRoutes = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'reset-password', ''];
 
-    // 1. GESTÃO DE ROTAS E VIEW (LANDING vs APP)
-    if (path === '') {
+    if (path && !reservedRoutes.includes(path)) {
+      localStorage.setItem('last_visited_slug', path);
+      if (urlSlug !== path) setUrlSlug(path);
+    }
+    else if (path === '' && localStorage.getItem('last_visited_slug')) {
       const savedSlug = localStorage.getItem('last_visited_slug');
-
-      if (savedSlug) {
-        window.location.replace(`/${savedSlug}`);
-        return;
-      }
-
-      if (!session && view !== 'landing') {
-        setView('landing');
-      } else if (session && view === 'landing') {
-        setView('profile');
-      }
-    } else if (!reservedRoutes.includes(path)) {
-      // Só atualiza o slug se ele for realmente diferente do atual
-      if (urlSlug !== path) {
-        localStorage.setItem('last_visited_slug', path);
-        setUrlSlug(path);
-      }
-    } else if (path === 'registrar' && view !== 'create_barbershop') {
+      window.location.replace(`/${savedSlug}`);
+      return;
+    }
+    else if (path === 'registrar') {
       setView('create_barbershop');
     }
 
-    // ✅ CORRETO — passa pelo proxy do Vercel, mesma origem
     if (urlSlug) {
       const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
       if (manifestLink) {
-        const newManifestHref = `/api-manifest/${urlSlug}`; // relativo = sempre mesma origem
+        const baseApi = "https://api.contafacilpro.com.br";
+        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
-        if (manifestLink.getAttribute('href') !== newManifestHref) {
-          manifestLink.removeAttribute('crossorigin'); // ❌ remove — não precisa para same-origin
+        if (manifestLink.href !== newManifestHref) {
+          manifestLink.setAttribute('crossorigin', 'anonymous');
           manifestLink.href = newManifestHref;
         }
       }
     }
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setSession(session);
 
-    // 3. OUVINTE DE AUTH (SUPABASE)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      // Evita atualizar se a sessão for a mesma
-      if (JSON.stringify(currentSession) !== JSON.stringify(session)) {
-        setSession(currentSession);
+      if (isResetPasswordRoute.current || window.location.pathname.includes('reset-password')) {
+        setView('reset_password');
+        setLoading(false);
+        return;
       }
 
-      if (currentSession) {
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          fetchProfile(currentSession, true, path);
+      if (session) {
+        const isNewSession = event === 'SIGNED_IN' || event === 'INITIAL_SESSION';
+        if (isNewSession) {
+          fetchProfile(session, true, window.location.pathname.split('/')[1]);
         }
       } else {
         setLoading(false);
         hasRedirected.current = false;
-        if (!urlSlug && path === '') {
-          setView('landing');
-        }
+        if (!urlSlug && (path === '' || path === 'profile')) setView('profile');
       }
     });
 
     return () => subscription.unsubscribe();
-    // Remova o 'view' das dependências se ele não for usado para lógica de decisão aqui dentro
-  }, [urlSlug, session]);
+  }, [urlSlug, barbershopName]);
 
   const fetchProfile = async (currentSession: any, allowRedirect: boolean, currentPath: string | null) => {
     try {
@@ -462,9 +451,6 @@ const AppContent: React.FC = () => {
   }
 
   if (!session && !isResetPasswordRoute.current) {
-    if (view === 'landing') {
-      return <LandingPage onLogin={() => setView('profile')} />;
-    }
     return (
       <Login onLoginSuccess={() => { hasRedirected.current = false; setLoading(true); }} />
     );
