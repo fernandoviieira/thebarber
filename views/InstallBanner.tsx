@@ -9,52 +9,88 @@ export function InstallBanner() {
   const [isStandalone, setIsStandalone] = useState(false);
 
   useEffect(() => {
+    // ==========================================================
+    // 1. DETECÇÃO DE MODO STANDALONE (MELHORADA PARA iOS)
+    // ==========================================================
     const checkStandalone = () => {
-      const standalone =
-        window.matchMedia('(display-mode: standalone)').matches ||
-        (window.navigator as any).standalone === true ||
-        document.referrer.includes('android-app://') ||
-        window.location.protocol === 'file:';
+      // iOS: navigator.standalone é true quando instalado
+      const iOSStandalone = (window.navigator as any).standalone === true;
+      
+      // Android/Desktop: display-mode
+      const displayModeStandalone = window.matchMedia('(display-mode: standalone)').matches;
+      
+      // PWA instalado no desktop
+      const desktopStandalone = window.matchMedia('(display-mode: window-controls-overlay)').matches;
+      
+      // Electron/Tauri
+      const electronStandalone = document.referrer.includes('android-app://') || 
+                                 window.location.protocol === 'file:';
 
+      const standalone = iOSStandalone || displayModeStandalone || desktopStandalone || electronStandalone;
+      
+      console.log('📱 Modo standalone:', {
+        iOS: iOSStandalone,
+        displayMode: displayModeStandalone,
+        desktop: desktopStandalone,
+        electron: electronStandalone,
+        final: standalone
+      });
+      
       setIsStandalone(standalone);
-
-      if (standalone) {
-        return true;
-      }
-      return false;
+      return standalone;
     };
 
-    if (checkStandalone()) return;
-
+    // ==========================================================
+    // 2. DETECÇÃO DE iOS (MELHORADA)
+    // ==========================================================
     const detectIOS = () => {
       const userAgent = window.navigator.userAgent.toLowerCase();
-      const platform = navigator.platform.toLowerCase();
-      const isAppleDevice =
-        /iphone|ipad|ipod/.test(userAgent) ||
-        /iphone|ipad|ipod/.test(platform) ||
-        (platform === 'macintel' && navigator.maxTouchPoints > 1);
-
-      const isSafari =
-        /safari/.test(userAgent) &&
-        !/chrome|crios|fxios|edgios/.test(userAgent) &&
-        !/crios/.test(userAgent);
-
-      const iOS = isAppleDevice && isSafari;
+      
+      // Verifica se é iOS (iPhone, iPad, iPod)
+      const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
+      
+      // Verifica se é Safari (não Chrome/Firefox/etc)
+      const isSafari = /safari/.test(userAgent) && 
+                      !/chrome|crios|fxios|edgios/.test(userAgent);
+      
+      // iPadOS 13+ se comporta como Mac
+      const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+      
+      const iOS = isIOSDevice || isIPadOS;
+      
+      console.log('📱 Detecção iOS:', {
+        isIOSDevice,
+        isSafari,
+        isIPadOS,
+        final: iOS
+      });
+      
       setIsIOS(iOS);
       return iOS;
     };
 
+    // ==========================================================
+    // 3. VERIFICAÇÃO INICIAL
+    // ==========================================================
+    const standalone = checkStandalone();
+    if (standalone) {
+      console.log('📱 App já está instalado, ocultando banner');
+      return;
+    }
+
     const iOSDetected = detectIOS();
+
+    // ==========================================================
+    // 4. VERIFICA SE O USUÁRIO DISPENSOU RECENTEMENTE
+    // ==========================================================
     const checkDismissed = () => {
       try {
         const lastDismissed = localStorage.getItem('pwa_banner_dismissed');
-        if (!lastDismissed) {
-          return false;
-        }
+        if (!lastDismissed) return false;
 
         const now = Date.now();
         const daysSinceDismiss = (now - parseInt(lastDismissed)) / (1000 * 60 * 60 * 24);
-        return daysSinceDismiss < 1;
+        return daysSinceDismiss < 1; // 1 dia
       } catch (error) {
         console.error('❌ Erro ao verificar dismiss:', error);
         return false;
@@ -63,40 +99,69 @@ export function InstallBanner() {
 
     const wasDismissedRecently = checkDismissed();
 
-    if (!wasDismissedRecently) {
-      if (iOSDetected) {
-        setIsIOS(true);
-        setIsVisible(true);
-      }
-    }
-
+    // ==========================================================
+    // 5. EVENTO DE INSTALAÇÃO (ANDROID/DESKTOP)
+    // ==========================================================
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
+      console.log('📱 Evento beforeinstallprompt disparado');
       setDeferredPrompt(e);
-      setIsIOS(false);
+      setIsIOS(false); // Não é iOS se recebeu este evento
 
-      if (!wasDismissedRecently) {
+      if (!wasDismissedRecently && !standalone) {
         setIsVisible(true);
       }
     };
 
+    // ==========================================================
+    // 6. EVENTO DE APP INSTALADO
+    // ==========================================================
     const handleAppInstalled = () => {
+      console.log('📱 App instalado com sucesso!');
       setIsVisible(false);
       setShowIOSHelp(false);
+      setIsStandalone(true);
+      localStorage.removeItem('pwa_banner_dismissed'); // Limpa dismiss
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
+    // ==========================================================
+    // 7. DETECÇÃO DE MUDANÇA NO DISPLAY MODE
+    // ==========================================================
+    const handleDisplayModeChange = (e: MediaQueryListEvent) => {
+      if (e.matches) {
+        console.log('📱 App entrou em modo standalone');
+        setIsStandalone(true);
+        setIsVisible(false);
+        setShowIOSHelp(false);
+      }
+    };
 
+    const mediaQuery = window.matchMedia('(display-mode: standalone)');
+    mediaQuery.addEventListener('change', handleDisplayModeChange);
+
+    // ==========================================================
+    // 8. MOSTRAR BANNER PARA iOS APÓS UM TEMPO
+    // ==========================================================
     const showTimer = setTimeout(() => {
-      if (!isStandalone && !isVisible && !wasDismissedRecently) {
+      if (!standalone && !isVisible && !wasDismissedRecently) {
+        console.log('📱 Mostrando banner para iOS');
         setIsVisible(true);
       }
     }, 3000);
 
+    // ==========================================================
+    // 9. REGISTRO DOS EVENTOS
+    // ==========================================================
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    // ==========================================================
+    // 10. LIMPEZA
+    // ==========================================================
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      mediaQuery.removeEventListener('change', handleDisplayModeChange);
       clearTimeout(showTimer);
     };
   }, []);
@@ -105,11 +170,15 @@ export function InstallBanner() {
     if (!deferredPrompt) return;
 
     try {
+      console.log('📱 Solicitando instalação...');
       await deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
+      console.log('📱 Resultado da instalação:', outcome);
+      
       if (outcome === 'accepted') {
         setIsVisible(false);
         setDeferredPrompt(null);
+        localStorage.removeItem('pwa_banner_dismissed');
       }
     } catch (error) {
       console.error('❌ Erro ao instalar:', error);
@@ -117,20 +186,25 @@ export function InstallBanner() {
   };
 
   const handleDismiss = () => {
+    console.log('📱 Banner dispensado');
     setIsVisible(false);
     setShowIOSHelp(false);
     localStorage.setItem('pwa_banner_dismissed', Date.now().toString());
   };
 
   const goToInstallForCurrentSlug = () => {
+    console.log('📱 Abrindo ajuda iOS');
     setShowIOSHelp(true);
     setIsVisible(false);
   };
+
   const handleCloseIOSHelp = () => {
+    console.log('📱 Fechando ajuda iOS');
     setShowIOSHelp(false);
     localStorage.setItem('pwa_banner_dismissed', Date.now().toString());
   };
 
+  // Se estiver em modo standalone, não mostra nada
   if (isStandalone) {
     return null;
   }
@@ -257,7 +331,7 @@ export function InstallBanner() {
 
       {/* Modal de Instruções para iOS */}
       {showIOSHelp && (
-        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[10000] animate-in fade-in duration-500">
+        <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[10000] animate-in fade-in duration-500 overflow-y-auto">
           <div className="min-h-screen flex flex-col items-center justify-center p-6">
             <div className="max-w-md w-full">
               {/* Cabeçalho */}
