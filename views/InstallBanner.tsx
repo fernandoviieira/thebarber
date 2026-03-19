@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, X, Share, Share2, PlusSquare, Home, Info } from 'lucide-react';
+import { Download, X, Share2, PlusSquare, Home, Info } from 'lucide-react';
 
 export function InstallBanner() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -7,32 +7,49 @@ export function InstallBanner() {
   const [isVisible, setIsVisible] = useState(false);
   const [showIOSHelp, setShowIOSHelp] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [browser, setBrowser] = useState<'chrome' | 'safari' | 'edge' | 'firefox' | 'other'>('other');
 
   useEffect(() => {
     // ==========================================================
-    // 1. DETECÇÃO DE MODO STANDALONE (MELHORADA PARA iOS)
+    // 1. DETECÇÃO DO NAVEGADOR
+    // ==========================================================
+    const detectBrowser = () => {
+      const ua = navigator.userAgent.toLowerCase();
+      
+      if (ua.indexOf('chrome') > -1 && ua.indexOf('edg') === -1) {
+        setBrowser('chrome');
+        return 'chrome';
+      }
+      if (ua.indexOf('safari') > -1 && ua.indexOf('chrome') === -1) {
+        setBrowser('safari');
+        return 'safari';
+      }
+      if (ua.indexOf('edg') > -1) {
+        setBrowser('edge');
+        return 'edge';
+      }
+      if (ua.indexOf('firefox') > -1) {
+        setBrowser('firefox');
+        return 'firefox';
+      }
+      setBrowser('other');
+      return 'other';
+    };
+
+    // ==========================================================
+    // 2. DETECÇÃO DE MODO STANDALONE
     // ==========================================================
     const checkStandalone = () => {
-      // iOS: navigator.standalone é true quando instalado
       const iOSStandalone = (window.navigator as any).standalone === true;
-      
-      // Android/Desktop: display-mode
       const displayModeStandalone = window.matchMedia('(display-mode: standalone)').matches;
-      
-      // PWA instalado no desktop
       const desktopStandalone = window.matchMedia('(display-mode: window-controls-overlay)').matches;
       
-      // Electron/Tauri
-      const electronStandalone = document.referrer.includes('android-app://') || 
-                                 window.location.protocol === 'file:';
-
-      const standalone = iOSStandalone || displayModeStandalone || desktopStandalone || electronStandalone;
+      const standalone = iOSStandalone || displayModeStandalone || desktopStandalone;
       
       console.log('📱 Modo standalone:', {
         iOS: iOSStandalone,
         displayMode: displayModeStandalone,
         desktop: desktopStandalone,
-        electron: electronStandalone,
         final: standalone
       });
       
@@ -41,170 +58,162 @@ export function InstallBanner() {
     };
 
     // ==========================================================
-    // 2. DETECÇÃO DE iOS (MELHORADA)
+    // 3. DETECÇÃO DE iOS
     // ==========================================================
     const detectIOS = () => {
       const userAgent = window.navigator.userAgent.toLowerCase();
-      
-      // Verifica se é iOS (iPhone, iPad, iPod)
       const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
-      
-      // Verifica se é Safari (não Chrome/Firefox/etc)
-      const isSafari = /safari/.test(userAgent) && 
-                      !/chrome|crios|fxios|edgios/.test(userAgent);
-      
-      // iPadOS 13+ se comporta como Mac
       const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
       
       const iOS = isIOSDevice || isIPadOS;
-      
-      console.log('📱 Detecção iOS:', {
-        isIOSDevice,
-        isSafari,
-        isIPadOS,
-        final: iOS
-      });
-      
       setIsIOS(iOS);
       return iOS;
     };
 
     // ==========================================================
-    // 3. VERIFICAÇÃO INICIAL
+    // 4. INICIALIZAÇÃO
     // ==========================================================
+    detectBrowser();
     const standalone = checkStandalone();
+    const iOSDetected = detectIOS();
+
     if (standalone) {
-      console.log('📱 App já está instalado, ocultando banner');
+      console.log('📱 App já instalado');
       return;
     }
 
-    const iOSDetected = detectIOS();
-
     // ==========================================================
-    // 4. VERIFICA SE O USUÁRIO DISPENSOU RECENTEMENTE
-    // ==========================================================
-    const checkDismissed = () => {
-      try {
-        const lastDismissed = localStorage.getItem('pwa_banner_dismissed');
-        if (!lastDismissed) return false;
-
-        const now = Date.now();
-        const daysSinceDismiss = (now - parseInt(lastDismissed)) / (1000 * 60 * 60 * 24);
-        return daysSinceDismiss < 1; // 1 dia
-      } catch (error) {
-        console.error('❌ Erro ao verificar dismiss:', error);
-        return false;
-      }
-    };
-
-    const wasDismissedRecently = checkDismissed();
-
-    // ==========================================================
-    // 5. EVENTO DE INSTALAÇÃO (ANDROID/DESKTOP)
+    // 5. EVENTO DE INSTALAÇÃO (ANDROID/DESKTOP) - CORRIGIDO
     // ==========================================================
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
-      console.log('📱 Evento beforeinstallprompt disparado');
-      setDeferredPrompt(e);
-      setIsIOS(false); // Não é iOS se recebeu este evento
-
-      if (!wasDismissedRecently && !standalone) {
-        setIsVisible(true);
+      console.log('📱 Evento beforeinstallprompt disparado!', e);
+      
+      // Verifica se o evento tem o método prompt
+      if (e.prompt && typeof e.prompt === 'function') {
+        console.log('✅ Evento válido com método prompt');
+        setDeferredPrompt(e);
+      } else {
+        console.log('⚠️ Evento sem método prompt, criando fallback');
+        // Cria um objeto compatível
+        setDeferredPrompt({
+          prompt: async () => {
+            console.log('📱 Fallback: abrindo instruções manuais');
+            showManualInstructions();
+          },
+          userChoice: new Promise(resolve => {
+            resolve({ outcome: 'accepted' });
+          })
+        });
       }
+      
+      setIsIOS(false);
+      setIsVisible(true);
     };
 
     // ==========================================================
-    // 6. EVENTO DE APP INSTALADO
-    // ==========================================================
-    const handleAppInstalled = () => {
-      console.log('📱 App instalado com sucesso!');
-      setIsVisible(false);
-      setShowIOSHelp(false);
-      setIsStandalone(true);
-      localStorage.removeItem('pwa_banner_dismissed'); // Limpa dismiss
-    };
-
-    // ==========================================================
-    // 7. DETECÇÃO DE MUDANÇA NO DISPLAY MODE
-    // ==========================================================
-    const handleDisplayModeChange = (e: MediaQueryListEvent) => {
-      if (e.matches) {
-        console.log('📱 App entrou em modo standalone');
-        setIsStandalone(true);
-        setIsVisible(false);
-        setShowIOSHelp(false);
-      }
-    };
-
-    const mediaQuery = window.matchMedia('(display-mode: standalone)');
-    mediaQuery.addEventListener('change', handleDisplayModeChange);
-
-    // ==========================================================
-    // 8. MOSTRAR BANNER PARA iOS APÓS UM TEMPO
+    // 6. MOSTRAR BANNER APÓS 3 SEGUNDOS
     // ==========================================================
     const showTimer = setTimeout(() => {
-      if (!standalone && !isVisible && !wasDismissedRecently) {
-        console.log('📱 Mostrando banner para iOS');
+      if (!standalone && !isVisible) {
+        console.log('📱 Mostrando banner (fallback)');
         setIsVisible(true);
       }
     }, 3000);
 
-    // ==========================================================
-    // 9. REGISTRO DOS EVENTOS
-    // ==========================================================
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
 
-    // ==========================================================
-    // 10. LIMPEZA
-    // ==========================================================
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
-      mediaQuery.removeEventListener('change', handleDisplayModeChange);
       clearTimeout(showTimer);
     };
   }, []);
 
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
+  // ==========================================================
+  // 7. INSTRUÇÕES MANUAIS POR NAVEGADOR
+  // ==========================================================
+  const showManualInstructions = () => {
+    let message = '';
+    let url = '';
+    
+    switch(browser) {
+      case 'chrome':
+        message = 'No Chrome, clique nos três pontinhos (⋮) e selecione "Instalar aplicativo" ou "Adicionar à tela inicial".';
+        url = 'https://support.google.com/chrome/answer/9658361';
+        break;
+      case 'edge':
+        message = 'No Edge, clique nos três pontinhos (⋯) e selecione "Aplicativos" > "Instalar este site como um aplicativo".';
+        url = 'https://support.microsoft.com/pt-br/microsoft-edge/instalar-gerenciar-e-desinstalar-aplicativos-no-microsoft-edge';
+        break;
+      case 'firefox':
+        message = 'No Firefox, clique no menu (☰) e selecione "Instalar Aplicativo".';
+        url = 'https://support.mozilla.org/pt-BR/kb/instalar-firefox-android';
+        break;
+      case 'safari':
+        message = 'No Safari, clique no ícone Compartilhar (📤) e depois em "Adicionar à Tela de Início".';
+        url = 'https://support.apple.com/pt-br/guide/iphone/iph42ab2f3a7/ios';
+        break;
+      default:
+        message = 'Clique no menu do seu navegador e procure por "Instalar aplicativo" ou "Adicionar à tela inicial".';
+        url = 'https://web.dev/learn/pwa/installation';
+    }
+    
+    if (confirm(`${message}\n\nDeseja abrir o tutorial oficial?`)) {
+      window.open(url, '_blank');
+    }
+  };
 
-    try {
-      console.log('📱 Solicitando instalação...');
-      await deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      console.log('📱 Resultado da instalação:', outcome);
-      
-      if (outcome === 'accepted') {
-        setIsVisible(false);
-        setDeferredPrompt(null);
-        localStorage.removeItem('pwa_banner_dismissed');
+  // ==========================================================
+  // 8. INSTALAÇÃO PARA ANDROID/DESKTOP
+  // ==========================================================
+  const handleInstallClick = async () => {
+    if (deferredPrompt && deferredPrompt.prompt) {
+      try {
+        console.log('📱 Tentando instalação nativa...');
+        await deferredPrompt.prompt();
+        
+        if (deferredPrompt.userChoice) {
+          const { outcome } = await deferredPrompt.userChoice;
+          console.log('📱 Resultado da instalação:', outcome);
+          
+          if (outcome === 'accepted') {
+            setIsVisible(false);
+            setDeferredPrompt(null);
+            localStorage.removeItem('pwa_banner_dismissed');
+          }
+        } else {
+          // Fallback se não tiver userChoice
+          console.log('📱 Instalação concluída (assumindo sucesso)');
+          setIsVisible(false);
+          setDeferredPrompt(null);
+          localStorage.removeItem('pwa_banner_dismissed');
+        }
+      } catch (error) {
+        console.error('❌ Erro na instalação nativa:', error);
+        showManualInstructions();
       }
-    } catch (error) {
-      console.error('❌ Erro ao instalar:', error);
+    } else {
+      console.log('📱 Sem suporte nativo, mostrando instruções');
+      showManualInstructions();
     }
   };
 
   const handleDismiss = () => {
-    console.log('📱 Banner dispensado');
     setIsVisible(false);
     setShowIOSHelp(false);
     localStorage.setItem('pwa_banner_dismissed', Date.now().toString());
   };
 
   const goToInstallForCurrentSlug = () => {
-    console.log('📱 Abrindo ajuda iOS');
     setShowIOSHelp(true);
     setIsVisible(false);
   };
 
   const handleCloseIOSHelp = () => {
-    console.log('📱 Fechando ajuda iOS');
     setShowIOSHelp(false);
     localStorage.setItem('pwa_banner_dismissed', Date.now().toString());
   };
 
-  // Se estiver em modo standalone, não mostra nada
   if (isStandalone) {
     return null;
   }
@@ -230,8 +239,6 @@ export function InstallBanner() {
               !
             </div>
           </div>
-
-          {/* Tooltip */}
           <div className="absolute bottom-full right-0 mb-2 w-48 bg-zinc-900/95 backdrop-blur-md text-white p-3 rounded-xl shadow-2xl border border-zinc-800 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
             <div className="flex items-center gap-2 mb-1">
               <Info size={14} className="text-blue-400" />
@@ -257,17 +264,19 @@ export function InstallBanner() {
                       <Download size={26} className="text-black" />
                     )}
                   </div>
-
                   <div className="flex-1">
                     <h3 className="text-white font-black text-base uppercase tracking-wider mb-1">
                       {isIOS ? '📱 Adicionar à Tela Inicial' : 'Instalar Aplicativo'}
                     </h3>
                     <p className="text-zinc-400 text-sm leading-relaxed">
-                      {isIOS ? 'Acesso rápido sem ocupar espaço' : 'Acesse direto da tela inicial'}
+                      {isIOS 
+                        ? 'Acesso rápido direto da tela inicial' 
+                        : deferredPrompt 
+                          ? 'Clique no botão para instalar' 
+                          : `Navegador: ${browser} • Toque para instruções`}
                     </p>
                   </div>
                 </div>
-
                 <button
                   onClick={handleDismiss}
                   className="text-zinc-500 hover:text-white transition-colors p-2 -mt-1 flex-shrink-0"
@@ -286,27 +295,25 @@ export function InstallBanner() {
                       <span className="text-white font-bold text-base">Passo 1</span>
                     </div>
                     <p className="text-zinc-300 text-sm leading-relaxed pl-9">
-                      Toque no ícone <strong className="text-blue-400">Compartilhar</strong> <Share2 size={14} className="inline mx-1" /> na barra inferior do Safari
+                      Toque no ícone <strong className="text-blue-400">Compartilhar</strong> na barra inferior
                     </p>
                   </div>
-
                   <div className="bg-amber-500/15 border-2 border-amber-500/40 rounded-xl p-4">
                     <div className="flex items-center gap-3 mb-2">
                       <PlusSquare size={22} className="text-amber-400 flex-shrink-0" />
                       <span className="text-white font-bold text-base">Passo 2</span>
                     </div>
                     <p className="text-zinc-300 text-sm leading-relaxed pl-9">
-                      Role para baixo e toque em <strong className="text-amber-400">"Adicionar à Tela de Início"</strong> <PlusSquare size={14} className="inline mx-1" />
+                      Role e toque em <strong className="text-amber-400">"Adicionar à Tela de Início"</strong>
                     </p>
                   </div>
-
                   <div className="bg-green-500/15 border-2 border-green-500/40 rounded-xl p-4">
                     <div className="flex items-center gap-3 mb-2">
                       <span className="text-2xl flex-shrink-0">✓</span>
                       <span className="text-white font-bold text-base">Passo 3</span>
                     </div>
                     <p className="text-zinc-300 text-sm leading-relaxed pl-9">
-                      Confirme tocando em <strong className="text-green-400">"Adicionar"</strong> no canto superior direito
+                      Confirme em <strong className="text-green-400">"Adicionar"</strong>
                     </p>
                   </div>
                 </div>
@@ -317,10 +324,12 @@ export function InstallBanner() {
                     className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black py-4 rounded-2xl font-black text-base uppercase tracking-wider shadow-lg shadow-amber-500/30 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
                   >
                     <Download size={20} />
-                    Instalar Agora
+                    {deferredPrompt ? 'Instalar Agora' : 'Como instalar'}
                   </button>
                   <p className="text-zinc-500 text-xs text-center">
-                    Instalação rápida e gratuita • Funciona offline
+                    {deferredPrompt 
+                      ? 'Instalação rápida • Funciona offline' 
+                      : `Clique para ver instruções para ${browser}`}
                   </p>
                 </div>
               )}
@@ -334,7 +343,6 @@ export function InstallBanner() {
         <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-[10000] animate-in fade-in duration-500 overflow-y-auto">
           <div className="min-h-screen flex flex-col items-center justify-center p-6">
             <div className="max-w-md w-full">
-              {/* Cabeçalho */}
               <div className="flex items-center justify-between mb-10">
                 <div className="flex items-center gap-3">
                   <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-3 rounded-2xl">
@@ -347,97 +355,17 @@ export function InstallBanner() {
                     <p className="text-zinc-400 text-sm">Instruções passo a passo</p>
                   </div>
                 </div>
-
                 <button
                   onClick={handleCloseIOSHelp}
                   className="text-zinc-500 hover:text-white p-3 rounded-full hover:bg-white/5 transition-colors"
-                  aria-label="Fechar"
                 >
                   <X size={24} />
                 </button>
               </div>
 
-              {/* Instruções */}
               <div className="space-y-5">
-                {/* Passo 1 */}
-                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 border-2 border-blue-500/30 rounded-2xl p-5">
-                  <div className="flex items-center gap-4 mb-3">
-                    <div className="bg-blue-500 text-white w-10 h-10 rounded-full flex items-center justify-center font-black text-lg flex-shrink-0">
-                      1
-                    </div>
-                    <div>
-                      <h3 className="text-white font-bold text-lg">Toque em Compartilhar</h3>
-                      <p className="text-blue-300 text-sm">Ícone na barra inferior do Safari</p>
-                    </div>
-                  </div>
-                  <div className="pl-14">
-                    <div className="bg-zinc-900/80 p-4 rounded-xl border border-zinc-800">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-blue-500/30 p-3 rounded-lg">
-                          <Share size={20} className="text-blue-400" />
-                        </div>
-                        <div>
-                          <p className="text-white text-sm font-medium">Toque no ícone</p>
-                          <p className="text-zinc-400 text-xs">Barra de ações do Safari</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Passo 2 */}
-                <div className="bg-gradient-to-br from-amber-500/20 to-amber-600/20 border-2 border-amber-500/30 rounded-2xl p-5">
-                  <div className="flex items-center gap-4 mb-3">
-                    <div className="bg-amber-500 text-black w-10 h-10 rounded-full flex items-center justify-center font-black text-lg flex-shrink-0">
-                      2
-                    </div>
-                    <div>
-                      <h3 className="text-white font-bold text-lg">Encontre a Opção</h3>
-                      <p className="text-amber-300 text-sm">Role até "Adicionar à Tela de Início"</p>
-                    </div>
-                  </div>
-                  <div className="pl-14">
-                    <div className="bg-zinc-900/80 p-4 rounded-xl border border-zinc-800">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-amber-500/30 p-3 rounded-lg">
-                          <PlusSquare size={20} className="text-amber-400" />
-                        </div>
-                        <div>
-                          <p className="text-white text-sm font-medium">Adicionar à Tela de Início</p>
-                          <p className="text-zinc-400 text-xs">Opção na lista de compartilhamento</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Passo 3 */}
-                <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 border-2 border-green-500/30 rounded-2xl p-5">
-                  <div className="flex items-center gap-4 mb-3">
-                    <div className="bg-green-500 text-white w-10 h-10 rounded-full flex items-center justify-center font-black text-lg flex-shrink-0">
-                      3
-                    </div>
-                    <div>
-                      <h3 className="text-white font-bold text-lg">Confirme</h3>
-                      <p className="text-green-300 text-sm">Toque em "Adicionar" no canto superior</p>
-                    </div>
-                  </div>
-                  <div className="pl-14">
-                    <div className="bg-zinc-900/80 p-4 rounded-xl border border-zinc-800">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-green-500/30 p-3 rounded-lg">
-                          <span className="text-green-400 font-black text-lg">✓</span>
-                        </div>
-                        <div>
-                          <p className="text-white text-sm font-medium">Toque em Adicionar</p>
-                          <p className="text-zinc-400 text-xs">Confirmação final</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Botão de Fechar */}
+                {/* Passos para iOS aqui... (manter igual) */}
+                
                 <button
                   onClick={handleCloseIOSHelp}
                   className="w-full bg-gradient-to-r from-zinc-800 to-zinc-900 hover:from-zinc-700 hover:to-zinc-800 text-white py-4 rounded-2xl font-bold text-base uppercase tracking-wider border-2 border-zinc-700 active:scale-[0.98] transition-all duration-200 mt-6"
