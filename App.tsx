@@ -188,16 +188,19 @@ const AppContent: React.FC = () => {
       setView('create_barbershop');
     }
 
-    // 2. MANIFEST PWA (REMOVIDO O Date.now() PARA EVITAR LOOP)
+    // 2. MANIFEST PWA - VERSÃO FINAL (Alinhada com seu server.js)
     if (urlSlug) {
-      const manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement;
+      const manifestLink = document.getElementById('manifest-link') as HTMLLinkElement;
       if (manifestLink) {
         const baseApi = "https://api.contafacilpro.com.br";
-        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}`; // Removido o v=Date.now()
+        // Mantemos o padrão que o seu server.js espera: /api/manifest/slug
+        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}`;
 
         if (manifestLink.href !== newManifestHref) {
-          manifestLink.setAttribute('crossorigin', 'anonymous');
+          // Importante: use-credentials por causa do CORS na Hostinger
+          manifestLink.setAttribute('crossorigin', 'use-credentials');
           manifestLink.href = newManifestHref;
+          console.log(`📱 Manifesto sincronizado com sucesso: ${urlSlug}`);
         }
       }
     }

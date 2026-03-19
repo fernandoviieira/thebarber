@@ -15,8 +15,14 @@
   <meta name="theme-color" content="#f59e0b">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="BarberPro">
-  <link rel="manifest" href="/api/manifest/default">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <link 
+    id="manifest-link" 
+    rel="manifest" 
+    href="https://api.contafacilpro.com.br/api/manifest/default" 
+    crossorigin="use-credentials"
+  >
 
   <link rel="apple-touch-icon" href="/icon-192.png">
   <link rel="apple-touch-startup-image" href="/icon-512.png">
@@ -28,9 +34,6 @@
       overscroll-behavior-y: none;
       -webkit-overflow-scrolling: touch;
       background-color: #09090b;
-    }
-
-    body {
       padding-top: env(safe-area-inset-top);
       padding-bottom: env(safe-area-inset-bottom);
     }
@@ -40,23 +43,6 @@
 <body class="bg-zinc-950 text-zinc-100">
   <div id="root"></div>
 
-  <!-- ✅ SERVICE WORKER REGISTRATION -->
-  <script>
-    document.addEventListener('DOMContentLoaded', function () {
-      const path = window.location.pathname.split('/').filter(Boolean)[0];
-      const reserved = ['admin', 'login', 'profile', 'settings', 'create_barbershop', 'my_appointments', 'registrar', 'install', ''];
-
-      // ✅ NO INDEX.HTML
-      const manifestLink = document.querySelector('link[rel="manifest"]');
-      if (manifestLink) {
-        if (path && !reserved.includes(path)) {
-          manifestLink.href = `/api-manifest/${path}?t=${Date.now()}`;
-        } else {
-          manifestLink.href = `/api-manifest/default?t=${Date.now()}`;
-        }
-      }
-    });
-  </script>
   <script type="module" src="/index.tsx"></script>
 </body>
 
