@@ -161,7 +161,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
             ) : null}
 
             <button
-              onClick={onLogin}
+              onClick={() => window.location.href = '/registrar'}
               className="text-[10px] font-black uppercase tracking-[0.2em] border border-amber-500/50 px-6 py-2.5 rounded-full hover:bg-amber-500 hover:text-black transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70"
               aria-label="Acessar o sistema"
             >
@@ -198,7 +198,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
             <div className="flex flex-col sm:flex-row justify-center gap-4">
               <button
-                onClick={onLogin}
+                onClick={() => window.location.href = '/registrar'}
                 className="bg-amber-500 text-black px-10 py-5 rounded-2xl font-black uppercase text-sm tracking-widest hover:bg-amber-400 transition-all hover:scale-[1.02] shadow-[0_20px_60px_rgba(245,158,11,0.18)] flex items-center justify-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                 aria-label="Começar agora"
               >
@@ -428,7 +428,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
                 </ul>
 
                 <button
-                  onClick={onLogin}
+                  onClick={() => window.location.href = '/registrar'}
                   className="mt-8 w-full bg-amber-500 text-black px-8 py-4 rounded-2xl font-black uppercase text-sm tracking-widest hover:bg-amber-400 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-300"
                 >
                   Começar agora
@@ -494,7 +494,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button
-                onClick={onLogin}
+                onClick={() => window.location.href = '/registrar'}
                 className="bg-black text-white px-10 py-5 rounded-2xl font-black uppercase text-sm tracking-widest hover:scale-[1.02] transition-all shadow-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-black/50"
               >
                 Começar agora
@@ -584,7 +584,7 @@ const LandingPage: React.FC<LandingPageProps> = ({
       {/* Sticky CTA (mobile) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-[120] border-t border-white/10 bg-black/75 backdrop-blur-md px-4 py-3">
         <button
-          onClick={onLogin}
+          onClick={() => window.location.href = '/registrar'}
           className="w-full bg-amber-500 text-black py-4 rounded-2xl font-black uppercase text-sm tracking-widest flex items-center justify-center gap-2"
           aria-label="Começar agora (CTA fixo)"
         >
