@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Download, X, Share2, PlusSquare, Home, Info } from 'lucide-react';
+import { Download, X, Share2, PlusSquare, Home, Info, Globe } from 'lucide-react';
 
 export function InstallBanner() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -8,6 +8,7 @@ export function InstallBanner() {
   const [showIOSHelp, setShowIOSHelp] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
   const [browser, setBrowser] = useState<'chrome' | 'safari' | 'edge' | 'firefox' | 'other'>('other');
+  const [installable, setInstallable] = useState(false);
 
   useEffect(() => {
     // ==========================================================
@@ -71,11 +72,22 @@ export function InstallBanner() {
     };
 
     // ==========================================================
-    // 4. INICIALIZAÇÃO
+    // 4. VERIFICA SE O PWA É INSTALÁVEL
+    // ==========================================================
+    const checkInstallable = () => {
+      // Verifica se está em um navegador que suporta PWA
+      const supportsPWA = 'serviceWorker' in navigator && 'BeforeInstallPromptEvent' in window;
+      setInstallable(supportsPWA);
+      return supportsPWA;
+    };
+
+    // ==========================================================
+    // 5. INICIALIZAÇÃO
     // ==========================================================
     detectBrowser();
     const standalone = checkStandalone();
     const iOSDetected = detectIOS();
+    const pwaSupported = checkInstallable();
 
     if (standalone) {
       console.log('📱 App já instalado');
@@ -83,36 +95,44 @@ export function InstallBanner() {
     }
 
     // ==========================================================
-    // 5. EVENTO DE INSTALAÇÃO (ANDROID/DESKTOP) - CORRIGIDO
+    // 6. EVENTO DE INSTALAÇÃO (ANDROID/DESKTOP) - VERSÃO FINAL
     // ==========================================================
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
-      console.log('📱 Evento beforeinstallprompt disparado!', e);
+      console.log('📱 Evento beforeinstallprompt REAL disparado!', e);
       
-      // Verifica se o evento tem o método prompt
-      if (e.prompt && typeof e.prompt === 'function') {
-        console.log('✅ Evento válido com método prompt');
+      // Verifica se é um evento real (não sintético)
+      if (e.isTrusted === true) {
+        console.log('✅ Evento confiável com método prompt disponível');
         setDeferredPrompt(e);
+        setInstallable(true);
+        setIsVisible(true);
       } else {
-        console.log('⚠️ Evento sem método prompt, criando fallback');
-        // Cria um objeto compatível
-        setDeferredPrompt({
-          prompt: async () => {
-            console.log('📱 Fallback: abrindo instruções manuais');
-            showManualInstructions();
-          },
-          userChoice: new Promise(resolve => {
-            resolve({ outcome: 'accepted' });
-          })
-        });
+        console.log('⚠️ Evento sintético ignorado');
+        // Não faz nada com eventos sintéticos
       }
-      
-      setIsIOS(false);
-      setIsVisible(true);
     };
 
     // ==========================================================
-    // 6. MOSTRAR BANNER APÓS 3 SEGUNDOS
+    // 7. VERIFICAÇÃO DE INSTALAÇÃO VIA MENU DO NAVEGADOR
+    // ==========================================================
+    const checkBrowserInstallCapability = () => {
+      // Chrome/Edge: tem suporte nativo
+      if (browser === 'chrome' || browser === 'edge') {
+        // Se não recebeu o evento após 5 segundos, pode ser porque já está instalado
+        // ou o navegador não quer disparar
+        setTimeout(() => {
+          if (!deferredPrompt && !standalone) {
+            console.log('📱 Navegador com suporte mas sem evento - mostrando instruções');
+            setInstallable(false);
+            setIsVisible(true);
+          }
+        }, 5000);
+      }
+    };
+
+    // ==========================================================
+    // 8. MOSTRAR BANNER APÓS 3 SEGUNDOS (FALLBACK)
     // ==========================================================
     const showTimer = setTimeout(() => {
       if (!standalone && !isVisible) {
@@ -122,6 +142,7 @@ export function InstallBanner() {
     }, 3000);
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    checkBrowserInstallCapability();
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -130,7 +151,7 @@ export function InstallBanner() {
   }, []);
 
   // ==========================================================
-  // 7. INSTRUÇÕES MANUAIS POR NAVEGADOR
+  // 9. INSTRUÇÕES MANUAIS POR NAVEGADOR
   // ==========================================================
   const showManualInstructions = () => {
     let message = '';
@@ -138,23 +159,23 @@ export function InstallBanner() {
     
     switch(browser) {
       case 'chrome':
-        message = 'No Chrome, clique nos três pontinhos (⋮) e selecione "Instalar aplicativo" ou "Adicionar à tela inicial".';
+        message = 'No Chrome, você pode instalar o app de duas formas:\n\n1. Clique nos três pontinhos (⋮) no canto superior direito\n2. Selecione "Instalar aplicativo" ou "Adicionar à tela inicial"\n\nOu use o atalho:';
         url = 'https://support.google.com/chrome/answer/9658361';
         break;
       case 'edge':
-        message = 'No Edge, clique nos três pontinhos (⋯) e selecione "Aplicativos" > "Instalar este site como um aplicativo".';
+        message = 'No Edge, você pode instalar o app de duas formas:\n\n1. Clique nos três pontinhos (⋯) no canto superior direito\n2. Vá em "Aplicativos" > "Instalar este site como um aplicativo"';
         url = 'https://support.microsoft.com/pt-br/microsoft-edge/instalar-gerenciar-e-desinstalar-aplicativos-no-microsoft-edge';
         break;
       case 'firefox':
-        message = 'No Firefox, clique no menu (☰) e selecione "Instalar Aplicativo".';
+        message = 'No Firefox, a instalação de PWA tem suporte limitado.\n\nClique no menu (☰) e selecione "Instalar Aplicativo" se disponível.';
         url = 'https://support.mozilla.org/pt-BR/kb/instalar-firefox-android';
         break;
       case 'safari':
-        message = 'No Safari, clique no ícone Compartilhar (📤) e depois em "Adicionar à Tela de Início".';
+        message = 'No Safari do iPhone/iPad:\n\n1. Toque no ícone Compartilhar (📤)\n2. Role para baixo e toque em "Adicionar à Tela de Início"\n3. Confirme em "Adicionar"';
         url = 'https://support.apple.com/pt-br/guide/iphone/iph42ab2f3a7/ios';
         break;
       default:
-        message = 'Clique no menu do seu navegador e procure por "Instalar aplicativo" ou "Adicionar à tela inicial".';
+        message = 'Seu navegador pode não suportar instalação de PWAs.\n\nTente usar Chrome ou Edge para melhor experiência.';
         url = 'https://web.dev/learn/pwa/installation';
     }
     
@@ -164,7 +185,7 @@ export function InstallBanner() {
   };
 
   // ==========================================================
-  // 8. INSTALAÇÃO PARA ANDROID/DESKTOP
+  // 10. INSTALAÇÃO PARA ANDROID/DESKTOP
   // ==========================================================
   const handleInstallClick = async () => {
     if (deferredPrompt && deferredPrompt.prompt) {
@@ -172,21 +193,16 @@ export function InstallBanner() {
         console.log('📱 Tentando instalação nativa...');
         await deferredPrompt.prompt();
         
-        if (deferredPrompt.userChoice) {
-          const { outcome } = await deferredPrompt.userChoice;
-          console.log('📱 Resultado da instalação:', outcome);
-          
-          if (outcome === 'accepted') {
-            setIsVisible(false);
-            setDeferredPrompt(null);
-            localStorage.removeItem('pwa_banner_dismissed');
-          }
-        } else {
-          // Fallback se não tiver userChoice
-          console.log('📱 Instalação concluída (assumindo sucesso)');
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log('📱 Resultado da instalação:', outcome);
+        
+        if (outcome === 'accepted') {
           setIsVisible(false);
           setDeferredPrompt(null);
           localStorage.removeItem('pwa_banner_dismissed');
+        } else {
+          // Usuário recusou, mostra instruções alternativas
+          showManualInstructions();
         }
       } catch (error) {
         console.error('❌ Erro na instalação nativa:', error);
@@ -220,6 +236,21 @@ export function InstallBanner() {
 
   const showIOSFloatingButton = isIOS && !showIOSHelp && !isStandalone;
 
+  // Determina a mensagem baseada no navegador
+  const getButtonText = () => {
+    if (deferredPrompt) return 'Instalar Agora';
+    if (isIOS) return 'Como instalar no iOS';
+    if (browser === 'chrome' || browser === 'edge') return 'Instalar via Menu do Navegador';
+    return 'Como instalar';
+  };
+
+  const getDescription = () => {
+    if (deferredPrompt) return 'Clique para instalar o app';
+    if (isIOS) return 'Siga as instruções para iOS';
+    if (browser === 'chrome' || browser === 'edge') return 'Use o menu do navegador para instalar';
+    return `Instruções para ${browser}`;
+  };
+
   return (
     <>
       {/* Botão Flutuante para iOS */}
@@ -244,7 +275,7 @@ export function InstallBanner() {
               <Info size={14} className="text-blue-400" />
               <span className="font-bold text-sm">Adicionar ao iPhone</span>
             </div>
-            <p className="text-zinc-300 text-xs">Toque para ver como instalar na tela inicial</p>
+            <p className="text-zinc-300 text-xs">Toque para ver instruções</p>
           </div>
         </button>
       )}
@@ -269,11 +300,7 @@ export function InstallBanner() {
                       {isIOS ? '📱 Adicionar à Tela Inicial' : 'Instalar Aplicativo'}
                     </h3>
                     <p className="text-zinc-400 text-sm leading-relaxed">
-                      {isIOS 
-                        ? 'Acesso rápido direto da tela inicial' 
-                        : deferredPrompt 
-                          ? 'Clique no botão para instalar' 
-                          : `Navegador: ${browser} • Toque para instruções`}
+                      {getDescription()}
                     </p>
                   </div>
                 </div>
@@ -324,12 +351,12 @@ export function InstallBanner() {
                     className="w-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-black py-4 rounded-2xl font-black text-base uppercase tracking-wider shadow-lg shadow-amber-500/30 active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2"
                   >
                     <Download size={20} />
-                    {deferredPrompt ? 'Instalar Agora' : 'Como instalar'}
+                    {getButtonText()}
                   </button>
                   <p className="text-zinc-500 text-xs text-center">
                     {deferredPrompt 
                       ? 'Instalação rápida • Funciona offline' 
-                      : `Clique para ver instruções para ${browser}`}
+                      : `Clique para ver instruções detalhadas para ${browser}`}
                   </p>
                 </div>
               )}
@@ -364,7 +391,33 @@ export function InstallBanner() {
               </div>
 
               <div className="space-y-5">
-                {/* Passos para iOS aqui... (manter igual) */}
+                <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 border-2 border-blue-500/30 rounded-2xl p-5">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="bg-blue-500 text-white w-10 h-10 rounded-full flex items-center justify-center font-black text-lg flex-shrink-0">1</div>
+                    <div>
+                      <h3 className="text-white font-bold text-lg">Toque em Compartilhar</h3>
+                      <p className="text-blue-300 text-sm">Ícone na barra inferior</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-gradient-to-br from-amber-500/20 to-amber-600/20 border-2 border-amber-500/30 rounded-2xl p-5">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="bg-amber-500 text-black w-10 h-10 rounded-full flex items-center justify-center font-black text-lg flex-shrink-0">2</div>
+                    <div>
+                      <h3 className="text-white font-bold text-lg">Adicionar à Tela de Início</h3>
+                      <p className="text-amber-300 text-sm">Role e toque na opção</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 border-2 border-green-500/30 rounded-2xl p-5">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="bg-green-500 text-white w-10 h-10 rounded-full flex items-center justify-center font-black text-lg flex-shrink-0">3</div>
+                    <div>
+                      <h3 className="text-white font-bold text-lg">Confirme</h3>
+                      <p className="text-green-300 text-sm">Toque em "Adicionar"</p>
+                    </div>
+                  </div>
+                </div>
                 
                 <button
                   onClick={handleCloseIOSHelp}
