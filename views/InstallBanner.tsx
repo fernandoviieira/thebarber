@@ -46,14 +46,6 @@ export function InstallBanner() {
       const desktopStandalone = window.matchMedia('(display-mode: window-controls-overlay)').matches;
 
       const standalone = iOSStandalone || displayModeStandalone || desktopStandalone;
-
-      console.log('📱 Modo standalone:', {
-        iOS: iOSStandalone,
-        displayMode: displayModeStandalone,
-        desktop: desktopStandalone,
-        final: standalone
-      });
-
       setIsStandalone(standalone);
       return standalone;
     };
@@ -89,7 +81,6 @@ export function InstallBanner() {
     const pwaSupported = checkInstallable();
 
     if (standalone) {
-      console.log('📱 App já instalado');
       return;
     }
 
@@ -98,10 +89,6 @@ export function InstallBanner() {
     // ==========================================================
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
-      console.log('📱 beforeinstallprompt disparado!', e);
-      console.log('✅ Evento beforeinstallprompt capturado e guardado!'); // Adicione este log
-
-      // ✅ Removido o check isTrusted - estava bloqueando evento real
       setDeferredPrompt(e);
       setInstallable(true);
       setIsVisible(true);
@@ -117,7 +104,6 @@ export function InstallBanner() {
         // ou o navegador não quer disparar
         setTimeout(() => {
           if (!deferredPrompt && !standalone) {
-            console.log('📱 Navegador com suporte mas sem evento - mostrando instruções');
             setInstallable(false);
             setIsVisible(true);
           }
@@ -130,7 +116,6 @@ export function InstallBanner() {
     // ==========================================================
     const showTimer = setTimeout(() => {
       if (!standalone && !isVisible) {
-        console.log('📱 Mostrando banner (fallback)');
         setIsVisible(true);
       }
     }, 3000);
@@ -184,12 +169,8 @@ export function InstallBanner() {
   const handleInstallClick = async () => {
     if (deferredPrompt && deferredPrompt.prompt) {
       try {
-        console.log('📱 Tentando instalação nativa...');
         await deferredPrompt.prompt();
-
         const { outcome } = await deferredPrompt.userChoice;
-        console.log('📱 Resultado da instalação:', outcome);
-
         if (outcome === 'accepted') {
           setIsVisible(false);
           setDeferredPrompt(null);
@@ -203,7 +184,6 @@ export function InstallBanner() {
         showManualInstructions();
       }
     } else {
-      console.log('📱 Sem suporte nativo, mostrando instruções');
       showManualInstructions();
     }
   };
