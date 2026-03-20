@@ -200,7 +200,6 @@ const AppContent: React.FC = () => {
         if (manifestLink.href !== newManifestHref) {
           manifestLink.setAttribute('crossorigin', 'use-credentials');
           manifestLink.href = newManifestHref;
-          console.log(`📱 Forçando novo manifesto: ${urlSlug}`);
         }
       }
     }
