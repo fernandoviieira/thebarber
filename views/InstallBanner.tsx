@@ -16,7 +16,7 @@ export function InstallBanner() {
     // ==========================================================
     const detectBrowser = () => {
       const ua = navigator.userAgent.toLowerCase();
-      
+
       if (ua.indexOf('chrome') > -1 && ua.indexOf('edg') === -1) {
         setBrowser('chrome');
         return 'chrome';
@@ -44,16 +44,16 @@ export function InstallBanner() {
       const iOSStandalone = (window.navigator as any).standalone === true;
       const displayModeStandalone = window.matchMedia('(display-mode: standalone)').matches;
       const desktopStandalone = window.matchMedia('(display-mode: window-controls-overlay)').matches;
-      
+
       const standalone = iOSStandalone || displayModeStandalone || desktopStandalone;
-      
+
       console.log('📱 Modo standalone:', {
         iOS: iOSStandalone,
         displayMode: displayModeStandalone,
         desktop: desktopStandalone,
         final: standalone
       });
-      
+
       setIsStandalone(standalone);
       return standalone;
     };
@@ -65,7 +65,7 @@ export function InstallBanner() {
       const userAgent = window.navigator.userAgent.toLowerCase();
       const isIOSDevice = /iphone|ipad|ipod/.test(userAgent);
       const isIPadOS = navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
-      
+
       const iOS = isIOSDevice || isIPadOS;
       setIsIOS(iOS);
       return iOS;
@@ -99,36 +99,21 @@ export function InstallBanner() {
     // ==========================================================
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
-      console.log('📱 Evento beforeinstallprompt REAL disparado!', e);
-      
-      // Verifica se é um evento real (não sintético)
-      if (e.isTrusted === true) {
-        console.log('✅ Evento confiável com método prompt disponível');
-        setDeferredPrompt(e);
-        setInstallable(true);
-        setIsVisible(true);
-      } else {
-        console.log('⚠️ Evento sintético ignorado');
-        // Não faz nada com eventos sintéticos
-      }
+      console.log('📱 beforeinstallprompt disparado!', e);
+
+      // ✅ Removido o check isTrusted - estava bloqueando evento real
+      setDeferredPrompt(e);
+      setInstallable(true);
+      setIsVisible(true);
     };
 
     // ==========================================================
     // 7. VERIFICAÇÃO DE INSTALAÇÃO VIA MENU DO NAVEGADOR
     // ==========================================================
-    const checkBrowserInstallCapability = () => {
-      // Chrome/Edge: tem suporte nativo
-      if (browser === 'chrome' || browser === 'edge') {
-        // Se não recebeu o evento após 5 segundos, pode ser porque já está instalado
-        // ou o navegador não quer disparar
-        setTimeout(() => {
-          if (!deferredPrompt && !standalone) {
-            console.log('📱 Navegador com suporte mas sem evento - mostrando instruções');
-            setInstallable(false);
-            setIsVisible(true);
-          }
-        }, 5000);
-      }
+    const checkInstallable = () => {
+      const supportsPWA = 'serviceWorker' in navigator; // sem BeforeInstallPromptEvent
+      setInstallable(supportsPWA);
+      return supportsPWA;
     };
 
     // ==========================================================
@@ -156,8 +141,8 @@ export function InstallBanner() {
   const showManualInstructions = () => {
     let message = '';
     let url = '';
-    
-    switch(browser) {
+
+    switch (browser) {
       case 'chrome':
         message = 'No Chrome, você pode instalar o app de duas formas:\n\n1. Clique nos três pontinhos (⋮) no canto superior direito\n2. Selecione "Instalar aplicativo" ou "Adicionar à tela inicial"\n\nOu use o atalho:';
         url = 'https://support.google.com/chrome/answer/9658361';
@@ -178,7 +163,7 @@ export function InstallBanner() {
         message = 'Seu navegador pode não suportar instalação de PWAs.\n\nTente usar Chrome ou Edge para melhor experiência.';
         url = 'https://web.dev/learn/pwa/installation';
     }
-    
+
     if (confirm(`${message}\n\nDeseja abrir o tutorial oficial?`)) {
       window.open(url, '_blank');
     }
@@ -192,10 +177,10 @@ export function InstallBanner() {
       try {
         console.log('📱 Tentando instalação nativa...');
         await deferredPrompt.prompt();
-        
+
         const { outcome } = await deferredPrompt.userChoice;
         console.log('📱 Resultado da instalação:', outcome);
-        
+
         if (outcome === 'accepted') {
           setIsVisible(false);
           setDeferredPrompt(null);
@@ -354,8 +339,8 @@ export function InstallBanner() {
                     {getButtonText()}
                   </button>
                   <p className="text-zinc-500 text-xs text-center">
-                    {deferredPrompt 
-                      ? 'Instalação rápida • Funciona offline' 
+                    {deferredPrompt
+                      ? 'Instalação rápida • Funciona offline'
                       : `Clique para ver instruções detalhadas para ${browser}`}
                   </p>
                 </div>
@@ -418,7 +403,7 @@ export function InstallBanner() {
                     </div>
                   </div>
                 </div>
-                
+
                 <button
                   onClick={handleCloseIOSHelp}
                   className="w-full bg-gradient-to-r from-zinc-800 to-zinc-900 hover:from-zinc-700 hover:to-zinc-800 text-white py-4 rounded-2xl font-bold text-base uppercase tracking-wider border-2 border-zinc-700 active:scale-[0.98] transition-all duration-200 mt-6"
