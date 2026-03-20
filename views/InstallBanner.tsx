@@ -75,8 +75,7 @@ export function InstallBanner() {
     // 4. VERIFICA SE O PWA É INSTALÁVEL
     // ==========================================================
     const checkInstallable = () => {
-      // Verifica se está em um navegador que suporta PWA
-      const supportsPWA = 'serviceWorker' in navigator && 'BeforeInstallPromptEvent' in window;
+      const supportsPWA = 'serviceWorker' in navigator; // sem BeforeInstallPromptEvent
       setInstallable(supportsPWA);
       return supportsPWA;
     };
@@ -110,10 +109,19 @@ export function InstallBanner() {
     // ==========================================================
     // 7. VERIFICAÇÃO DE INSTALAÇÃO VIA MENU DO NAVEGADOR
     // ==========================================================
-    const checkInstallable = () => {
-      const supportsPWA = 'serviceWorker' in navigator; // sem BeforeInstallPromptEvent
-      setInstallable(supportsPWA);
-      return supportsPWA;
+    const checkBrowserInstallCapability = () => {
+      // Chrome/Edge: tem suporte nativo
+      if (browser === 'chrome' || browser === 'edge') {
+        // Se não recebeu o evento após 5 segundos, pode ser porque já está instalado
+        // ou o navegador não quer disparar
+        setTimeout(() => {
+          if (!deferredPrompt && !standalone) {
+            console.log('📱 Navegador com suporte mas sem evento - mostrando instruções');
+            setInstallable(false);
+            setIsVisible(true);
+          }
+        }, 5000);
+      }
     };
 
     // ==========================================================
