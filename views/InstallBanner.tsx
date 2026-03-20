@@ -99,6 +99,7 @@ export function InstallBanner() {
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       console.log('📱 beforeinstallprompt disparado!', e);
+      console.log('✅ Evento beforeinstallprompt capturado e guardado!'); // Adicione este log
 
       // ✅ Removido o check isTrusted - estava bloqueando evento real
       setDeferredPrompt(e);

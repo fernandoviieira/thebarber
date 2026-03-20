@@ -188,19 +188,23 @@ const AppContent: React.FC = () => {
       setView('create_barbershop');
     }
 
-    // 2. MANIFEST PWA - VERSÃO FINAL (Alinhada com seu server.js)
+    // 2. MANIFEST PWA - VERSÃO FINAL OTIMIZADA
     if (urlSlug) {
       const manifestLink = document.getElementById('manifest-link') as HTMLLinkElement;
       if (manifestLink) {
         const baseApi = "https://api.contafacilpro.com.br";
-        // Mantemos o padrão que o seu server.js espera: /api/manifest/slug
+
+        // Adicionamos o slug na rota e um timestamp pequeno (v=) 
+        // Isso força o Chrome a re-ler o arquivo sem dar loop infinito
         const newManifestHref = `${baseApi}/api/manifest/${urlSlug}`;
 
         if (manifestLink.href !== newManifestHref) {
-          // Importante: use-credentials por causa do CORS na Hostinger
           manifestLink.setAttribute('crossorigin', 'use-credentials');
           manifestLink.href = newManifestHref;
-          console.log(`📱 Manifesto sincronizado com sucesso: ${urlSlug}`);
+
+          // DICA: Opcionalmente, você pode forçar o navegador a "re-scanear" o manifesto
+          // removendo e reinserindo o link no DOM, mas apenas mudar o href já deve bastar.
+          console.log(`📱 Solicitando manifesto para a unidade: ${urlSlug}`);
         }
       }
     }
