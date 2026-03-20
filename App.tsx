@@ -194,21 +194,16 @@ const AppContent: React.FC = () => {
       if (manifestLink) {
         const baseApi = "https://api.contafacilpro.com.br";
 
-        // Adicionamos o slug na rota e um timestamp pequeno (v=) 
-        // Isso força o Chrome a re-ler o arquivo sem dar loop infinito
-        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}`;
+        // Adicionamos ?v= + timestamp para forçar o Chrome a baixar de novo
+        const newManifestHref = `${baseApi}/api/manifest/${urlSlug}?v=${Date.now()}`;
 
         if (manifestLink.href !== newManifestHref) {
           manifestLink.setAttribute('crossorigin', 'use-credentials');
           manifestLink.href = newManifestHref;
-
-          // DICA: Opcionalmente, você pode forçar o navegador a "re-scanear" o manifesto
-          // removendo e reinserindo o link no DOM, mas apenas mudar o href já deve bastar.
-          console.log(`📱 Solicitando manifesto para a unidade: ${urlSlug}`);
+          console.log(`📱 Forçando novo manifesto: ${urlSlug}`);
         }
       }
     }
-
     // 3. OUVINTE DE AUTH (SUPABASE)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       // Evita atualizar se a sessão for a mesma
