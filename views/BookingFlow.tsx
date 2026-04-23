@@ -418,8 +418,9 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
   // ✅ PREMIUM: derivados do Step 1
   const servicesCount = availableServices.length;
-  const hasTooManyServices = servicesCount > 12;
   const FEATURED_LIMIT = 8;
+  const hasTooManyServices = servicesCount > FEATURED_LIMIT;
+
 
   const availableCategories: ServiceCategory[] = useMemo(() => {
     const set = new Set<ServiceCategory>();
@@ -452,11 +453,10 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
 
   const servicesToRender = useMemo(() => {
     const q = normalizeText(serviceQuery);
-    if (q) return filteredServices; // buscando => mostra tudo do filtro
-    if (showAllServices) return filteredServices;
+    if (q) return filteredServices;
+    if (showAllServices || !hasTooManyServices) return filteredServices; // Adicione: || !hasTooManyServices
     return featuredServices;
-  }, [filteredServices, featuredServices, showAllServices, serviceQuery]);
-
+  }, [filteredServices, featuredServices, showAllServices, serviceQuery, hasTooManyServices]);
   useEffect(() => {
     setShowAllServices(false);
   }, [serviceCategory]);
@@ -614,10 +614,10 @@ const BookingFlow: React.FC<BookingFlowProps> = ({ onComplete, onCancel }) => {
                   onAction={
                     hasActiveFilters
                       ? () => {
-                          setServiceQuery('');
-                          setServiceCategory('Todos');
-                          setShowAllServices(false);
-                        }
+                        setServiceQuery('');
+                        setServiceCategory('Todos');
+                        setShowAllServices(false);
+                      }
                       : undefined
                   }
                 />
