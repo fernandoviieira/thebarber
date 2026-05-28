@@ -201,14 +201,14 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
         if (error) throw error;
 
         const map = new Map<string, SubscriberInfo>();
-        
+
         data?.forEach(sub => {
           const customerPhone = sub.profiles?.phone;
           if (!customerPhone) return;
 
           const usedCount = sub.usage?.length || 0;
           const limit = 10; // Idealmente buscar do plano, mas vamos simplificar
-          
+
           map.set(customerPhone.replace(/\D/g, ''), {
             id: sub.id,
             customer_id: sub.customer_id,
@@ -256,8 +256,8 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
 
   // ✅ NOVO: Função para verificar se um agendamento usou plano
   const isPaidWithPlan = useCallback((appointment: Appointment): boolean => {
-    return appointment.payment_method?.toLowerCase() === 'plano' || 
-           appointment.payment_method?.toLowerCase() === 'pacote';
+    return appointment.payment_method?.toLowerCase() === 'plano' ||
+      appointment.payment_method?.toLowerCase() === 'pacote';
   }, []);
 
   useEffect(() => {
@@ -896,8 +896,8 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
             <div className="bg-gradient-to-br from-[#111827] to-[#0b1020] border border-white/15 w-full max-w-sm rounded-3xl p-6 shadow-2xl text-center">
               <div className="flex justify-center mb-4">
                 <div className={`p-4 rounded-full 
-                  ${selectedApp.status === 'finalizado' 
-                    ? 'bg-emerald-500/15 text-emerald-300' 
+                  ${selectedApp.status === 'finalizado'
+                    ? 'bg-emerald-500/15 text-emerald-300'
                     : isPaidWithPlan(selectedApp)
                       ? 'bg-purple-500/15 text-purple-300'
                       : 'bg-amber-500/15 text-amber-300'
@@ -1330,7 +1330,7 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
                     const isByAdmin = appStartingHere?.created_by_admin === true;
                     const isFinalized = appStartingHere?.status === 'finalizado';
                     // ✅ NOVO: Verifica se é assinante ou pagou com plano
-                    const isPlanUser = appStartingHere ? 
+                    const isPlanUser = appStartingHere ?
                       (isPaidWithPlan(appStartingHere) || isSubscriber(appStartingHere.customerPhone)) : false;
 
                     const slotOccupied = isTimeOccupied(targetDate, barberName, slot);
@@ -1443,8 +1443,8 @@ const AdminCalendarView: React.FC<CalendarProps> = ({
           <div className="bg-gradient-to-br from-[#111827] to-[#0b1020] border border-white/15 w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center">
             <div className="flex justify-center mb-6">
               <div className={`p-5 rounded-full 
-                ${selectedApp.status === 'finalizado' 
-                  ? 'bg-emerald-500/15 text-emerald-300' 
+                ${selectedApp.status === 'finalizado'
+                  ? 'bg-emerald-500/15 text-emerald-300'
                   : isPaidWithPlan(selectedApp)
                     ? 'bg-purple-500/15 text-purple-300'
                     : 'bg-amber-500/15 text-amber-300'

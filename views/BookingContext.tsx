@@ -82,7 +82,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
   const [reservingSlots, setReservingSlots] = useState<Set<string>>(new Set());
   // ✅ NOVO: Estado para armazenar mapa de assinantes ativos (phone -> subscription)
   const [activeSubscriptions, setActiveSubscriptions] = useState<Map<string, ActiveSubscription>>(new Map());
-  
+
   const mountedRef = useRef(true);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const currentBarbershopIdRef = useRef<string | undefined>(undefined);
@@ -115,14 +115,14 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       if (error) throw error;
 
       const subscriptionMap = new Map<string, ActiveSubscription>();
-      
+
       data?.forEach(sub => {
         const customerPhone = sub.profiles?.phone;
         if (!customerPhone) return;
 
         const usedCount = sub.usage?.length || 0;
         const limit = sub.plan?.limit_services || 0;
-        
+
         subscriptionMap.set(customerPhone.replace(/\D/g, ''), {
           id: sub.id,
           customer_id: sub.customer_id,
@@ -149,7 +149,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     if (!customerPhone || !currentBarbershopIdRef.current) return null;
 
     const cleanPhone = customerPhone.replace(/\D/g, '');
-    
+
     // Primeiro tenta no mapa em memória
     const cached = activeSubscriptions.get(cleanPhone);
     if (cached) return cached;
@@ -209,7 +209,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
   // ✅ NOVO: Registrar uso de assinatura
   const recordSubscriptionUsage = useCallback(async (
-    subscriptionId: string, 
+    subscriptionId: string,
     appointmentId: string
   ): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -265,10 +265,17 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false);
         return;
       }
+
+      // 🛠️ Pega a data de 3 dias atrás no formato YYYY-MM-DD
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      const formattedStartDate = threeDaysAgo.toISOString().split('T')[0];
+
       const { data, error } = await supabase
         .from('appointments')
         .select('*')
         .eq('barbershop_id', barbershopId)
+        .gte('date', formattedStartDate) // 🚀 FILTRO: Trás apenas de 3 dias atrás para frente (futuro ilimitado)
         .order('date', { ascending: true })
         .order('time', { ascending: true });
 
@@ -281,7 +288,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       setAppointments(data?.map(formatAppointment) || []);
       currentBarbershopIdRef.current = barbershopId;
 
-      // ✅ NOVO: Quando carregar agendamentos, também carrega assinantes ativos
+      // Quando carregar agendamentos, também carrega assinantes ativos
       await fetchActiveSubscriptions(barbershopId);
 
     } catch (err: any) {
