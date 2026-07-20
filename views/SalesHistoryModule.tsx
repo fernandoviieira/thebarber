@@ -81,6 +81,7 @@ const SalesHistoryModule: React.FC<SalesHistoryProps> = ({ appointments, onDelet
 
   const filteredSales = useMemo(() => {
     const today = startOfDay(new Date());
+    console.log('appointments', appointments)
     const baseFilter = appointments.filter(app => {
       const appDate = startOfDay(new Date(app.date + 'T00:00:00'));
       let matchesDate = true;

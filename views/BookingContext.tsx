@@ -268,7 +268,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
 
       // 🛠️ Pega a data de 3 dias atrás no formato YYYY-MM-DD
       const threeDaysAgo = new Date();
-      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 30);
       const formattedStartDate = threeDaysAgo.toISOString().split('T')[0];
 
       const { data, error } = await supabase
