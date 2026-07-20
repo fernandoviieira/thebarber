@@ -11,22 +11,24 @@ import {
   ArrowRight,
   AlertTriangle,
   CalendarClock,
+  MessageCircle,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface SubscriptionPageProps {
   barbershopId: string;
+  barbershopName?: string;
   userEmail: string;
-  subscriptionStatus?: string; 
-  expiresAt?: string | null;  
-  currentPlan?: string | null; 
+  subscriptionStatus?: string;
+  expiresAt?: string | null;
+  currentPlan?: string | null;
 }
 
 type Plan = {
   id: string;
   name: string;
   price: string;
-  period: string; 
+  period: string;
   description: string;
   icon: React.ReactNode;
   popular?: boolean;
@@ -69,6 +71,7 @@ function formatExpiryLabel(daysRemaining: number) {
 
 const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   barbershopId,
+  barbershopName,
   userEmail,
   subscriptionStatus,
   expiresAt,
@@ -77,6 +80,8 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
   const [isBillingLoading, setIsBillingLoading] = useState(false);
+
+  const WHATSAPP_NUMBER = '5541988252335';
 
   const PLANS: Plan[] = useMemo(
     () => [
@@ -123,12 +128,17 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
     if (!selectedPlanId && popularPlanId) setSelectedPlanId(popularPlanId);
   }, [popularPlanId, selectedPlanId]);
 
+  const isSubActiveByStatus =
+    subscriptionStatus === 'active' || subscriptionStatus === 'trialing';
 
-  const isSubActiveByStatus = subscriptionStatus === 'active' || subscriptionStatus === 'trialing';
-  const daysRemaining = useMemo(() => getDaysRemainingCalendar(expiresAt), [expiresAt]);
+  const daysRemaining = useMemo(
+    () => getDaysRemainingCalendar(expiresAt),
+    [expiresAt]
+  );
+
   const isUrgent = useMemo(() => {
     if (daysRemaining === null) return false;
-    return daysRemaining <= 10; 
+    return daysRemaining <= 10;
   }, [daysRemaining]);
 
   const isExpired = daysRemaining !== null && daysRemaining < 0;
@@ -174,9 +184,9 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
     try {
       const { data, error } = await supabase.functions.invoke('create-checkout', {
         body: {
-          barbershopId: barbershopId,
-          userEmail: userEmail,       
-          priceId: priceId            
+          barbershopId,
+          userEmail,
+          priceId,
         },
       });
 
@@ -204,6 +214,7 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
       const { data, error } = await supabase.functions.invoke('create-portal-session', {
         body: { barbershopId },
       });
+
       if (error) throw error;
       if (data?.url) window.location.href = data.url;
     } catch (err) {
@@ -212,6 +223,39 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
       setIsBillingLoading(false);
     }
   };
+
+  const handleWhatsAppPayment = (plan: Plan) => {
+    const safeBarbershopName = barbershopName?.trim() || 'Não informado';
+    const safeCurrentPlan = currentPlan?.trim() || 'Nenhum';
+    const safeSubscriptionStatus = subscriptionStatus || 'inactive';
+
+    const message = [
+      'Olá! 👋',
+      '',
+      'Quero contratar um plano via WhatsApp para minha barbearia.',
+      '',
+      '📦 *Plano escolhido*',
+      `• Nome: ${plan.name}`,
+      `• Valor: R$ ${plan.price}`,
+      `• Período: ${plan.period}`,
+      '',
+      '🏪 *Dados da barbearia*',
+      `• Nome: ${safeBarbershopName}`,
+      `• ID: ${barbershopId}`,
+      `• E-mail: ${userEmail}`,
+      '',
+      '🧾 *Status atual da assinatura*',
+      `• Status: ${safeSubscriptionStatus}`,
+      `• Plano atual: ${safeCurrentPlan}`,
+      `• Situação: ${statusLabel}`,
+      '',
+      'Pode me passar as instruções para pagamento?'
+    ].join('\n');
+
+    const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  };
+
   const canOpenBillingPortal = isSubActiveByStatus || isUrgent;
 
   return (
@@ -220,9 +264,11 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
       <div
         className={`
           border rounded-[2.5rem] p-5 lg:p-8 flex flex-col md:flex-row items-center justify-between gap-6 transition-all duration-500
-          ${statusTone === 'danger'
-            ? 'bg-red-500/10 border-red-500/40 shadow-[0_0_30px_rgba(239,68,68,0.12)]'
-            : 'bg-zinc-900/50 border-white/5'}
+          ${
+            statusTone === 'danger'
+              ? 'bg-red-500/10 border-red-500/40 shadow-[0_0_30px_rgba(239,68,68,0.12)]'
+              : 'bg-zinc-900/50 border-white/5'
+          }
         `}
       >
         <div className="flex items-center gap-6">
@@ -235,7 +281,11 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
               ${statusTone === 'muted' ? 'bg-white/5 text-slate-400' : ''}
             `}
           >
-            {statusTone === 'danger' ? <AlertTriangle size={28} /> : <ShieldCheck size={28} />}
+            {statusTone === 'danger' ? (
+              <AlertTriangle size={28} />
+            ) : (
+              <ShieldCheck size={28} />
+            )}
           </div>
 
           <div>
@@ -245,7 +295,6 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
                 <span className="text-white ml-1">{currentPlan || 'Nenhum'}</span>
               </p>
 
-              {/* Só marca verdinho se estiver operacionalmente ativo (OPÇÃO 1) */}
               {isOperationallyActive && (
                 <span className="h-1.5 w-1.5 rounded-full bg-green-500 shadow-[0_0_10px_#22c55e]" />
               )}
@@ -264,17 +313,29 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
 
         <button
           onClick={handleManageBilling}
-          disabled={isBillingLoading || subscriptionStatus === 'trialing' || !canOpenBillingPortal}
+          disabled={
+            isBillingLoading || subscriptionStatus === 'trialing' || !canOpenBillingPortal
+          }
           className={`flex items-center gap-3 px-8 py-4 rounded-2xl transition-all group border font-black uppercase text-[10px] tracking-widest
-                ${statusTone === 'danger'
-              ? 'bg-red-500 text-white border-red-400 hover:bg-red-600 shadow-xl shadow-red-500/20'
-              : (canOpenBillingPortal && subscriptionStatus !== 'trialing')
+            ${
+              statusTone === 'danger'
+                ? 'bg-red-500 text-white border-red-400 hover:bg-red-600 shadow-xl shadow-red-500/20'
+                : canOpenBillingPortal && subscriptionStatus !== 'trialing'
                 ? 'bg-white/5 hover:bg-white/10 border-white/10 text-white'
-                : 'bg-white/5 border-white/5 opacity-30 cursor-not-allowed'}
-  `}
+                : 'bg-white/5 border-white/5 opacity-30 cursor-not-allowed'
+            }
+          `}
         >
-          {isBillingLoading ? <Loader2 className="animate-spin" size={18} /> : <Settings size={18} />}
-          <span>{statusTone === 'danger' ? 'Resolver Faturamento' : 'Configurações de Cobrança'}</span>
+          {isBillingLoading ? (
+            <Loader2 className="animate-spin" size={18} />
+          ) : (
+            <Settings size={18} />
+          )}
+          <span>
+            {statusTone === 'danger'
+              ? 'Resolver Faturamento'
+              : 'Configurações de Cobrança'}
+          </span>
         </button>
       </div>
 
@@ -294,7 +355,9 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
           const isSelected = selectedPlanId === plan.id;
           const isLoading = loadingPlanId === plan.id;
 
-          const checkoutDisabled = (subscriptionStatus === 'active') && !isUrgent && !isExpired;
+          const checkoutDisabled =
+            subscriptionStatus === 'active' && !isUrgent && !isExpired;
+
           return (
             <div
               key={plan.id}
@@ -302,9 +365,11 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
               className={`
                 relative flex flex-col rounded-[3rem] p-10 transition-all duration-500 cursor-pointer
                 min-w-0 overflow-hidden
-                ${plan.popular
-                  ? 'bg-gradient-to-b from-amber-500/10 to-transparent border-2 border-amber-500 shadow-2xl'
-                  : 'bg-zinc-900/40 border border-white/5'}
+                ${
+                  plan.popular
+                    ? 'bg-gradient-to-b from-amber-500/10 to-transparent border-2 border-amber-500 shadow-2xl'
+                    : 'bg-zinc-900/40 border border-white/5'
+                }
                 ${isSelected ? 'scale-[1.02] ring-2 ring-amber-500/50 bg-amber-500/5' : 'hover:-translate-y-2'}
                 ${checkoutDisabled ? 'opacity-50 grayscale-[0.5]' : ''}
               `}
@@ -315,61 +380,112 @@ const SubscriptionPage: React.FC<SubscriptionPageProps> = ({
                 </div>
               )}
 
-              <div className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${plan.color} flex items-center justify-center text-white mb-10 shadow-xl`}>
+              <div
+                className={`w-14 h-14 rounded-2xl bg-gradient-to-br ${plan.color} flex items-center justify-center text-white mb-10 shadow-xl`}
+              >
                 {plan.icon}
               </div>
 
-              <h3 className="text-3xl font-black uppercase italic text-white mb-2">{plan.name}</h3>
+              <h3 className="text-3xl font-black uppercase italic text-white mb-2">
+                {plan.name}
+              </h3>
+
               <p className="text-slate-500 text-[10px] uppercase tracking-widest mb-10 font-bold leading-relaxed">
                 {plan.description}
               </p>
 
-              {/* PREÇO (corrigido para não vazar) */}
               <div className="mb-10 flex flex-wrap items-end gap-x-2 gap-y-2 min-w-0">
-                <span className="text-xl sm:text-2xl font-black text-white/30 leading-none">R$</span>
+                <span className="text-xl sm:text-2xl font-black text-white/30 leading-none">
+                  R$
+                </span>
 
                 <span className="text-5xl sm:text-6xl font-black tracking-tighter text-white leading-none">
                   {plan.price}
                 </span>
 
-                {/* Chip do período: não estoura e fica sempre legível */}
                 <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] font-black text-slate-300 whitespace-nowrap">
                   / {plan.period}
                 </span>
               </div>
 
               <div className="space-y-5 mb-12 flex-1">
-                {['Agendamento Ilimitado', 'Sarah AI Insights', 'Gestão Financeira', 'Estoque & Vendas'].map((f, i) => (
+                {[
+                  'Agendamento Ilimitado',
+                  'Sarah AI Insights',
+                  'Gestão Financeira',
+                  'Estoque & Vendas',
+                ].map((f, i) => (
                   <div key={i} className="flex items-center gap-4">
                     <div className="p-1 rounded-full bg-amber-500/20 text-amber-500">
                       <Check size={14} />
                     </div>
-                    <span className="text-[11px] uppercase font-black text-slate-300">{f}</span>
+                    <span className="text-[11px] uppercase font-black text-slate-300">
+                      {f}
+                    </span>
                   </div>
                 ))}
               </div>
 
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleSubscribe(plan.id);
-                }}
-                disabled={checkoutDisabled || isLoading}
-                className={`
-                  w-full py-6 rounded-2xl font-black uppercase text-[11px] tracking-widest transition-all flex items-center justify-center gap-3
-                  ${plan.popular ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20' : 'bg-white/10 text-white hover:bg-white/20'}
-                  ${checkoutDisabled ? 'cursor-not-allowed' : ''}
-                `}
-              >
-                {isLoading ? (
-                  <Loader2 className="animate-spin" size={20} />
-                ) : (
-                  <>
-                    <span>{isSelected ? 'Confirmar Plano' : 'Selecionar'}</span>
-                    <ArrowRight size={16} />
-                  </>
-                )}
-              </button>
+              <div className="space-y-3">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSubscribe(plan.id);
+                  }}
+                  disabled={checkoutDisabled || isLoading}
+                  className={`
+                    w-full py-6 rounded-2xl font-black uppercase text-[11px] tracking-widest transition-all flex items-center justify-center gap-3
+                    ${
+                      plan.popular
+                        ? 'bg-amber-500 text-black shadow-lg shadow-amber-500/20'
+                        : 'bg-white/10 text-white hover:bg-white/20'
+                    }
+                    ${checkoutDisabled ? 'cursor-not-allowed' : ''}
+                  `}
+                >
+                  {isLoading ? (
+                    <Loader2 className="animate-spin" size={20} />
+                  ) : (
+                    <>
+                      <span>{isSelected ? 'Confirmar Plano' : 'Selecionar'}</span>
+                      <ArrowRight size={16} />
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleWhatsAppPayment(plan);
+                  }}
+                  className="
+                    relative w-full overflow-hidden rounded-2xl
+                    bg-gradient-to-r from-green-500 via-emerald-500 to-green-600
+                    py-5 px-5
+                    font-black uppercase text-[11px] tracking-widest text-white
+                    transition-all duration-300
+                    hover:scale-[1.01] hover:from-green-600 hover:via-emerald-600 hover:to-green-700
+                    shadow-lg shadow-green-500/20
+                    border border-white/10
+                  "
+                >
+                  <div className="absolute inset-0 bg-[linear-gradient(120deg,transparent,rgba(255,255,255,0.14),transparent)] -translate-x-full hover:translate-x-full transition-transform duration-1000" />
+
+                  <div className="relative flex items-center justify-center gap-3">
+                    <div className="relative flex items-center justify-center">
+                      <span className="absolute inline-flex h-4 w-4 rounded-full bg-white/30 animate-ping" />
+                      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+                    </div>
+
+                    <MessageCircle size={18} />
+                    <span>Pagar via WhatsApp</span>
+                  </div>
+
+                  <div className="relative mt-2 text-[9px] font-extrabold uppercase tracking-[0.25em] text-white/80 text-center">
+                    Atendimento rápido
+                  </div>
+                </button>
+              </div>
             </div>
           );
         })}

@@ -499,14 +499,16 @@ const AppContent: React.FC = () => {
         )}
 
         {view === 'subscription_plans' && (
-          <SubscriptionPage
-            barbershopId={barbershopId!}
-            userEmail={session?.user?.email}
-            subscriptionStatus={dbSubscriptionStatus}
-            expiresAt={expiresAt}
-            currentPlan={currentPlan}
-          />
-        )}
+  <SubscriptionPage
+    barbershopId={barbershopId!}
+    barbershopName={barbershopName}
+    userEmail={session?.user?.email}
+    subscriptionStatus={dbSubscriptionStatus}
+    expiresAt={expiresAt}
+    currentPlan={currentPlan}
+  />
+)}
+
 
         {view === 'client' && urlSlug && (
           <ClientHome onStartBooking={() => navigateTo('booking')} />
@@ -581,15 +583,17 @@ const AppContent: React.FC = () => {
                   }}
                 />
               )}
-              {adminActiveTab === 'billing' && (
-                <SubscriptionPage
-                  barbershopId={barbershopId!}
-                  userEmail={session?.user?.email}
-                  subscriptionStatus={dbSubscriptionStatus}
-                  expiresAt={expiresAt}
-                  currentPlan={currentPlan}
-                />
-              )}
+           {adminActiveTab === 'billing' && (
+  <SubscriptionPage
+    barbershopId={barbershopId!}
+    barbershopName={barbershopName}
+    userEmail={session?.user?.email}
+    subscriptionStatus={dbSubscriptionStatus}
+    expiresAt={expiresAt}
+    currentPlan={currentPlan}
+  />
+)}
+
               {adminActiveTab === 'config' && <AdminSettings barbershopId={barbershopId} />}
             </div>
           </div>
